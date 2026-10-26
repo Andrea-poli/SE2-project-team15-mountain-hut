@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Builds and reports
+dist/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Databases (dev data, E2E data, sessions)
+server/data/*
+!server/data/.gitkeep
+e2e/.tmp/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local settings
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+*.log
