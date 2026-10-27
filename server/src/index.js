@@ -4,7 +4,15 @@ import { createApp } from './app.js';
 
 const app = createApp();
 
-app.listen(config.port, () => {
+// Express 5 passes listen errors (e.g. port already in use) to the callback: without this check
+// the server would print "Mountain Hut API on …" and then stop without saying why.
+app.listen(config.port, (err) => {
+  if (err) {
+    if (err.code === 'EADDRINUSE') {
+      err.message = `Port ${config.port} is already in use: stop the other server or set another PORT in .env (${err.message})`;
+    }
+    throw err;
+  }
   console.log(`Mountain Hut API on http://localhost:${config.port} (${config.env}, TZ=${process.env.TZ})`);
   if (config.fakeNow) {
     console.warn(
