@@ -1,12 +1,15 @@
-// E2E tests (planning DoD): their own server and client, a dedicated DB, a fixed clock.
+// E2E tests (planning DoD): their own server and client, a dedicated DB, a fixed clock (server and browser).
 // First time on a new computer: npx playwright install chromium
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
+import { E2E_NOW } from './e2e/helpers/clock.js';
+
+// Dates computed in the test code use hut time on any machine (e.g. a CI running in UTC).
+process.env.TZ = 'Europe/Rome';
 
 const SERVER_PORT = 3101;
 const CLIENT_PORT = 5174;
-// The day and time the E2E tests "live in" (hut local time). The server reads it as FAKE_NOW.
-export const E2E_NOW = '2026-11-02T10:00';
+const E2E_DATA = path.resolve('e2e/.tmp');
 
 export default defineConfig({
   testDir: 'e2e',
@@ -39,7 +42,11 @@ export default defineConfig({
         NODE_ENV: 'e2e',
         TZ: 'Europe/Rome',
         FAKE_NOW: E2E_NOW,
-        DATA_DIR: path.resolve('e2e/.tmp'),
+        // Explicit paths and a dummy secret: values set here win over .env,
+        // so the E2E tests never use the dev database or a real secret.
+        DB_PATH: path.join(E2E_DATA, 'mountain-hut.db'),
+        SESSIONS_DB_PATH: path.join(E2E_DATA, 'sessions.db'),
+        SESSION_SECRET: 'test-only',
       },
     },
     {

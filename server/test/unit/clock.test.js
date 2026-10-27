@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { now, resetNow, setNow } from '../../src/clock.js';
+import { now, parseFakeNow, resetNow, setNow } from '../../src/clock.js';
 
 describe('clock', () => {
   afterEach(() => {
@@ -32,5 +32,26 @@ describe('clock', () => {
 
   it('rejects invalid dates', () => {
     expect(() => setNow('not a date')).toThrow(TypeError);
+  });
+
+  it('refuses an invalid FAKE_NOW instead of returning an Invalid Date', () => {
+    process.env.FAKE_NOW = '02/11/2026 10:00';
+    expect(() => now()).toThrow(RangeError);
+  });
+});
+
+describe('parseFakeNow', () => {
+  it('reads YYYY-MM-DDTHH:mm in hut local time', () => {
+    expect(parseFakeNow('2026-11-02T19:30').toISOString()).toBe('2026-11-02T18:30:00.000Z');
+  });
+
+  it('refuses a date without the time (JavaScript would read it as UTC midnight)', () => {
+    expect(() => parseFakeNow('2026-11-02')).toThrow(/YYYY-MM-DDTHH:mm/);
+  });
+
+  it('refuses other formats and impossible days or times', () => {
+    for (const value of ['02/11/2026', '2026-11-02 10:00', '2026-11-02T10:00Z', '2026-02-30T10:00', '2026-11-02T24:00', '']) {
+      expect(() => parseFakeNow(value), value).toThrow(RangeError);
+    }
   });
 });

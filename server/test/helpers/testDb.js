@@ -1,24 +1,16 @@
-// Temporary database for tests (planning DoD): every test file gets its own DB file,
-// deleted at the end. Tests never touch the development or demo database.
+// Temporary database for tests. Used by test/setupTestDb.js, which sets DB_PATH and SESSIONS_DB_PATH
+// before every test file: tests do not need to call anything, config.dbPath is already the temp DB.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll } from 'vitest';
 
 export function createTestDb() {
   const dir = mkdtempSync(path.join(tmpdir(), 'mountain-hut-test-'));
-  const file = path.join(dir, 'test.db');
   return {
     dir,
-    file,
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    file: path.join(dir, 'test.db'),
+    sessionsFile: path.join(dir, 'sessions.db'),
+    // Windows cannot delete a file that is still open (EBUSY): retry for a moment.
+    cleanup: () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
   };
-}
-
-export function useTestDb() {
-  const db = createTestDb();
-  process.env.DB_PATH = db.file;
-  process.env.SESSIONS_DB_PATH = path.join(db.dir, 'sessions.db');
-  afterAll(() => db.cleanup());
-  return db;
 }

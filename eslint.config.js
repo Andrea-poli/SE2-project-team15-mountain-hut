@@ -25,6 +25,22 @@ export default [
     files: ['server/**/*.js', '*.config.js'],
     languageOptions: { globals: globals.node },
   },
+  // Time: only clock.js may read the real time, everything else uses now() (fixed in tests and E2E).
+  // new Date(value) with an argument is allowed: it parses a date, it does not read the clock.
+  {
+    files: ['server/src/**/*.js'],
+    ignores: ['server/src/clock.js'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: 'Use now() from clock.js' },
+        {
+          selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']",
+          message: 'Use now() from clock.js',
+        },
+      ],
+    },
+  },
   // E2E tests run in Node, with code passed to the browser (page.evaluate)
   {
     files: ['e2e/**/*.js'],

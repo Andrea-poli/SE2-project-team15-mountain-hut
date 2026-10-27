@@ -4,10 +4,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.js'],
-    // Same time zone as the hut, and test-only routes enabled.
-    env: { TZ: 'Europe/Rome', NODE_ENV: 'test' },
-    // One temporary DB per test file: test files must not share state.
-    fileParallelism: true,
+    // Runs before the imports of every test file: each file gets its own temporary DB,
+    // set before config.js reads DB_PATH.
+    setupFiles: ['./test/setupTestDb.js'],
+    // Hut time zone, test-only routes enabled, dummy session secret (never a real one).
+    env: { TZ: 'Europe/Rome', NODE_ENV: 'test', SESSION_SECRET: 'test-only' },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.js'],

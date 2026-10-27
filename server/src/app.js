@@ -1,7 +1,7 @@
 // ★ Shared file (planning 4.5): it already mounts every route of sprint 1.
 // Stories fill their own route file; changes here only in #0 tasks or after agreeing in the group chat.
 import express from 'express';
-import { isTestEnv } from './config.js';
+import { config, isTestEnv } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import authRouter from './routes/auth.js';
@@ -24,7 +24,7 @@ export function createApp() {
   app.use('/api/bookings', bookingsRouter); //        MH-01
   app.use('/api/slots', slotsRouter); //              MH-02
   app.use('/api/availability', availabilityRouter); // MH-04
-  if (isTestEnv) {
+  if (isTestEnv(config.env)) {
     app.use('/api/test', testSupportRouter); //       MH-03 (tests only)
   }
 

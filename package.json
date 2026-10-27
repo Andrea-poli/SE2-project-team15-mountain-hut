@@ -9,7 +9,7 @@
     "client"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "scripts": {
     "dev": "concurrently --names server,client --prefix-colors blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
