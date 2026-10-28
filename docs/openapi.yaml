@@ -248,11 +248,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/PublicSlot'
               example:
-                - slotId: 3
+                - id: 3
                   label: Lunch
                   startTime: '12:00'
                   endTime: '14:00'
-                - slotId: 4
+                - id: 4
                   label: Dinner - 1st turn
                   startTime: '19:00'
                   endTime: '20:30'
@@ -277,9 +277,9 @@ paths:
         slot, a slot in the past, or a slot starting within 2 hours answers
         `200` with `available: false` and an empty `split` - never an error,
         so the answer can be shown in place of the check result. Each item of
-        `split` says which table (id and name) the party would sit at and how
-        many seats it takes there, in the order the allocation rule chooses
-        the tables.
+        `split` lists the tables selected by the allocation rule and the
+        party seats assigned to each. Show hikers the seat split, not table
+        names.
       operationId: checkAvailability
       security: []
       parameters:
@@ -787,9 +787,9 @@ components:
     PublicSlot:
       type: object
       description: Open, still bookable slot, as shown in the SlotPicker "time" menu.
-      required: [slotId, startTime, endTime]
+      required: [id, startTime, endTime]
       properties:
-        slotId:
+        id:
           type: integer
           example: 3
         label:
@@ -864,11 +864,9 @@ components:
     Allocation:
       type: object
       description: >
-        One table of a seating, shared by the availability check and the
-        booking. `seats` is the number of seats the party takes on this
-        table - NOT the total capacity of the table, so the UI must not
-        present it as "table capacity" (e.g. show
-        "T2 - 3 seats for your party", never "T2 (3 seats)").
+        One table's share of a party's seating. `seats` is the number of party
+        members at this table, not its capacity. Show hikers the seat split
+        (for example, "2 + 3 + 1 seats"), not table names.
       required: [slotTableId, tableName, seats]
       properties:
         slotTableId:
