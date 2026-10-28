@@ -19,10 +19,15 @@ info:
       set by `POST /api/auth/register` and `POST /api/auth/login` (httpOnly,
       sameSite=lax) and is accepted by every endpoint marked with
       `sessionCookie` security.
-    * **Dates and times** - dates are `YYYY-MM-DD`, times are `HH:MM` (24 h),
-      both in hut local time (`TZ`, default Europe/Rome); `createdAt` is
-      ISO 8601 UTC. A client may display 12-hour times locally, but it must
-      convert back to `HH:MM` before calling the API.
+    * **Dates and times** - dates are valid calendar dates in `YYYY-MM-DD`
+      format, and times are `HH:MM` (24 h), both in hut local time (`TZ`,
+      default Europe/Rome); `createdAt` is ISO 8601 UTC. Dates that do not
+      exist on the calendar are invalid and date-taking endpoints return `400`.
+      A client may display 12-hour times locally, but it must convert back to
+      `HH:MM` before calling the API.
+    * **Slot time rules** - a new slot must start strictly after the current
+      hut-local time. A slot is `past` once its start time is at or before the
+      current hut-local time.
     * **Booking deadline** - a slot can be booked only up to 2 hours before
       its start. Past that deadline the slot disappears from
       `GET /api/public/slots` and `POST /api/bookings` returns `400`.
@@ -266,7 +271,7 @@ paths:
                   endTime: '22:30'
                   bookingState: bookable
         '400':
-          description: Missing or invalid date (not YYYY-MM-DD)
+          description: Missing or invalid date (not a valid YYYY-MM-DD calendar date)
           content:
             application/json:
               schema:
@@ -352,7 +357,7 @@ paths:
         stays valid.
       operationId: createBooking
       security:
-        - sessionCookie: [hiker]
+        - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -431,7 +436,7 @@ paths:
         booking is not revealed.
       operationId: getBooking
       security:
-        - sessionCookie: [hiker]
+        - sessionCookie: []
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -469,18 +474,19 @@ paths:
       tags: [slots]
       summary: Slots of a date range, with their tables
       description: >
-        Employee and warden only (the warden passes every employee check).
+        Employee and warden only (the warden passes every employee check);
+        hikers receive 403.
         Used by the weekly view (past days greyed out, `past` flag) and by the
         "copy tables from" menu of the new-slot form. No slot detail endpoint
         exists: the tables are read from this list.
       operationId: listSlots
       security:
-        - sessionCookie: [employee, warden]
+        - sessionCookie: []
       parameters:
         - name: from
           in: query
           required: true
-          description: First day of the range, YYYY-MM-DD (inclusive)
+          description: First valid calendar date, YYYY-MM-DD (inclusive)
           schema:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -488,7 +494,7 @@ paths:
         - name: to
           in: query
           required: true
-          description: Last day of the range, YYYY-MM-DD (inclusive)
+          description: Last valid calendar date, YYYY-MM-DD (inclusive)
           schema:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -505,8 +511,8 @@ paths:
                   $ref: '#/components/schemas/Slot'
         '400':
           description: >
-            Missing/invalid dates, `to` before `from`, or range longer
-            than 31 days.
+            Missing or invalid calendar dates, `to` before `from`, or a range
+            longer than 31 days.
           content:
             application/json:
               schema:
@@ -532,13 +538,14 @@ paths:
       tags: [slots]
       summary: Create a meal slot with its tables
       description: >
-        Employee and warden only. The slot must be in the future and must not
-        overlap any existing slot of the same day (adjacent turns are allowed:
+        Employee and warden only; hikers receive 403. The slot must start
+        strictly after the current hut-local time and must not overlap any
+        existing slot of the same day (adjacent turns are allowed:
         end == next start). A slot has at least one table; table names are
         unique within the slot.
       operationId: createSlot
       security:
-        - sessionCookie: [employee, warden]
+        - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -563,8 +570,10 @@ paths:
                 $ref: '#/components/schemas/Slot'
         '400':
           description: >
-            Invalid body: malformed date/times, end not after start, slot in
-            the past, no tables, duplicated table names, seats < 1.
+            Invalid body: missing or invalid calendar date, malformed
+            date/times, end not after start, slot not starting in the future,
+            missing or empty label, no tables, duplicated table names,
+            seats < 1.
           content:
             application/json:
               schema:
@@ -639,7 +648,7 @@ components:
       name: date
       in: query
       required: true
-      description: Day of the meal, YYYY-MM-DD, hut local time
+      description: Valid calendar date of the meal, YYYY-MM-DD, hut local time
       schema:
         type: string
         pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -803,14 +812,13 @@ components:
     PublicSlot:
       type: object
       description: Open slot, as shown in the SlotPicker "time" menu.
-      required: [id, startTime, endTime, bookingState]
+      required: [id, startTime, endTime, label, bookingState]
       properties:
         id:
           type: integer
           example: 3
         label:
           type: string
-          nullable: true
           example: Lunch
         startTime:
           type: string
@@ -862,7 +870,7 @@ components:
     SlotSummary:
       type: object
       description: The slot inside a booking.
-      required: [id, date, startTime, endTime]
+      required: [id, date, startTime, endTime, label]
       properties:
         id:
           type: integer
@@ -881,7 +889,6 @@ components:
           example: '20:30'
         label:
           type: string
-          nullable: true
           example: Dinner - 1st turn
 
     Allocation:
@@ -962,6 +969,7 @@ components:
           example: 12
         date:
           type: string
+          description: Valid calendar date in hut local time.
           pattern: '^\d{4}-\d{2}-\d{2}$'
           example: '2026-11-02'
         startTime:
@@ -974,7 +982,7 @@ components:
           example: '20:30'
         label:
           type: string
-          nullable: true
+          minLength: 1
           example: Dinner - 1st turn
         status:
           type: string
@@ -983,7 +991,7 @@ components:
           example: open
         past:
           type: boolean
-          description: True when the day (or the slot itself) is in the past, for the greyed-out style.
+          description: True when the slot start is at or before the current hut-local time.
           example: false
         tables:
           type: array
@@ -1005,10 +1013,11 @@ components:
 
     NewSlot:
       type: object
-      required: [date, startTime, endTime, tables]
+      required: [date, startTime, endTime, label, tables]
       properties:
         date:
           type: string
+          description: Valid calendar date in hut local time.
           pattern: '^\d{4}-\d{2}-\d{2}$'
           example: '2026-11-02'
         startTime:
@@ -1021,7 +1030,7 @@ components:
           example: '20:30'
         label:
           type: string
-          nullable: true
+          minLength: 1
           example: Dinner - 1st turn
         tables:
           type: array
