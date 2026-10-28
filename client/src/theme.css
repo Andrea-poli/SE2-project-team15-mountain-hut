@@ -1,0 +1,210 @@
+/* ★ Shared file (planning 3.4): palette, large text, visible focus, touch targets, small screens.
+   Loaded right after Bootstrap (main.jsx), so these rules win over Bootstrap's defaults. */
+
+/* 1. Palette: the only place with colour codes. */
+:root {
+  --mh-text: #1f2a24; /* body text and headings */
+  --mh-muted: #55605a; /* secondary text: hints, captions, past days */
+  --mh-bg: #eef4ef; /* page background */
+  --mh-surface: #ffffff; /* background of fields, cards and panels */
+  --mh-primary: #2f5d45; /* main buttons, links, focus outline */
+  --mh-danger: #a3372c; /* errors, invalid fields, destructive buttons */
+  --mh-highlight: #e3a93b; /* highlights (e.g. today); only with --mh-text on top */
+  --mh-on-primary: #ffffff; /* text and icons on --mh-primary or --mh-danger */
+
+  /* RGB of primary and danger, for Bootstrap's rgba() shadows; keep in sync with the hex value */
+  --mh-primary-rgb: 47, 93, 69;
+  --mh-danger-rgb: 163, 55, 44;
+  --mh-primary-active-rgb: 35, 70, 52; /* RGB of --mh-primary-active, keep in sync */
+
+  /* Derived */
+  --mh-primary-hover: color-mix(in srgb, var(--mh-primary), black 15%); /* primary button on hover */
+  --mh-primary-active: color-mix(in srgb, var(--mh-primary), black 25%); /* primary button pressed, link hover */
+  --mh-danger-hover: color-mix(in srgb, var(--mh-danger), black 15%); /* danger button on hover */
+  --mh-danger-active: color-mix(in srgb, var(--mh-danger), black 25%); /* danger button pressed */
+  --mh-focus-on-dark: var(--mh-on-primary); /* focus outline on a dark background (e.g. navbar) */
+
+  /* Focus outline colour in use, switched to --mh-focus-on-dark inside dark areas (see 5) */
+  --mh-focus-color: var(--mh-primary);
+}
+
+/* 2. Palette mapped onto Bootstrap. */
+:root {
+  --bs-body-color: var(--mh-text);
+  --bs-body-bg: var(--mh-bg);
+  --bs-secondary-color: var(--mh-muted);
+  --bs-primary: var(--mh-primary);
+  --bs-primary-rgb: var(--mh-primary-rgb);
+  --bs-danger: var(--mh-danger);
+  --bs-danger-rgb: var(--mh-danger-rgb);
+  --bs-link-color: var(--mh-primary);
+  --bs-link-color-rgb: var(--mh-primary-rgb);
+  --bs-link-hover-color: var(--mh-primary-active);
+  --bs-link-hover-color-rgb: var(--mh-primary-active-rgb); /* what a:hover actually reads */
+  --bs-focus-ring-color: rgba(var(--mh-primary-rgb), 0.25);
+  --bs-form-invalid-color: var(--mh-danger);
+  --bs-form-invalid-border-color: var(--mh-danger);
+}
+
+/* 3. Buttons (the --bs-btn-* variables Bootstrap 5.3 reads). */
+.btn-primary {
+  --bs-btn-color: var(--mh-on-primary);
+  --bs-btn-bg: var(--mh-primary);
+  --bs-btn-border-color: var(--mh-primary);
+  --bs-btn-hover-color: var(--mh-on-primary);
+  --bs-btn-hover-bg: var(--mh-primary-hover);
+  --bs-btn-hover-border-color: var(--mh-primary-hover);
+  --bs-btn-focus-shadow-rgb: var(--mh-primary-rgb);
+  --bs-btn-active-color: var(--mh-on-primary);
+  --bs-btn-active-bg: var(--mh-primary-active);
+  --bs-btn-active-border-color: var(--mh-primary-active);
+  --bs-btn-disabled-color: var(--mh-on-primary);
+  --bs-btn-disabled-bg: var(--mh-primary);
+  --bs-btn-disabled-border-color: var(--mh-primary);
+}
+
+/* Background stays transparent (Bootstrap does not set --bs-btn-bg here). */
+.btn-outline-primary {
+  --bs-btn-color: var(--mh-primary);
+  --bs-btn-border-color: var(--mh-primary);
+  --bs-btn-hover-color: var(--mh-on-primary);
+  --bs-btn-hover-bg: var(--mh-primary);
+  --bs-btn-hover-border-color: var(--mh-primary);
+  --bs-btn-focus-shadow-rgb: var(--mh-primary-rgb);
+  --bs-btn-active-color: var(--mh-on-primary);
+  --bs-btn-active-bg: var(--mh-primary-active);
+  --bs-btn-active-border-color: var(--mh-primary-active);
+  --bs-btn-disabled-color: var(--mh-primary);
+  --bs-btn-disabled-border-color: var(--mh-primary);
+}
+
+.btn-danger {
+  --bs-btn-color: var(--mh-on-primary);
+  --bs-btn-bg: var(--mh-danger);
+  --bs-btn-border-color: var(--mh-danger);
+  --bs-btn-hover-color: var(--mh-on-primary);
+  --bs-btn-hover-bg: var(--mh-danger-hover);
+  --bs-btn-hover-border-color: var(--mh-danger-hover);
+  --bs-btn-focus-shadow-rgb: var(--mh-danger-rgb);
+  --bs-btn-active-color: var(--mh-on-primary);
+  --bs-btn-active-bg: var(--mh-danger-active);
+  --bs-btn-active-border-color: var(--mh-danger-active);
+  --bs-btn-disabled-color: var(--mh-on-primary);
+  --bs-btn-disabled-bg: var(--mh-danger);
+  --bs-btn-disabled-border-color: var(--mh-danger);
+}
+
+/* 4. Text: one base size, buttons and fields follow it.
+   Headings keep Bootstrap's sizes: they already shrink on small screens (calc with vw). */
+:root {
+  --bs-body-font-size: 1.125rem;
+}
+
+.btn {
+  /* also overrides .btn-sm / .btn-lg: small buttons would break the 44px target */
+  --bs-btn-font-size: var(--bs-body-font-size);
+}
+
+.form-control,
+.form-select {
+  font-size: var(--bs-body-font-size);
+}
+
+/* Fields: white background and a border with ≥ 3:1 contrast (Bootstrap's grey border is 1.17:1).
+   Disabled fields keep Bootstrap's grey (--bs-secondary-bg). Global --bs-border-color stays light. */
+.form-control,
+.form-select {
+  background-color: var(--mh-surface);
+  border-color: var(--mh-muted);
+}
+
+.form-check-input {
+  --bs-form-check-bg: var(--mh-surface);
+  border-color: var(--mh-muted);
+}
+
+/* Bootstrap writes its blue directly in these rules, not through variables. */
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  background-color: var(--mh-surface);
+  border-color: var(--mh-primary);
+}
+
+.form-check-input:checked {
+  background-color: var(--mh-primary);
+  border-color: var(--mh-primary);
+}
+
+/* 5. Visible focus: solid outline instead of Bootstrap's faint shadow (≥ 3:1 against the background). */
+:is(a, button, .btn, .nav-link, .navbar-brand, .navbar-toggler, .form-control, .form-select, .form-check-input):focus-visible {
+  outline: 3px solid var(--mh-focus-color);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus,
+.navbar-toggler:focus {
+  box-shadow: none;
+}
+
+/* Bootstrap adds the shadow back on pressed buttons with more specific selectors. */
+.btn {
+  --bs-btn-focus-box-shadow: none;
+}
+
+/* Dark navbar (colour decided with the navbar): the green outline would not show on it. */
+.navbar.bg-primary,
+.navbar-dark,
+.navbar[data-bs-theme='dark'] {
+  --mh-focus-color: var(--mh-focus-on-dark);
+}
+
+/* 6. Touch targets at least 44px high. */
+.btn,
+.form-control,
+.form-select,
+.navbar-toggler,
+.navbar-brand,
+.nav-link,
+textarea.form-control {
+  min-height: 44px;
+}
+
+.navbar-brand,
+.nav-link {
+  display: flex;
+  align-items: center;
+}
+
+/* 7. No horizontal scroll down to 360px: long words wrap, media never wider than its box. */
+body {
+  overflow-wrap: break-word;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* No height:auto here: an SVG without viewBox would grow to 150px. */
+svg {
+  max-width: 100%;
+}
+
+/* 8. Reduced motion: no transitions or animations. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
