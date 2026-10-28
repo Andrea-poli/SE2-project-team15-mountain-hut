@@ -23,7 +23,7 @@ export function createApp() {
   app.use('/api/public/slots', publicSlotsRouter); // MH-01
   app.use('/api/bookings', bookingsRouter); //        MH-01
   app.use('/api/slots', slotsRouter); //              MH-02
-  app.use('/api/availability', availabilityRouter); // MH-04
+  app.use('/api/public/slots/:id/availability', availabilityRouter); // MH-04
   if (isTestEnv(config.env)) {
     app.use('/api/test', testSupportRouter); //       MH-03 (tests only)
   }
