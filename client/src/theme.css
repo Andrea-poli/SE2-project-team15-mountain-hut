@@ -44,6 +44,12 @@
   --bs-focus-ring-color: rgba(var(--mh-primary-rgb), 0.25);
   --bs-form-invalid-color: var(--mh-danger);
   --bs-form-invalid-border-color: var(--mh-danger);
+
+  /* Danger "subtle" colours (Alert variant="danger", ErrorMessage): palette red instead of Bootstrap's.
+     Text --mh-danger-active on this background = 8.0:1 (≥ 4.5:1); recheck if --mh-danger changes. */
+  --bs-danger-text-emphasis: var(--mh-danger-active);
+  --bs-danger-bg-subtle: color-mix(in srgb, var(--mh-danger), white 88%);
+  --bs-danger-border-subtle: color-mix(in srgb, var(--mh-danger), white 60%);
 }
 
 /* 3. Buttons (the --bs-btn-* variables Bootstrap 5.3 reads). */
