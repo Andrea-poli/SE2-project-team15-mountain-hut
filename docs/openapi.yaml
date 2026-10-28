@@ -402,7 +402,9 @@ paths:
               example:
                 error: 'Slot not found'
         '409':
-          description: The party no longer fits (concurrent booking)
+          description: >
+            The party does not fit (partySize > free seats) for example because 
+            another booking took the room before validation
           content:
             application/json:
               schema:
@@ -415,15 +417,12 @@ paths:
       tags: [bookings]
       summary: Read one booking (owner only)
       description: >
-        Only the hiker who made the booking sees it; anyone else gets 404, so
-        the existence of other people's bookings is never revealed. Staff
-        access to bookings is a later extension of this contract: when staff
-        can enter phone reservations or read occupancy, the rule becomes
-        "owner or staff" - keep that in mind before caching these responses
-        client-side.
+        Only the hiker who made the booking can read it. All other users,
+        including staff, receive 404 so the existence of another person's
+        booking is not revealed.
       operationId: getBooking
       security:
-        - sessionCookie: [hiker, employee, warden]
+        - sessionCookie: [hiker]
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -433,6 +432,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Booking'
+        '400':
+          description: The booking id is not a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'id must be a positive integer'
         '401':
           description: Not logged in
           content:
@@ -480,7 +487,7 @@ paths:
       responses:
         '200':
           description: >
-            Slots ordered by date, then start time; `tables` ordered by name.
+            Slots ordered by date, then start time; `tables` ordered by natural order.
           content:
             application/json:
               schema:
@@ -615,7 +622,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               example:
-                error: 'Not found: GET /api/test/emails'
+                error: 'No API endpoint for GET /api/test/emails'
 
 components:
   parameters:
