@@ -46,8 +46,6 @@ security:
   - sessionCookie: []
 
 tags:
-  - name: health
-    description: Server liveness (CI and Docker health check)
   - name: auth
     description: Registration, login, logout and current user
   - name: public
@@ -62,24 +60,6 @@ tags:
     description: Only available when NODE_ENV is test/e2e
 
 paths:
-  /api/health:
-    get:
-      tags: [health]
-      summary: Check that the server is running
-      operationId: getHealth
-      security: []
-      responses:
-        '200':
-          description: Server is up
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [status]
-                properties:
-                  status:
-                    type: string
-                    example: ok
 
   /api/auth/register:
     post:
