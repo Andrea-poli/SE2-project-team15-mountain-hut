@@ -227,20 +227,22 @@ paths:
   /api/public/slots:
     get:
       tags: [public]
-      summary: Open meal slots still bookable on a day
+      summary: All meal slots on a day
       description: >
         Used by the SlotPicker (date → time → party size) on both the
-        availability page and the booking page. Only slots with status `open`
-        that start more than 2 hours from now are returned, and only slots
-        where a party of 1 still fits, i.e. the slot has at least one free
-        seat (the allocation rule is defined in the API overview).
+        availability page and the booking page. All slots with status `open`
+        are returned, including full slots and slots that have started or start
+        within 2 hours. `bookingState` is `tooLate` when booking is closed,
+        otherwise `full` when no seats remain, or `bookable`. The SlotPicker
+        disables full and too-late slots and shows the reason. No seat counts
+        are exposed.
       operationId: listPublicSlots
       security: []
       parameters:
         - $ref: '#/components/parameters/Date'
       responses:
         '200':
-          description: Bookable slots of the day, ordered by start time
+          description: All slots of the day, ordered by start time
           content:
             application/json:
               schema:
@@ -252,10 +254,17 @@ paths:
                   label: Lunch
                   startTime: '12:00'
                   endTime: '14:00'
+                  bookingState: tooLate
                 - id: 4
                   label: Dinner - 1st turn
                   startTime: '19:00'
                   endTime: '20:30'
+                  bookingState: full
+                - id: 5
+                  label: Dinner - 2nd turn
+                  startTime: '21:00'
+                  endTime: '22:30'
+                  bookingState: bookable
         '400':
           description: Missing or invalid date (not YYYY-MM-DD)
           content:
@@ -793,8 +802,8 @@ components:
 
     PublicSlot:
       type: object
-      description: Open, still bookable slot, as shown in the SlotPicker "time" menu.
-      required: [id, startTime, endTime]
+      description: Open slot, as shown in the SlotPicker "time" menu.
+      required: [id, startTime, endTime, bookingState]
       properties:
         id:
           type: integer
@@ -811,6 +820,13 @@ components:
           type: string
           pattern: '^\d{2}:\d{2}$'
           example: '14:00'
+        bookingState:
+          type: string
+          description: >
+            `tooLate` when the slot has started or starts within 2 hours;
+            `full` when no seats remain; else `bookable` .
+          enum: [bookable, full, tooLate]
+          example: bookable
 
     Availability:
       type: object
@@ -911,8 +927,7 @@ components:
         status:
           type: string
           description: >
-            Values managed by a code constant, not by a DB check, so new
-            states can be added without rebuilding the table.
+            Will be implemented in a future story; for now always `confirmed`.
           enum: [confirmed, cancelled]
           example: confirmed
         createdAt:
@@ -940,7 +955,7 @@ components:
     Slot:
       type: object
       description: A slot with its tables, as shown in the weekly view card.
-      required: [id, date, startTime, endTime, status, past, tables]
+      required: [id, date, startTime, endTime, label, status, past, tables]
       properties:
         id:
           type: integer
@@ -963,6 +978,7 @@ components:
           example: Dinner - 1st turn
         status:
           type: string
+          description: Will be implemented in a future story; for now always `open`
           enum: [open, closed]
           example: open
         past:
