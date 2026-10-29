@@ -15,8 +15,8 @@ let nextId = users.length + 1;
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, DELAY_MS));
 
-// The client never sees the password.
-function toUser({ password: _password, ...user }) {
+// The client never sees the password, nor the mock-only registration extras.
+function toUser({ password: _password, notes: _notes, emergencyContact: _emergencyContact, ...user }) {
   return user;
 }
 
@@ -46,25 +46,34 @@ const isBlank = (value) => typeof value !== 'string' || value.trim() === '';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const findByEmail = (email) => users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
 
+// Same phone rule as utils/validation.js: optional leading +, digits, spaces, hyphens, at least 6 digits.
+const isPhone = (value) => /^\+?[\d\s-]+$/.test(value.trim()) && value.replace(/\D/g, '').length >= 6;
+
 export async function register(data = {}) {
   await wait();
-  const { firstName, lastName, email, password, phone } = data;
-  // TODO: align with U5 server / openapi.yaml (only the password message is in the yaml)
-  if ([firstName, lastName, email, password].some(isBlank)) {
-    throw new ApiError(400, 'First name, last name, email and password are required');
+  const { firstName, lastName, email, password, phone, notes, emergencyContact } = data;
+  // TODO: align with the updated contract (U2) and U5: phone required, notes and emergencyContact
+  // (PO, context.md "Hiker Information"). Only the password message is in openapi.yaml.
+  if ([firstName, lastName, email, password, phone].some(isBlank)) {
+    throw new ApiError(400, 'First name, last name, email, password and mobile number are required');
   }
   if (!EMAIL_RE.test(email.trim())) throw new ApiError(400, 'Email is not valid');
   if (password.length < 8) throw new ApiError(400, 'Password must be at least 8 characters long');
+  if (!isPhone(phone)) throw new ApiError(400, 'Mobile number is not valid');
   if (findByEmail(email)) throw new ApiError(409, 'Email already in use');
 
+  // notes and emergencyContact are kept by the mock but, like the password, never returned:
+  // the user object stays {id, firstName, lastName, email, phone, role}.
   const created = {
     id: nextId++,
     firstName: firstName.trim(),
     lastName: lastName.trim(),
     email: email.trim(),
-    phone: isBlank(phone) ? null : phone.trim(),
+    phone: phone.trim(),
     role: 'hiker',
     password,
+    notes: isBlank(notes) ? null : notes.trim(),
+    emergencyContact: isBlank(emergencyContact) ? null : emergencyContact.trim(),
   };
   users.push(created);
   const user = toUser(created);

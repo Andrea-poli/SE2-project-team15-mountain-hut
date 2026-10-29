@@ -9,7 +9,10 @@ import { apiFetch, useMocks } from './client.js';
 const mocks = () =>
   import.meta.env.VITE_USE_MOCKS === 'true' ? import('./mocks/auth.js') : Promise.reject(new Error('Mocks are off'));
 
-// POST /api/auth/register → 201 User (logged in) | 400 | 409 "Email already in use"
+// POST /api/auth/register {firstName, lastName, email, password, phone, notes?, emergencyContact?}
+//   → 201 User (logged in) | 400 | 409 "Email already in use"
+// TODO: align with the updated contract (U2) and U5: phone required, notes and emergencyContact
+// are new (PO, context.md "Hiker Information"); openapi.yaml still has phone optional.
 export async function register(data) {
   if (useMocks) return (await mocks()).register(data);
   return apiFetch('/api/auth/register', { method: 'POST', body: data });
