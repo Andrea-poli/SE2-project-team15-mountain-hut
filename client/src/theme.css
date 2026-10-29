@@ -268,3 +268,76 @@ svg {
   flex-shrink: 0;
   color: var(--mh-primary);
 }
+
+/* 11. Phone field (react-phone-number-input in RegisterPage; its style.css is loaded with that page).
+   The container .PhoneInput is the .form-control (border, 44px, is-invalid); the inner <input> has none. */
+.PhoneInput {
+  /* The library's own blue and greys, replaced by the palette (set here, not on :root, so they win). */
+  --PhoneInput-color--focus: var(--mh-primary);
+  --PhoneInputCountrySelectArrow-color: var(--mh-text);
+  --PhoneInputCountrySelectArrow-opacity: 1;
+}
+
+/* Clean flag: no grey frame or loading background, centred in the field. The focus on the country
+   menu is shown by the container outline below, like the other fields. */
+.PhoneInput .PhoneInputCountryIcon--border {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+/* The flag <svg> is inline by default and sits on the text baseline (6.5px too low):
+   as a block filling a flex box it is centred like the code and the arrow. */
+.PhoneInput .PhoneInputCountryIcon {
+  display: flex;
+  align-items: center;
+}
+
+.PhoneInput .PhoneInputCountryIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.PhoneInput .PhoneInputCountry {
+  align-self: stretch;
+  align-items: center;
+  margin-right: 0.75rem; /* space between the arrow and the number */
+}
+
+/* Calling code next to the flag (PhoneCountrySelect): same size and colour as the field text,
+   centred on the same line as flag and arrow. */
+.PhoneInput .mh-phone-prefix {
+  margin-left: 0.5rem;
+  line-height: 1;
+}
+
+/* Example number: --mh-muted like the other placeholders (≥ 4.5:1 on --mh-surface). */
+.PhoneInput .PhoneInputInput::placeholder {
+  color: var(--mh-muted);
+  opacity: 1;
+}
+
+.PhoneInput.form-control {
+  display: flex;
+  align-items: center;
+  /* No vertical padding: the inner <input> fills the box inside the 1px border (42px of the 44px). */
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.PhoneInput .PhoneInputInput {
+  align-self: stretch; /* full height of the 44px container: the whole box is the click target */
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* The focus is on the inner <input> or <select>: the container shows it like the other fields (section 5). */
+.PhoneInput.form-control:focus-within {
+  border-color: var(--mh-primary);
+  outline: 3px solid var(--mh-focus-color);
+  outline-offset: 2px;
+}

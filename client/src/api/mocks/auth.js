@@ -1,5 +1,6 @@
 // Mock of the auth endpoints (VITE_USE_MOCKS=true): same results and errors as the server,
 // no server needed. Only loaded through a dynamic import in api/auth.js.
+import { isValidPhoneNumber } from 'libphonenumber-js';
 import { ApiError } from '../client.js';
 
 const DELAY_MS = 300;
@@ -46,8 +47,8 @@ const isBlank = (value) => typeof value !== 'string' || value.trim() === '';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const findByEmail = (email) => users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
 
-// Same phone rule as utils/validation.js: optional leading +, digits, spaces, hyphens, at least 6 digits.
-const isPhone = (value) => /^\+?[\d\s-]+$/.test(value.trim()) && value.replace(/\D/g, '').length >= 6;
+// Same check and metadata as utils/phone.js and the server (U5): the number is E.164.
+const isPhone = (value) => isValidPhoneNumber(value.trim());
 
 export async function register(data = {}) {
   await wait();

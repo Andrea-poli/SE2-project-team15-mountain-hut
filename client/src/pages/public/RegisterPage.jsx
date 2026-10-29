@@ -8,6 +8,11 @@ import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
 import Row from 'react-bootstrap/Row';
+// Phone field with country menu. Metadata: the same set as utils/phone.js and the server (U5).
+// Flags are bundled SVGs: without the `flags` prop the library would load them from an external site.
+import PhoneInput from 'react-phone-number-input';
+import flags from 'react-phone-number-input/flags';
+import 'react-phone-number-input/style.css'; // the only import of the library CSS (colours: theme.css, section 11)
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { nextFor } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
@@ -15,7 +20,9 @@ import ErrorMessage from '../../components/ErrorMessage.jsx';
 import FormField from '../../components/FormField.jsx';
 import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
-import { MIN_PASSWORD_LENGTH, isBlank, isEmail, isPhone } from '../../utils/validation.js';
+import PhoneCountrySelect from '../../components/PhoneCountrySelect.jsx';
+import { countryLabels, examplePhone, isPhone, pastedInternationalPhone } from '../../utils/phone.js';
+import { MIN_PASSWORD_LENGTH, isBlank, isEmail } from '../../utils/validation.js';
 
 // Ids of the checked fields in form order: after a failed submit, the first one with an error gets the focus.
 const FIELD_IDS = {
@@ -26,6 +33,7 @@ const FIELD_IDS = {
   phone: 'register-phone',
 };
 const GENERAL = 'general';
+const DEFAULT_PHONE_COUNTRY = 'IT';
 
 const EMPTY = { firstName: '', lastName: '', email: '', password: '', phone: '', notes: '', emergencyContact: '' };
 
@@ -40,20 +48,19 @@ function validate(v) {
     errors.password = `The password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
   }
   if (isBlank(v.phone)) errors.phone = 'Enter your mobile number.';
-  else if (!isPhone(v.phone)) {
-    errors.phone = 'Enter a valid mobile number: at least 6 digits; only +, spaces and hyphens.';
-  }
+  else if (!isPhone(v.phone)) errors.phone = 'Enter a valid mobile number for the chosen country.';
   return errors;
 }
 
-// Text fields trimmed, password as typed, empty optional fields not sent.
+// Text fields trimmed, password as typed, phone already E.164 (e.g. "+393401234567"),
+// empty optional fields not sent.
 function toPayload(v) {
   const data = {
     firstName: v.firstName.trim(),
     lastName: v.lastName.trim(),
     email: v.email.trim(),
     password: v.password,
-    phone: v.phone.trim(),
+    phone: v.phone,
   };
   if (!isBlank(v.notes)) data.notes = v.notes.trim();
   if (!isBlank(v.emergencyContact)) data.emergencyContact = v.emergencyContact.trim();
@@ -69,6 +76,8 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [generalError, setGeneralError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // Country of the phone field: drives the example number in the placeholder.
+  const [phoneCountry, setPhoneCountry] = useState(DEFAULT_PHONE_COUNTRY);
 
   const generalRef = useRef(null);
   // What gets the focus after a failed submit: a field id, or GENERAL for the general message.
@@ -88,6 +97,16 @@ export default function RegisterPage() {
   if (user) return <Navigate replace to={nextFor(user, next)} />;
 
   const change = (name) => (e) => setValues((v) => ({ ...v, [name]: e.target.value }));
+
+  // Pasting "+41 79 123 45 67": the library would switch to Switzerland but keep "+41" in the field,
+  // next to the "+41" already shown by the flag. Passing the E.164 value instead lets PhoneInput
+  // pick the country and show only the national part.
+  const pastePhone = (event) => {
+    const e164 = pastedInternationalPhone(event.clipboardData.getData('text'));
+    if (!e164) return;
+    event.preventDefault();
+    setValues((v) => ({ ...v, phone: e164 }));
+  };
 
   // On blur, only for a field that already shows an error: check it again and update or remove
   // its message. Nothing while typing, and no errors on fields that were never flagged.
@@ -188,13 +207,32 @@ export default function RegisterPage() {
                 required
                 error={errors.password}
               />
+              {/* PhoneInput as the control: the container gets .form-control (border, 44px, is-invalid),
+                  id, aria-*, required, autoComplete, placeholder, onPaste and onBlur go to the number <input>.
+                  onChange gives the E.164 value (undefined when empty), not an event.
+                  The field holds the national number; the calling code is shown next to the flag
+                  (PhoneCountrySelect), and changes with the country. */}
               <FormField
                 id={FIELD_IDS.phone}
+                as={PhoneInput}
                 label="Mobile number"
-                type="tel"
+                help="Choose the country, then type your mobile number."
+                defaultCountry={DEFAULT_PHONE_COUNTRY}
+                addInternationalOption={false}
+                labels={countryLabels}
+                flags={flags}
+                countrySelectComponent={PhoneCountrySelect}
+                countrySelectProps={{ 'aria-label': 'Country' }}
+                onCountryChange={(country) => setPhoneCountry(country)}
+                placeholder={examplePhone(phoneCountry)}
+                onPaste={pastePhone}
+                // A value set from outside (the pasted number) is shown in national format.
+                initialValueFormat="national"
+                // Arrow keys on the country menu must not jump to the number field.
+                focusInputOnCountrySelection={false}
                 autoComplete="tel"
-                value={values.phone}
-                onChange={change('phone')}
+                value={values.phone || undefined}
+                onChange={(phone) => setValues((v) => ({ ...v, phone: phone ?? '' }))}
                 onBlur={recheck('phone')}
                 required
                 error={errors.phone}
