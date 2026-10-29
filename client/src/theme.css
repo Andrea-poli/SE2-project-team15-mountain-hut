@@ -248,3 +248,23 @@ svg {
   background-color: var(--mh-surface);
   color: var(--mh-primary);
 }
+
+/* 10. Cards and home hero. */
+
+/* Cards on --mh-surface (Bootstrap uses the body background, the same grey as the page). */
+.card {
+  --bs-card-bg: var(--mh-surface);
+}
+
+/* Intro block at the top of the home page. */
+.mh-hero {
+  background-color: var(--mh-surface);
+  border: var(--bs-border-width) solid var(--bs-border-color-translucent);
+  border-radius: var(--bs-border-radius-lg);
+}
+
+/* Decorative icon next to a card title. */
+.mh-card-icon {
+  flex-shrink: 0;
+  color: var(--mh-primary);
+}
