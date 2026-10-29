@@ -1,6 +1,11 @@
 // Starts the server. config.js is imported first: it sets TZ and checks the settings before anything else runs.
 import { config } from './config.js';
 import { createApp } from './app.js';
+import { getDb } from './dao/db.js';
+
+// Opens the database (and creates or migrates its tables) before accepting requests:
+// a wrong DB_PATH or a broken schema stops the server here, with the SQLite error.
+await getDb();
 
 const app = createApp();
 
