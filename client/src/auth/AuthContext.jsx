@@ -45,9 +45,17 @@ export function AuthProvider({ children }) {
     return created;
   }, []);
 
+  // Logout is started from the navbar, which has no place for messages: the error goes to `error`
+  // (shown by PageLayout) and is thrown again for the caller.
   const logout = useCallback(async () => {
-    await authApi.logout();
+    try {
+      await authApi.logout();
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
     setUser(null);
+    setError(null);
   }, []);
 
   const value = useMemo(

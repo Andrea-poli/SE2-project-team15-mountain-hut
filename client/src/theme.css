@@ -5,7 +5,7 @@
 :root {
   --mh-text: #1f2a24; /* body text and headings */
   --mh-muted: #55605a; /* secondary text: hints, captions, past days */
-  --mh-bg: #eef4ef; /* page background */
+  --mh-bg: #f7f7f5; /* page background (neutral) */
   --mh-surface: #ffffff; /* background of fields, cards and panels */
   --mh-primary: #2f5d45; /* main buttons, links, focus outline */
   --mh-danger: #a3372c; /* errors, invalid fields, destructive buttons */
@@ -213,4 +213,38 @@ svg {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* 9. Navbar (AppNavbar: bg="primary" + data-bs-theme="dark") and skip link. */
+
+/* Full white instead of Bootstrap's 55 % white (3.5:1): --mh-on-primary on --mh-primary = 7.6:1. */
+.navbar.bg-primary {
+  --bs-navbar-color: var(--mh-on-primary);
+  --bs-navbar-hover-color: var(--mh-on-primary);
+  --bs-navbar-active-color: var(--mh-on-primary);
+  --bs-navbar-brand-color: var(--mh-on-primary);
+  --bs-navbar-brand-hover-color: var(--mh-on-primary);
+  --bs-navbar-toggler-border-color: var(--mh-on-primary);
+}
+
+/* All entries are white: only the current page (NavLink .active, set from the URL) is underlined.
+   Not on hover or focus, so nothing else looks like the current page; focus has its outline (section 5). */
+.navbar.bg-primary .nav-link.active {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+/* Hidden until focused (Bootstrap .visually-hidden-focusable), then on top of the navbar. */
+.mh-skip-link:focus {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  background-color: var(--mh-surface);
+  color: var(--mh-primary);
 }
