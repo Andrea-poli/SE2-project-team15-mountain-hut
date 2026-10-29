@@ -1,6 +1,5 @@
 // Home page (U7, step 9b): static information about the hut, texts in content/hut.js.
 import { Binoculars, CalendarSearch, Info, MapPin, Route } from 'lucide-react';
-import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
 import Row from 'react-bootstrap/Row';
@@ -34,10 +33,10 @@ export default function HomePage() {
       <section className="mh-hero p-4 p-md-5 mb-4">
         <h1>{hut.name}</h1>
         <p className="fs-5 mb-4">{hut.tagline}</p>
-        <Button as={Link} to={routes.checkAvailability} size="lg" className="d-inline-flex align-items-center">
+        <Link to={routes.checkAvailability} className="btn btn-primary btn-lg d-inline-flex align-items-center">
           <CalendarSearch aria-hidden="true" size={24} className="me-2" />
           Check availability
-        </Button>
+        </Link>
       </section>
 
       {/* One column on phones, two from 768px. */}
