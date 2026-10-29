@@ -10,6 +10,7 @@ import { nextFor } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import FormField from '../../components/FormField.jsx';
+import PasswordField from '../../components/PasswordField.jsx';
 import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
 import { isBlank, isEmail } from '../../utils/validation.js';
@@ -113,10 +114,10 @@ export default function LoginPage() {
                 required
                 error={errors.email}
               />
-              <FormField
+              <PasswordField
                 id={FIELD_IDS.password}
                 label="Password"
-                type="password"
+                toggleLabel="Show password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

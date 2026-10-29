@@ -341,3 +341,42 @@ svg {
   outline: 3px solid var(--mh-focus-color);
   outline-offset: 2px;
 }
+
+/* 12. Password field (PasswordField): show/hide button inside the input, on the right, no box. */
+.mh-password-box {
+  position: relative;
+}
+
+/* Room on the right for the 44px button, so long passwords never run under the icon.
+   No Bootstrap error icon here (it would sit under the eye): the red border marks the error. */
+.mh-password .form-control,
+.mh-password .form-control.is-invalid {
+  padding-right: calc(44px + 0.25rem);
+  background-image: none;
+}
+
+.mh-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px; /* 44 × 44 click target */
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-border-radius);
+  background: transparent;
+  color: var(--mh-muted); /* icon ≥ 3:1 on --mh-surface */
+}
+
+.mh-password-toggle:hover {
+  color: var(--mh-text);
+}
+
+/* Edge draws its own "reveal" eye inside password inputs: only our button is shown. */
+.mh-password input::-ms-reveal {
+  display: none;
+}

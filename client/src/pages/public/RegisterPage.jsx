@@ -18,6 +18,7 @@ import { nextFor } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import FormField from '../../components/FormField.jsx';
+import PasswordField from '../../components/PasswordField.jsx';
 import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
 import PhoneCountrySelect from '../../components/PhoneCountrySelect.jsx';
@@ -30,12 +31,22 @@ const FIELD_IDS = {
   lastName: 'register-last-name',
   email: 'register-email',
   password: 'register-password',
+  confirmPassword: 'register-confirm-password',
   phone: 'register-phone',
 };
 const GENERAL = 'general';
 const DEFAULT_PHONE_COUNTRY = 'IT';
 
-const EMPTY = { firstName: '', lastName: '', email: '', password: '', phone: '', notes: '', emergencyContact: '' };
+const EMPTY = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  phone: '',
+  notes: '',
+  emergencyContact: '',
+};
 
 function validate(v) {
   const errors = {};
@@ -47,13 +58,15 @@ function validate(v) {
   else if (v.password.length < MIN_PASSWORD_LENGTH) {
     errors.password = `The password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
   }
+  if (isBlank(v.confirmPassword)) errors.confirmPassword = 'Confirm your password.';
+  else if (v.confirmPassword !== v.password) errors.confirmPassword = 'The passwords do not match.';
   if (isBlank(v.phone)) errors.phone = 'Enter your mobile number.';
   else if (!isPhone(v.phone)) errors.phone = 'Enter a valid mobile number for the chosen country.';
   return errors;
 }
 
 // Text fields trimmed, password as typed, phone already E.164 (e.g. "+393401234567"),
-// empty optional fields not sent.
+// empty optional fields not sent. confirmPassword is a client-side check only: never sent.
 function toPayload(v) {
   const data = {
     firstName: v.firstName.trim(),
@@ -195,10 +208,10 @@ export default function RegisterPage() {
                 required
                 error={errors.email}
               />
-              <FormField
+              <PasswordField
                 id={FIELD_IDS.password}
                 label="Password"
-                type="password"
+                toggleLabel="Show password"
                 autoComplete="new-password"
                 help={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 value={values.password}
@@ -206,6 +219,17 @@ export default function RegisterPage() {
                 onBlur={recheck('password')}
                 required
                 error={errors.password}
+              />
+              <PasswordField
+                id={FIELD_IDS.confirmPassword}
+                label="Confirm password"
+                toggleLabel="Show confirmed password"
+                autoComplete="new-password"
+                value={values.confirmPassword}
+                onChange={change('confirmPassword')}
+                onBlur={recheck('confirmPassword')}
+                required
+                error={errors.confirmPassword}
               />
               {/* PhoneInput as the control: the container gets .form-control (border, 44px, is-invalid),
                   id, aria-*, required, autoComplete, placeholder, onPaste and onBlur go to the number <input>.
