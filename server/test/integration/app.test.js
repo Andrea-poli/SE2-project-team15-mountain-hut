@@ -38,7 +38,7 @@ describe('app skeleton', () => {
   });
 
   it('answers the unknown URLs of the sprint areas with 404 and { error }', async () => {
-    for (const url of ['/api/auth/me', '/api/public/slots', '/api/bookings/1', '/api/slots', '/api/availability']) {
+    for (const url of ['/api/auth/nothing', '/api/public/slots', '/api/bookings/1', '/api/slots', '/api/availability']) {
       const res = await request(app).get(url);
       expect(res.status, url).toBe(404);
       expect(res.body.error, url).toMatch(/^No API endpoint/);
