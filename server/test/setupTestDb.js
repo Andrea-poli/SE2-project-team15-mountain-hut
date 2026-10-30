@@ -7,4 +7,10 @@ import { createTestDb } from './helpers/testDb.js';
 const db = createTestDb();
 process.env.DB_PATH = db.file;
 process.env.SESSIONS_DB_PATH = db.sessionsFile;
-afterAll(() => db.cleanup());
+afterAll(async () => {
+  // Close the shared connection first: Windows cannot delete an open file. Imported here, not at the top,
+  // so config.js is never loaded before DB_PATH is set; a file that never used the DB just opens nothing.
+  const { closeDb } = await import('../src/dao/db.js');
+  await closeDb();
+  db.cleanup();
+});
