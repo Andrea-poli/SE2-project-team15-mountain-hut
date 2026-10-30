@@ -28,14 +28,18 @@ info:
     * **Slot time rules** - a new slot must start strictly after the current
       hut-local time. A slot is `past` once its start time is at or before the
       current hut-local time.
-    * **Booking deadline** - a slot can be booked only up to 2 hours before
-      its start. Past that deadline the slot disappears from
-      `GET /api/public/slots` and `POST /api/bookings` returns `400`.
-    * **Allocation rule** - a party sits on the fewest tables possible; among
-      those options, the one leaving the fewest free seats on the tables
-      used; on a tie, the lowest table ids. Example: tables 6, 4, 4, party of
-      8 → the two 4s; party of 5 → the 6. Both the availability check and the
-      booking use the same rule, so what the hiker saw is what they get.
+    * **Booking window** - there is no maximum advance-booking window. A hiker
+      can book any staff-defined slot up to 2 hours before its start; within
+      2 hours, the slot is no longer bookable and `POST /api/bookings` returns
+      `400`.
+    * **Allocation rule** - first try to seat the whole party at one table,
+      possibly sharing it with other parties. Split the party only when no
+      single table has enough free seats; then use as few tables as possible,
+      leaving the fewest unused free seats on the selected tables. On a tie,
+      use the lowest table ids. There is no minimum party size per table or
+      requirement that selected tables be adjacent. Example: tables 6, 4, 4,
+      party of 8 → the two 4s; party of 5 → the 6. The availability check and
+      booking use the same rule.
     * **Unknown routes** - any request under `/api` that matches no path+method
       below returns `404` with the `Error` body.
     * **Test-only routes** - endpoints tagged `test-utils` exist only when
@@ -73,8 +77,9 @@ paths:
       description: >
         Creates a hiker account only (staff accounts are created by the seed).
         On success the user is already logged in: the response sets the
-        session cookie. Web registration always requires first name, last
-        name, email and password.
+        session cookie. Hiker registration requires first name, last name,
+        email, password and mobile number. Notes and emergency-contact details
+        are optional.
       operationId: register
       security: []
       requestBody:
@@ -88,7 +93,9 @@ paths:
               lastName: Rossi
               email: mario.rossi@example.com
               password: segretissimopw
-              phone: '+39 333 1234567'
+              phone: '+39 333 0000000'
+              notes: Registered mountain guide
+              emergencyContact: '+39 333 0000001'
       responses:
         '201':
           description: User created and logged in; sets the session cookie
@@ -98,8 +105,8 @@ paths:
                 $ref: '#/components/schemas/User'
         '400':
           description: >
-            Missing or invalid body: email not well formed, password shorter
-            than 8 characters, missing first or last name.
+            Missing or invalid body: missing required registration details,
+            email not well formed, or password shorter than 8 characters.
           content:
             application/json:
               schema:
@@ -185,50 +192,6 @@ paths:
               example:
                 error: 'Not logged in'
 
-  /api/public/home:
-    get:
-      tags: [public]
-      summary: Home page content
-      description: >
-        General presentation of the hut for the home page: description,
-        location, how to get there and points of interest reachable from
-        the hut. Anonymous and read-only for now; a later story may let the
-        warden edit this content, which is why it comes from the API instead
-        of being hard-coded in the client. Cacheable client-side (it changes
-        rarely).
-      operationId: getHutInfo
-      security: []
-      responses:
-        '200':
-          description: The hut information shown on the home page
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HutInfo'
-              example:
-                name: Rifugio Monte Albo
-                description: >
-                  A mountain hut owned by the local alpine club, on the ridge
-                  above the valley. Shared sleeping quarters, communal dining
-                  room, open from June to September.
-                location:
-                  latitude: 45.8321
-                  longitude: 7.5663
-                  altitudeM: 2035
-                gettingThere: >
-                  From the parking of Pian delle Noci, trail 103 in about
-                  3 hours (900 m of ascent). Check the weather forecast: the
-                  last hour is exposed.
-                pointsOfInterest:
-                  - name: Lago Bianco
-                    description: Small alpine lake, 40 minutes from the hut.
-                    walkingTimeMin: 40
-                  - name: Cresta della Croce
-                    description: >
-                      Ridge walk with a view over the whole valley, a full
-                      day trip with the hut as a base.
-                    walkingTimeMin: 300
-
   /api/public/slots:
     get:
       tags: [public]
@@ -240,7 +203,8 @@ paths:
         within 2 hours. `bookingState` is `tooLate` when booking is closed,
         otherwise `full` when no seats remain, or `bookable`. The SlotPicker
         disables full and too-late slots and shows the reason. No seat counts
-        are exposed.
+        are exposed. A hut may define multiple slots per day with different
+        start times and durations; there is no fixed meal schedule.
       operationId: listPublicSlots
       security: []
       parameters:
@@ -350,11 +314,11 @@ paths:
       summary: Book a table for a party
       description: >
         Hikers only. The server re-reads the seats inside a transaction and
-        assigns the tables with the allocation rule; if another booking takes
-        the room in between the answer is 409. A booking for a slot starting
-        within 2 hours is refused with 400. On success the confirmation email
-        hook is called after the commit: if the email fails the booking
-        stays valid.
+        assigns tables with the allocation rule. A slot holds its tables for
+        its entire duration. A hiker may have at most one booking for a given
+        slot. A booking for a slot starting within 2 hours is refused with 400. 
+        On success, the confirmation email hook is called after the commit: 
+        if the email fails, the booking stays valid.
       operationId: createBooking
       security:
         - sessionCookie: []
@@ -417,14 +381,18 @@ paths:
                 error: 'Slot not found'
         '409':
           description: >
-            The party does not fit (partySize > free seats) for example because 
-            another booking took the room before validation
+            The party does not fit in the remaining free seats (including
+            when another booking took seats before validation), or this hiker
+            already has a booking for this slot.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example:
-                error: 'Not available anymore'
+              examples:
+                notAvailable:
+                  value: { error: 'Not enough seats available for this party' }
+                alreadyBooked:
+                  value: { error: 'You already have a booking for this slot' }
 
   /api/bookings/{id}:
     get:
@@ -477,8 +445,10 @@ paths:
         Employee and warden only (the warden passes every employee check);
         hikers receive 403.
         Used by the weekly view (past days greyed out, `past` flag) and by the
-        "copy tables from" menu of the new-slot form. No slot detail endpoint
-        exists: the tables are read from this list.
+        "copy tables from" menu of the new-slot form. Slots can have different
+        table layouts; staff may reuse a previous slot's table configuration,
+        and there is no single fixed table set. No slot detail endpoint exists for
+        the moment: the tables are read from this list.
       operationId: listSlots
       security:
         - sessionCookie: []
@@ -502,7 +472,9 @@ paths:
       responses:
         '200':
           description: >
-            Slots ordered by date, then start time; `tables` ordered by natural order.
+            Slots ordered by date, then start time; `tables` ordered by natural
+            name order (text alphabetically, digit sequences numerically, e.g.
+            T2 before T10).
           content:
             application/json:
               schema:
@@ -541,8 +513,9 @@ paths:
         Employee and warden only; hikers receive 403. The slot must start
         strictly after the current hut-local time and must not overlap any
         existing slot of the same day (adjacent turns are allowed:
-        end == next start). A slot has at least one table; table names are
-        unique within the slot.
+        end == next start). Each slot has its own table configuration and may
+        reuse a previous slot's configuration. A slot has at least one table;
+        table names are unique within the slot.
       operationId: createSlot
       security:
         - sessionCookie: []
@@ -689,7 +662,9 @@ components:
   schemas:
     User:
       type: object
-      description: A user as seen by the client. Never contains the password or its hash.
+      description: >
+        A user as seen by the client. Never contains the password or its hash.
+        Notes and emergency-contact details are optional hiker profile fields.
       required: [id, firstName, lastName, email, phone, role]
       properties:
         id:
@@ -708,7 +683,16 @@ components:
         phone:
           type: string
           nullable: true
+          description: Optional for staff, required for hikers. Must be a valid mobile number.
           example: '+39 333 1234567'
+        notes:
+          type: string
+          nullable: true
+          description: Optional notes on a hiker's profile.
+        emergencyContact:
+          type: string
+          nullable: true
+          description: Optional free-text emergency-contact details.
         role:
           type: string
           enum: [hiker, employee, warden]
@@ -716,8 +700,10 @@ components:
 
     NewUser:
       type: object
-      description: Registration form. Web registration requires all fields except phone.
-      required: [firstName, lastName, email, password]
+      description: >
+        Hiker registration form. Mobile number is required; notes and
+        emergency-contact details are optional.
+      required: [firstName, lastName, email, password, phone]
       properties:
         firstName:
           type: string
@@ -739,8 +725,16 @@ components:
           example: segretissimopw
         phone:
           type: string
-          nullable: true
+          format: phone number
           example: '+39 333 1234567'
+        notes:
+          type: string
+          nullable: true          
+          description: Optional notes on the hiker's profile.
+        emergencyContact:
+          type: string
+          nullable: true
+          description: Optional free-text emergency-contact details.
 
     LoginCredentials:
       type: object
@@ -754,60 +748,6 @@ components:
           type: string
           format: password
           example: segretissimopw
-
-    HutInfo:
-      type: object
-      description: >
-        General information about the hut, shown on the home page. Read-only;
-        the fields are free text on purpose (mountain directions do not
-        structure well), ready for a future editing story.
-      required: [name, description, location, gettingThere, pointsOfInterest]
-      properties:
-        name:
-          type: string
-          example: Rifugio Monte Albo
-        description:
-          type: string
-          description: General description of the hut.
-        location:
-          type: object
-          required: [latitude, longitude]
-          properties:
-            latitude:
-              type: number
-              example: 45.8321
-            longitude:
-              type: number
-              example: 7.5663
-            altitudeM:
-              type: integer
-              nullable: true
-              description: Altitude in metres, when known.
-              example: 2035
-        gettingThere:
-          type: string
-          description: How to reach the hut, free text (trail numbers, times, warnings).
-        pointsOfInterest:
-          type: array
-          description: Points of interest reachable from the hut.
-          items:
-            $ref: '#/components/schemas/PointOfInterest'
-
-    PointOfInterest:
-      type: object
-      required: [name, description]
-      properties:
-        name:
-          type: string
-          example: Lago Bianco
-        description:
-          type: string
-          example: Small alpine lake, 40 minutes from the hut.
-        walkingTimeMin:
-          type: integer
-          nullable: true
-          description: Walking time from the hut, in minutes, when meaningful.
-          example: 40
 
     PublicSlot:
       type: object
@@ -855,6 +795,9 @@ components:
 
     NewBooking:
       type: object
+      description: >
+        Creates one booking for the authenticated hiker. Party size has no
+        configured maximum; available seats are the limit.
       required: [slotId, partySize]
       properties:
         slotId:
@@ -952,6 +895,7 @@ components:
           example: 7
         name:
           type: string
+          description: Table name; may contain letters, numbers, or both.
           example: T1
         seats:
           type: integer
@@ -1005,6 +949,7 @@ components:
         name:
           type: string
           minLength: 1
+          description: Table name; may contain letters, numbers, or both.
           example: T1
         seats:
           type: integer
@@ -1053,7 +998,10 @@ components:
           example: 'Your booking at the mountain hut is confirmed'
         text:
           type: string
-          description: Body of the email with all booking details.
+          description: >
+            Confirmation body includes the booking reference, hiker name,
+            slot date and time, party size and party requirements when present.
+            It does not include table numbers.
         sentAt:
           type: string
           format: date-time
