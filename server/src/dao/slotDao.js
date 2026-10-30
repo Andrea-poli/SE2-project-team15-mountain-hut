@@ -63,10 +63,10 @@ export async function findInRange(db, from, to) {
  * Inserts a slot and its tables and returns it like findById.
  * Call it inside withTransaction (transaction.js), together with the overlap check of the service:
  * the slot and its tables are saved together or not at all.
- * @param {{ date: string, startTime: string, endTime: string, label?: string | null,
+ * @param {{ date: string, startTime: string, endTime: string, label: string,
  *           status?: 'open' | 'closed', tables: { name: string, seats: number }[] }} slot
  */
-export async function create(db, { date, startTime, endTime, label = null, status = 'open', tables }) {
+export async function create(db, { date, startTime, endTime, label, status = 'open', tables }) {
   const { lastID: slotId } = await db.run(
     'INSERT INTO slots (date, start_time, end_time, label, status) VALUES (?, ?, ?, ?, ?)',
     [date, startTime, endTime, label, status],

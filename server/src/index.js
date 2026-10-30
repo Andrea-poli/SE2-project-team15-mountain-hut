@@ -1,7 +1,15 @@
 // Starts the server. config.js is imported first: it sets TZ and checks the settings before anything else runs.
+import { rmSync } from 'node:fs';
 import { config } from './config.js';
 import { createApp } from './app.js';
-import { getDb } from './dao/db.js';
+import { closeDb, getDb } from './dao/db.js';
+
+// E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from an empty database.
+// Only in e2e, so the development database is never touched; before createApp(), which will open sessions.db (U5).
+if (config.env === 'e2e') {
+  rmSync(config.dbPath, { force: true });
+  rmSync(config.sessionsDbPath, { force: true });
+}
 
 // Opens the database (and creates or migrates its tables) before accepting requests:
 // a wrong DB_PATH or a broken schema stops the server here, with the SQLite error.
@@ -11,7 +19,7 @@ const app = createApp();
 
 // Express 5 passes listen errors (e.g. port already in use) to the callback: without this check
 // the server would print "Mountain Hut API on …" and then stop without saying why.
-app.listen(config.port, (err) => {
+const server = app.listen(config.port, (err) => {
   if (err) {
     if (err.code === 'EADDRINUSE') {
       err.message = `Port ${config.port} is already in use: stop the other server or set another PORT in .env (${err.message})`;
@@ -30,3 +38,14 @@ app.listen(config.port, (err) => {
     );
   }
 });
+
+// Ctrl+C (SIGINT) or a stop from the system (SIGTERM): stop accepting requests, let the ones in progress
+// finish, close the database, then exit. A second Ctrl+C exits at once (once, not on).
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    server.close(async () => {
+      await closeDb();
+      process.exit(0);
+    });
+  });
+}

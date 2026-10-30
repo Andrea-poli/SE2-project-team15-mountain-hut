@@ -30,6 +30,8 @@ export async function allocationsForSlot(db, slotId) {
  * Inserts a booking and the seats it takes at each table, and returns it like findById.
  * Call it inside withTransaction (transaction.js), after re-reading the seats with allocationsForSlot:
  * the booking and its tables are saved together or not at all.
+ * A second confirmed booking of the same hiker in the same slot makes SQLite throw
+ * 'UNIQUE constraint failed: bookings.slot_id, bookings.hiker_id' (index bookings_one_per_hiker_slot).
  * @param {{ slotId: number, hikerId: number, partySize: number, status?: string, createdAt: string,
  *           tables: { slotTableId: number, seats: number }[] }} booking
  *        createdAt: ISO UTC, from now() of clock.js (never the real clock, so tests can fix it)
