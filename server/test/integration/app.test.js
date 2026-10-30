@@ -27,7 +27,7 @@ describe('app skeleton', () => {
       [publicSlotsRouter, '/api/public/slots'],
       [bookingsRouter, '/api/bookings/1'],
       [slotsRouter, '/api/slots'],
-      [availabilityRouter, '/api/availability'],
+      [availabilityRouter, '/api/public/slots/1/availability'],
       [testSupportRouter, '/api/test/emails'], // NODE_ENV=test in Vitest
     ];
     for (const [router, url] of mounts) {
@@ -38,7 +38,7 @@ describe('app skeleton', () => {
   });
 
   it('answers the unknown URLs of the sprint areas with 404 and { error }', async () => {
-    for (const url of ['/api/auth/me', '/api/public/slots', '/api/bookings/1', '/api/slots', '/api/availability']) {
+    for (const url of ['/api/auth/me', '/api/public/slots', '/api/bookings/1', '/api/slots', '/api/public/slots/1/availability']) {
       const res = await request(app).get(url);
       expect(res.status, url).toBe(404);
       expect(res.body.error, url).toMatch(/^No API endpoint/);
