@@ -79,6 +79,41 @@ describe('PageLayout', () => {
     expect(within(navbar()).getByRole('link', { name: 'Register' })).not.toHaveAttribute('aria-current');
   });
 
+  it('"Open menu" tells whether the menu is open (aria-expanded)', async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new ApiError(401, 'Not logged in'));
+    renderLayout();
+    const toggle = screen.getByRole('button', { name: 'Open menu' });
+    expect(toggle).toHaveAttribute('aria-controls', 'main-navbar');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes the menu when an entry is chosen', async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new ApiError(401, 'Not logged in'));
+    renderLayout();
+    const toggle = screen.getByRole('button', { name: 'Open menu' });
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(await within(navbar()).findByRole('link', { name: 'Register' }));
+    expect(await screen.findByText('Landed on /register')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes the menu on log out', async () => {
+    vi.mocked(authApi.me).mockResolvedValue(hiker);
+    vi.mocked(authApi.logout).mockResolvedValue(null);
+    renderLayout();
+    const toggle = screen.getByRole('button', { name: 'Open menu' });
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(await within(navbar()).findByRole('button', { name: 'Log out' }));
+    expect(await screen.findByText('Landed on /')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('Log out goes to the home page and shows the guest menu', async () => {
     vi.mocked(authApi.me).mockResolvedValue(hiker);
     vi.mocked(authApi.logout).mockResolvedValue(null);

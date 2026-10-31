@@ -47,6 +47,15 @@ describe('nextFor', () => {
     }
   });
 
+  it('never leaves the site with a tab or newline after the first slash', () => {
+    // ?next=/%09/example.com and ?next=/%0A/example.com, already decoded by useSearchParams:
+    // the URL parser drops tabs and newlines, so "/\t/site" is "//site", another site.
+    for (const next of ['/\t/example.com', '/\n/example.com']) {
+      expect(nextFor(hiker, next), JSON.stringify(next)).toBe('/');
+      expect(nextFor(employee, next), JSON.stringify(next)).toBe('/staff/slots');
+    }
+  });
+
   it('does not go back to the login or register page', () => {
     expect(nextFor(hiker, '/login')).toBe('/');
     expect(nextFor(employee, '/register?next=/book')).toBe('/staff/slots');

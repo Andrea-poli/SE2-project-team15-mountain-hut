@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as authApi from '../../../src/api/auth.js';
@@ -209,5 +209,87 @@ describe('RegisterPage', () => {
   it('keeps next in the link to the login page', async () => {
     renderRegister('/register?next=%2Fbook');
     expect(await screen.findByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login?next=%2Fbook');
+  });
+});
+
+// Fields with a maximum length (utils/validation.js, agreed with the team). Text is counted without the
+// spaces at the ends, the password as typed. No maxLength attribute: the text is never cut.
+const LIMITS = [
+  { label: 'First name', key: 'firstName', max: 100, message: 'First name must be 100 characters or fewer.' },
+  { label: 'Last name', key: 'lastName', max: 100, message: 'Last name must be 100 characters or fewer.' },
+  { label: 'Password', key: 'password', max: 128, message: 'The password must be 128 characters or fewer.' },
+  { label: 'Notes (optional)', key: 'notes', max: 500, message: 'Notes must be 500 characters or fewer.' },
+  {
+    label: 'Emergency contact (optional)',
+    key: 'emergencyContact',
+    max: 200,
+    message: 'Emergency contact must be 200 characters or fewer.',
+  },
+];
+
+// Fills the form with `text` in the field `label` (pasted: typing hundreds of characters is slow),
+// the password also in the confirmation, the other fields valid; then submits.
+async function submitWithLong(label, text) {
+  await screen.findByRole('button', { name: 'Create account' });
+  const pasted = label === 'Password' ? ['Password', 'Confirm password'] : [label];
+  for (const name of pasted) {
+    await userEvent.click(screen.getByLabelText(name));
+    await userEvent.paste(text);
+  }
+  const others = Object.fromEntries(Object.entries(valid).filter(([name]) => !pasted.includes(name)));
+  await fillAndSubmit(others);
+}
+
+describe('RegisterPage length limits', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(authApi.me).mockRejectedValue(new ApiError(401, 'Not logged in'));
+    vi.mocked(authApi.register).mockResolvedValue(hiker);
+  });
+
+  describe.each(LIMITS)('$label (at most $max characters)', ({ label, key, max, message }) => {
+    it('sends the form with exactly the limit', async () => {
+      renderRegister();
+      await submitWithLong(label, 'a'.repeat(max));
+      expect(authApi.register).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(authApi.register).mock.calls[0][0][key]).toHaveLength(max);
+    });
+
+    it('one character more: message, aria-invalid and focus on the field, nothing sent, text not cut', async () => {
+      renderRegister();
+      const text = 'a'.repeat(max + 1);
+      await submitWithLong(label, text);
+      const field = screen.getByLabelText(label);
+      expect(field).toHaveAccessibleDescription(expect.stringContaining(message));
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(field).toHaveFocus();
+      expect(field).toHaveValue(text);
+      expect(authApi.register).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(LIMITS.filter(({ key }) => key !== 'password'))(
+    '$label: spaces at the ends do not count and are not sent',
+    async ({ label, key, max }) => {
+      renderRegister();
+      await submitWithLong(label, `  ${'a'.repeat(max)}  `);
+      expect(authApi.register).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(authApi.register).mock.calls[0][0][key]).toBe('a'.repeat(max));
+    },
+  );
+
+  it('counts the password as typed: spaces at the ends count and are sent', async () => {
+    renderRegister();
+    await submitWithLong('Password', ` ${'a'.repeat(127)}`);
+    expect(vi.mocked(authApi.register).mock.calls[0][0].password).toBe(` ${'a'.repeat(127)}`);
+
+    vi.mocked(authApi.register).mockClear();
+    cleanup();
+    renderRegister();
+    await submitWithLong('Password', ` ${'a'.repeat(128)}`);
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(
+      expect.stringContaining('The password must be 128 characters or fewer.'),
+    );
+    expect(authApi.register).not.toHaveBeenCalled();
   });
 });
