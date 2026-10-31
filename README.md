@@ -26,12 +26,25 @@ Requirements: Node.js 22.9 or later (22 or 24 LTS recommended).
 npm install                      # server + client + tools
 npx playwright install chromium  # only once per computer, for the E2E tests
 cp .env.example .env             # then set your own SESSION_SECRET in .env (command in the file)
+npm run seed                     # demo users, slots and bookings (see Demo accounts)
 npm run dev                      # server on http://localhost:3001, client on http://localhost:5173
 ```
 
 The server does not start without `SESSION_SECRET`: no secret is written in the code. `.env` is personal and never committed.
 
 Open http://localhost:5173. In development the client calls `/api/...` on its own address and Vite forwards the call to the server (same origin: the session cookie works, no CORS).
+
+## Demo accounts
+
+`npm run seed` fills the development database with demo data: slots from 7 days ago to 14 days ahead (lunch, dinner, and a second dinner turn on Saturdays, tables T1–T5) and a few bookings. Dates are relative to today, so the data never gets old: run it again whenever you want a fresh start. It **replaces** every user, slot and booking and logs everybody out; it refuses to run when `NODE_ENV=production`. Tests never use it.
+
+| Role | Email | Password |
+|---|---|---|
+| Hiker | `hiker@example.com` | `hikerpass` |
+| Employee | `employee@example.com` | `employeepass` |
+| Warden | `warden@example.com` | `wardenpass` |
+
+Other hikers with bookings: `marco.rossi@example.com`, `anna.bianchi@example.com`, `luca.verdi@example.com` (password `hikerpass`). The same accounts work in mock mode (`VITE_USE_MOCKS=true`). Passwords are stored hashed (salt + scrypt): plain demo passwords are written only here.
 
 ## Scripts (from the root)
 
@@ -41,6 +54,7 @@ Open http://localhost:5173. In development the client calls `/api/...` on its ow
 | `npm test` | unit and integration tests of server and client |
 | `npm run coverage` | the same tests with the coverage report (`server/coverage/`, `client/coverage/`) |
 | `npm run lint` | ESLint on the whole repository |
+| `npm run seed` | replaces the development data with the demo data (see Demo accounts) |
 | `npm run test:e2e` | Playwright E2E tests: starts its own server (port 3101) and client (port 5174) |
 
 Single workspace: `npm test -w server`, `npm run dev -w client`, …
@@ -77,6 +91,7 @@ server/src/
   routes/             one file per area: auth, publicSlots, bookings, slots, availability, testSupport
   middleware/         errorHandler, notFound
   notifications/      notifier.js: bookingConfirmed() hook (called by MH-01, filled by MH-03)
+  seed.js             demo data (npm run seed), dates relative to today
 server/test/          setupTestDb.js (temporary DB per file), helpers/, unit/, integration/
 client/src/           React app (App.jsx is a placeholder until U7 Common UI)
 client/test/          unit tests (React Testing Library)
