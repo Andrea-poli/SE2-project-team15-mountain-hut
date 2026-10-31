@@ -53,7 +53,11 @@ export default defineConfig({
       command: `npm run dev -w client -- --port ${CLIENT_PORT} --strictPort`,
       port: CLIENT_PORT,
       reuseExistingServer: false,
-      env: { API_TARGET: `http://localhost:${SERVER_PORT}` },
+      env: {
+        API_TARGET: `http://localhost:${SERVER_PORT}`,
+        // E2E always test the real server, whatever is in .env
+        VITE_USE_MOCKS: 'false',
+      },
     },
   ],
 });
