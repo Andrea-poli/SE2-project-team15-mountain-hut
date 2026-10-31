@@ -1,11 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDatabase } from '../../src/dao/db.js';
-import * as bookingDao from '../../src/dao/bookingDao.js';
-import * as slotDao from '../../src/dao/slotDao.js';
-import * as userDao from '../../src/dao/userDao.js';
-import { createTestDb } from '../helpers/testDb.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { getDb } from '../../../src/dao/db.js';
+import * as bookingDao from '../../../src/dao/bookingDao.js';
+import * as slotDao from '../../../src/dao/slotDao.js';
+import * as userDao from '../../../src/dao/userDao.js';
 
-let testDb;
 let db;
 
 async function insertUser(db, { email, firstName = 'Kilian', role = 'hiker' } = {}) {
@@ -42,18 +40,14 @@ async function insertBooking(db, { slotId, hikerId, status = 'confirmed', create
 }
 
 beforeEach(async () => {
-  testDb = createTestDb();
-  db = await openDatabase(testDb.file);
-});
-
-afterEach(async () => {
-  try {
-    await db?.close();
-  } finally {
-    db = null;
-    testDb?.cleanup();
-    testDb = null;
-  }
+  db = await getDb();
+  await db.exec(`
+    DELETE FROM booking_tables;
+    DELETE FROM bookings;
+    DELETE FROM slot_tables;
+    DELETE FROM slots;
+    DELETE FROM users;
+  `);
 });
 
 describe('user DAO', () => {
