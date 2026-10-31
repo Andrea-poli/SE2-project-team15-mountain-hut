@@ -17,7 +17,7 @@ export class BadRequest extends AppError {
 
 /** Not logged in. */
 export class Unauthorized extends AppError {
-  constructor(message = 'You need to log in') {
+  constructor(message = 'Not logged in') {
     super(401, message);
   }
 }
