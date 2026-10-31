@@ -3,6 +3,7 @@ import { rmSync } from 'node:fs';
 import { config } from './config.js';
 import { createApp } from './app.js';
 import { closeDb, getDb } from './dao/db.js';
+import { closeSessionStore } from './session.js';
 
 // E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from an empty database.
 // Only in e2e, so the development database is never touched; before createApp(), which will open sessions.db (U5).
@@ -40,10 +41,11 @@ const server = app.listen(config.port, (err) => {
 });
 
 // Ctrl+C (SIGINT) or a stop from the system (SIGTERM): stop accepting requests, let the ones in progress
-// finish, close the database, then exit. A second Ctrl+C exits at once (once, not on).
+// finish, close the databases (main and sessions), then exit. A second Ctrl+C exits at once (once, not on).
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
     server.close(async () => {
+      await closeSessionStore();
       await closeDb();
       process.exit(0);
     });

@@ -46,9 +46,10 @@ export async function verifyPassword(password, stored) {
 }
 
 // Login with an unknown email still computes a hash, so the answer time does not tell whether
-// the email is registered. Created at the first login, then reused.
-let dummyHash;
-const getDummyHash = async () => (dummyHash ??= await hashPassword('dummy-password-for-timing'));
+// the email is registered. Started when the module loads: creating it at the first login would make
+// that one request twice as slow (two scrypt runs) and reveal the unknown email.
+const dummyHash = hashPassword('dummy-password-for-timing');
+const getDummyHash = () => dummyHash;
 
 // ---------- Validation ----------
 

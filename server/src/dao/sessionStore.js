@@ -14,8 +14,11 @@ export class SqliteSessionStore extends session.Store {
   /** @param {string} file path of sessions.db (its folder must exist: sessionsDbPath() in db.js) */
   constructor(file) {
     super();
-    this.db = new sqlite3.Database(file);
     this.ready = new Promise((resolve, reject) => {
+      // A file that cannot be opened (permissions, missing folder) rejects here, like a failed CREATE TABLE.
+      this.db = new sqlite3.Database(file, (err) => {
+        if (err) reject(err);
+      });
       this.db.serialize(() => {
         this.db.run('PRAGMA busy_timeout = 5000');
         this.db.run(
@@ -24,6 +27,9 @@ export class SqliteSessionStore extends session.Store {
         );
       });
     });
+    // Nobody may be waiting for ready yet: without this, a failure before the first request would stop
+    // the process with an unhandled rejection. The error still reaches express-session through #run.
+    this.ready.catch(() => {});
     this.cleanup = setInterval(() => this.#deleteExpired(), CLEANUP_EVERY_MS);
     this.cleanup.unref(); // never keeps the process alive
   }

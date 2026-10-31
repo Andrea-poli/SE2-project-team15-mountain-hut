@@ -8,8 +8,27 @@ import { SqliteSessionStore } from './dao/sessionStore.js';
 export const SESSION_COOKIE = 'connect.sid'; // name in openapi.yaml (securitySchemes)
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The express-session middleware, with its store (closed by the tests with store.close()). */
-export function createSessionMiddleware(store = new SqliteSessionStore(sessionsDbPath())) {
+let sharedStore = null;
+
+/** The server's session store: opened once on sessions.db, then reused (like getDb()). */
+export function getSessionStore() {
+  sharedStore ??= new SqliteSessionStore(sessionsDbPath());
+  return sharedStore;
+}
+
+/**
+ * Closes the shared store (end of the tests, server shutdown). Does nothing if it is not open.
+ * Windows cannot delete an open file: the tests must close it before removing their temporary folder.
+ */
+export async function closeSessionStore() {
+  if (!sharedStore) return;
+  const store = sharedStore;
+  sharedStore = null;
+  await store.close();
+}
+
+/** The express-session middleware, with the shared store unless a test passes its own. */
+export function createSessionMiddleware(store = getSessionStore()) {
   const middleware = session({
     name: SESSION_COOKIE,
     secret: config.sessionSecret,
