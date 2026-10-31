@@ -1,8 +1,6 @@
 // Register a hiker (U8). After success (already logged in), or when already logged in,
 // the page sends the user to nextFor(user, ?next=).
-// TODO: align with the updated contract (U2) and U5: phone required, notes and emergencyContact
-// (PO, context.md "Hiker Information"); planning 3.3 still has phone optional and no other fields.
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
@@ -20,10 +18,11 @@ import ErrorMessage from '../../components/ErrorMessage.jsx';
 import FormField from '../../components/FormField.jsx';
 import PasswordField from '../../components/PasswordField.jsx';
 import Loading from '../../components/Loading.jsx';
+import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
 import PhoneCountrySelect from '../../components/PhoneCountrySelect.jsx';
 import { countryLabels, examplePhone, isPhone, pastedInternationalPhone } from '../../utils/phone.js';
-import { MIN_PASSWORD_LENGTH, isBlank, isEmail } from '../../utils/validation.js';
+import { MAX_LENGTH, MIN_PASSWORD_LENGTH, isBlank, isEmail, tooLongMessage } from '../../utils/validation.js';
 
 // Ids of the checked fields in form order: after a failed submit, the first one with an error gets the focus.
 const FIELD_IDS = {
@@ -33,8 +32,9 @@ const FIELD_IDS = {
   password: 'register-password',
   confirmPassword: 'register-confirm-password',
   phone: 'register-phone',
+  notes: 'register-notes',
+  emergencyContact: 'register-emergency-contact',
 };
-const GENERAL = 'general';
 const DEFAULT_PHONE_COUNTRY = 'IT';
 
 const EMPTY = {
@@ -48,20 +48,30 @@ const EMPTY = {
   emergencyContact: '',
 };
 
+// Text longer than the limit of MAX_LENGTH, counted as it is sent (trimmed).
+const tooLong = (value, name) => value.trim().length > MAX_LENGTH[name];
+const tooLongError = (label, name) => `${tooLongMessage(label, MAX_LENGTH[name])}.`;
+
 function validate(v) {
   const errors = {};
   if (isBlank(v.firstName)) errors.firstName = 'Enter your first name.';
+  else if (tooLong(v.firstName, 'firstName')) errors.firstName = tooLongError('First name', 'firstName');
   if (isBlank(v.lastName)) errors.lastName = 'Enter your last name.';
+  else if (tooLong(v.lastName, 'lastName')) errors.lastName = tooLongError('Last name', 'lastName');
   if (isBlank(v.email)) errors.email = 'Enter your email.';
   else if (!isEmail(v.email)) errors.email = 'Enter a valid email, e.g. name@example.com.';
   if (isBlank(v.password)) errors.password = 'Enter a password.';
   else if (v.password.length < MIN_PASSWORD_LENGTH) {
     errors.password = `The password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
-  }
+  } else if (v.password.length > MAX_LENGTH.password) errors.password = tooLongError('The password', 'password');
   if (isBlank(v.confirmPassword)) errors.confirmPassword = 'Confirm your password.';
   else if (v.confirmPassword !== v.password) errors.confirmPassword = 'The passwords do not match.';
   if (isBlank(v.phone)) errors.phone = 'Enter your mobile number.';
   else if (!isPhone(v.phone)) errors.phone = 'Enter a valid mobile number for the chosen country.';
+  if (tooLong(v.notes, 'notes')) errors.notes = tooLongError('Notes', 'notes');
+  if (tooLong(v.emergencyContact, 'emergencyContact')) {
+    errors.emergencyContact = tooLongError('Emergency contact', 'emergencyContact');
+  }
   return errors;
 }
 
@@ -86,22 +96,11 @@ export default function RegisterPage() {
   const next = params.get('next');
 
   const [values, setValues] = useState(EMPTY);
-  const [errors, setErrors] = useState({});
-  const [generalError, setGeneralError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   // Country of the phone field: drives the example number in the placeholder.
   const [phoneCountry, setPhoneCountry] = useState(DEFAULT_PHONE_COUNTRY);
-
-  const generalRef = useRef(null);
-  // What gets the focus after a failed submit: a field id, or GENERAL for the general message.
-  // It is moved after the next render, when the error and its aria attributes are in the page.
-  const pendingFocus = useRef(null);
-  useEffect(() => {
-    if (!pendingFocus.current) return;
-    if (pendingFocus.current === GENERAL) generalRef.current?.focus();
-    else document.getElementById(pendingFocus.current)?.focus();
-    pendingFocus.current = null;
-  });
+  const { errors, setErrors, generalError, generalRef, checkOnSubmit, recheck, focusField, showGeneralError } =
+    useFormErrors(validate, FIELD_IDS);
   // Email refused by the server (409): its error stays until the email is changed.
   const rejectedEmail = useRef(null);
 
@@ -121,30 +120,16 @@ export default function RegisterPage() {
     setValues((v) => ({ ...v, phone: e164 }));
   };
 
-  // On blur, only for a field that already shows an error: check it again and update or remove
-  // its message. Nothing while typing, and no errors on fields that were never flagged.
-  const recheck = (name) => () => {
-    if (!errors[name]) return;
+  // On blur (useFormErrors: only a field that already shows an error is checked again).
+  // The email refused by the server keeps its error until it is changed.
+  const recheckField = (name) => () => {
     if (name === 'email' && values.email.trim() === rejectedEmail.current) return;
-    const now = validate(values)[name];
-    setErrors((current) => {
-      const { [name]: _old, ...rest } = current;
-      return now ? { ...rest, [name]: now } : rest;
-    });
+    recheck(name, values);
   };
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (submitting) return;
-    setGeneralError(null);
-
-    const found = validate(values);
-    setErrors(found);
-    const firstInvalid = Object.keys(FIELD_IDS).find((name) => found[name]);
-    if (firstInvalid) {
-      pendingFocus.current = FIELD_IDS[firstInvalid];
-      return;
-    }
+    if (submitting || !checkOnSubmit(values)) return;
 
     setSubmitting(true);
     try {
@@ -155,10 +140,9 @@ export default function RegisterPage() {
         // The only error that names a field without guessing from the text: email already in use.
         setErrors({ email: err.message });
         rejectedEmail.current = values.email.trim();
-        pendingFocus.current = FIELD_IDS.email;
+        focusField('email');
       } else {
-        setGeneralError(err.message);
-        pendingFocus.current = GENERAL;
+        showGeneralError(err.message);
       }
     } finally {
       setSubmitting(false);
@@ -183,7 +167,7 @@ export default function RegisterPage() {
                 autoComplete="given-name"
                 value={values.firstName}
                 onChange={change('firstName')}
-                onBlur={recheck('firstName')}
+                onBlur={recheckField('firstName')}
                 required
                 error={errors.firstName}
               />
@@ -193,7 +177,7 @@ export default function RegisterPage() {
                 autoComplete="family-name"
                 value={values.lastName}
                 onChange={change('lastName')}
-                onBlur={recheck('lastName')}
+                onBlur={recheckField('lastName')}
                 required
                 error={errors.lastName}
               />
@@ -204,7 +188,7 @@ export default function RegisterPage() {
                 autoComplete="email"
                 value={values.email}
                 onChange={change('email')}
-                onBlur={recheck('email')}
+                onBlur={recheckField('email')}
                 required
                 error={errors.email}
               />
@@ -216,7 +200,7 @@ export default function RegisterPage() {
                 help={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 value={values.password}
                 onChange={change('password')}
-                onBlur={recheck('password')}
+                onBlur={recheckField('password')}
                 required
                 error={errors.password}
               />
@@ -227,7 +211,7 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 value={values.confirmPassword}
                 onChange={change('confirmPassword')}
-                onBlur={recheck('confirmPassword')}
+                onBlur={recheckField('confirmPassword')}
                 required
                 error={errors.confirmPassword}
               />
@@ -257,26 +241,34 @@ export default function RegisterPage() {
                 autoComplete="tel"
                 value={values.phone || undefined}
                 onChange={(phone) => setValues((v) => ({ ...v, phone: phone ?? '' }))}
-                onBlur={recheck('phone')}
+                onBlur={recheckField('phone')}
                 required
                 error={errors.phone}
               />
+              {/* No maxLength attribute: it would cut typed or pasted text silently. The character count
+                  shows the limit, and the check on submit puts the error next to the field. */}
               <FormField
-                id="register-notes"
+                id={FIELD_IDS.notes}
                 label="Notes (optional)"
                 as="textarea"
                 rows={3}
                 help='e.g. "registered mountain guide"'
+                characterLimit={MAX_LENGTH.notes}
                 value={values.notes}
                 onChange={change('notes')}
+                onBlur={recheckField('notes')}
+                error={errors.notes}
               />
               <FormField
-                id="register-emergency-contact"
+                id={FIELD_IDS.emergencyContact}
                 label="Emergency contact (optional)"
                 autoComplete="off"
                 help="Name and phone number"
+                characterLimit={MAX_LENGTH.emergencyContact}
                 value={values.emergencyContact}
                 onChange={change('emergencyContact')}
+                onBlur={recheckField('emergencyContact')}
+                error={errors.emergencyContact}
               />
               {/* preventDefault on mousedown: the field keeps the focus, so its blur check cannot remove
                   an error above the button and move the button away before the click ends. */}

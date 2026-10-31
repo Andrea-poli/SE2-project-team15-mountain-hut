@@ -380,3 +380,10 @@ svg {
 .mh-password input::-ms-reveal {
   display: none;
 }
+
+/* 13. Character count (CharacterCount, under Notes and Emergency contact).
+   Past the limit: --mh-danger (≥ 4.5:1 on --mh-surface) and bold, so it is not told by colour alone. */
+.mh-char-count-over {
+  color: var(--mh-danger);
+  font-weight: 600;
+}

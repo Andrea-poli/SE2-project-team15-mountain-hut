@@ -29,6 +29,7 @@ function NotAvailable({ user }) {
   const home = homeFor(user);
   return (
     <>
+      <title>Page not available – Mountain Hut</title>
       <h1>Page not available</h1>
       <p>This page is not available for your role.</p>
       <Link to={home}>{home === routes.staffSlots ? 'Go to slots' : 'Go to the home page'}</Link>

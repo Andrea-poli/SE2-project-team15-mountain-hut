@@ -1,12 +1,13 @@
 // Mock of the auth endpoints (VITE_USE_MOCKS=true): same results and errors as the server,
 // no server needed. Only loaded through a dynamic import in api/auth.js.
 import { isValidPhoneNumber } from 'libphonenumber-js';
+import { MAX_LENGTH, tooLongMessage } from '../../utils/validation.js';
 import { ApiError } from '../client.js';
 
 const DELAY_MS = 300;
 const STORAGE_KEY = 'mh-mock-user';
 
-// TODO: align with seed.js (U10) and U5 messages; remove together with all mocks if the team drops mock mode.
+// TODO: align with seed.js (U10); remove together with all mocks if the team drops mock mode.
 const users = [
   { id: 1, firstName: 'Hannah', lastName: 'Hiker', email: 'hiker@example.com', phone: '+39 333 1111111', role: 'hiker', password: 'hikerpass' },
   { id: 2, firstName: 'Eric', lastName: 'Employee', email: 'employee@example.com', phone: null, role: 'employee', password: 'employeepass' },
@@ -50,17 +51,27 @@ const findByEmail = (email) => users.find((u) => u.email.toLowerCase() === email
 // Same check and metadata as utils/phone.js and the server (U5): the number is E.164.
 const isPhone = (value) => isValidPhoneNumber(value.trim());
 
+// Same limits as the form (utils/validation.js), text counted trimmed, the password as typed.
+// The message is the form's one without the final full stop, like the other server messages.
+function checkLength(value, name, label) {
+  const length = name === 'password' ? value.length : value.trim().length;
+  if (length > MAX_LENGTH[name]) throw new ApiError(400, tooLongMessage(label, MAX_LENGTH[name]));
+}
+
 export async function register(data = {}) {
   await wait();
   const { firstName, lastName, email, password, phone, notes, emergencyContact } = data;
-  // TODO: align with the updated contract (U2) and U5: phone required, notes and emergencyContact
-  // (PO, context.md "Hiker Information"). Only the password message is in openapi.yaml.
   if ([firstName, lastName, email, password, phone].some(isBlank)) {
     throw new ApiError(400, 'First name, last name, email, password and mobile number are required');
   }
+  checkLength(firstName, 'firstName', 'First name');
+  checkLength(lastName, 'lastName', 'Last name');
   if (!EMAIL_RE.test(email.trim())) throw new ApiError(400, 'Email is not valid');
   if (password.length < 8) throw new ApiError(400, 'Password must be at least 8 characters long');
+  checkLength(password, 'password', 'The password');
   if (!isPhone(phone)) throw new ApiError(400, 'Mobile number is not valid');
+  if (!isBlank(notes)) checkLength(notes, 'notes', 'Notes');
+  if (!isBlank(emergencyContact)) checkLength(emergencyContact, 'emergencyContact', 'Emergency contact');
   if (findByEmail(email)) throw new ApiError(409, 'Email already in use');
 
   // notes and emergencyContact are kept by the mock but, like the password, never returned:

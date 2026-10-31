@@ -15,14 +15,15 @@ export function homeFor(user) {
 }
 
 // Where to go after login/register: `next` only if it is an internal path the user may open,
-// otherwise the role's first page. Blocks "//site" and "/\site" (other sites) and login/register.
+// otherwise the role's first page. The URL parser decides what is another site, the same way the
+// browser does: "//site", "/\site" and "/<tab>/site" (?next=/%09/site, the parser drops tabs and
+// newlines) all have another origin. Login and register are never a destination.
 export function nextFor(user, next) {
-  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) {
-    return homeFor(user);
-  }
-  const pathname = next.split(/[?#]/)[0];
-  if (pathname === routes.login || pathname === routes.register) return homeFor(user);
-  const page = Object.keys(pageRoles).find((pattern) => matchPath(pattern, pathname));
+  if (typeof next !== 'string' || !next.startsWith('/')) return homeFor(user);
+  const url = new URL(next, window.location.origin);
+  if (url.origin !== window.location.origin) return homeFor(user);
+  if (url.pathname === routes.login || url.pathname === routes.register) return homeFor(user);
+  const page = Object.keys(pageRoles).find((pattern) => matchPath(pattern, url.pathname));
   if (page && !hasRole(user, pageRoles[page])) return homeFor(user);
-  return next;
+  return url.pathname + url.search + url.hash;
 }

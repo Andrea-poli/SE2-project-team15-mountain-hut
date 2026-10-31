@@ -1,6 +1,7 @@
 // Navbar with the entries of the current role. Colours in theme.css (.navbar.bg-primary).
 // NavLink marks the current page with the "active" class and aria-current="page".
 import { CalendarDays, CalendarPlus, CalendarSearch, DoorClosed, DoorOpen, Mountain, User, UserPlus } from 'lucide-react';
+import { useState } from 'react';
 import Container from 'react-bootstrap/Container';
 import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
@@ -26,8 +27,12 @@ export default function AppNavbar() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const isStaff = hasRole(user, ['employee']);
+  // Mobile menu open or closed: controlled, so the toggle can expose aria-expanded and the
+  // logo and logout can close the menu too.
+  const [expanded, setExpanded] = useState(false);
 
   async function handleLogout() {
+    setExpanded(false);
     // Leave the page first: if user became null while on a protected page,
     // RequireRole would send to /login?next=... as if the session had expired.
     navigate(routes.home);
@@ -40,14 +45,16 @@ export default function AppNavbar() {
 
   return (
     // collapseOnSelect: on small screens the menu closes after choosing an entry.
-    <Navbar expand="md" bg="primary" data-bs-theme="dark" collapseOnSelect>
+    <Navbar expand="md" bg="primary" data-bs-theme="dark" collapseOnSelect expanded={expanded} onToggle={setExpanded}>
       <Container>
-        {/* The logo leads to the role's first page: slots for staff, home for hikers and guests. */}
-        <Navbar.Brand as={Link} to={homeFor(user)}>
+        {/* The logo leads to the role's first page: slots for staff, home for hikers and guests.
+            It is not a Nav entry, so it closes the menu itself. */}
+        <Navbar.Brand as={Link} to={homeFor(user)} onClick={() => setExpanded(false)}>
           <Mountain aria-hidden="true" size={24} className="me-2" />
           Mountain Hut
         </Navbar.Brand>
-        <Navbar.Toggle aria-controls="main-navbar" aria-label="Open menu" />
+        {/* label becomes the aria-label (react-bootstrap overwrites aria-label with it). */}
+        <Navbar.Toggle aria-controls="main-navbar" aria-expanded={expanded} label="Open menu" />
         <Navbar.Collapse id="main-navbar">
           {/* Both sides are empty during the startup check: user is still null, and showing the
               guest entries ("Check availability", "Log in") would flash the wrong menu. */}

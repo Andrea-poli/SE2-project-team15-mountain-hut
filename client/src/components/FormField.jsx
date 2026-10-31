@@ -3,12 +3,15 @@
 // The control's id is `id` (controlId): a page moves the focus to a field with getElementById(id).
 // Other props go to the control: `required` becomes the HTML attribute, so screen readers say
 // "required" (the form has noValidate, so the browser shows no bubbles).
+// characterLimit (optional): a character count under the help text (CharacterCount), also linked to the control.
 import Form from 'react-bootstrap/Form';
+import CharacterCount from './CharacterCount.jsx';
 
-export default function FormField({ id, label, help, error, ...controlProps }) {
+export default function FormField({ id, label, help, error, characterLimit, ...controlProps }) {
   const helpId = help ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [errorId, helpId].filter(Boolean).join(' ') || undefined;
+  const countId = characterLimit ? `${id}-count` : undefined;
+  const describedBy = [errorId, helpId, countId].filter(Boolean).join(' ') || undefined;
 
   return (
     <Form.Group controlId={id} className="mb-3">
@@ -30,6 +33,7 @@ export default function FormField({ id, label, help, error, ...controlProps }) {
           {help}
         </Form.Text>
       )}
+      {characterLimit && <CharacterCount id={countId} value={controlProps.value} limit={characterLimit} />}
     </Form.Group>
   );
 }
