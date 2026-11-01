@@ -1,0 +1,274 @@
+// MH-02 FT1 – unit tests of the staff slot pages (SlotsWeekPage + NewSlotPage, tasks MH-02 FE1 and FE2).
+// Written before the pages, from MH-02 (PO clarifications), docs/openapi.yaml (tag slots) and the plan:
+// these tests are the agreed CONTRACT the pages are built to pass. Behaviour only – roles, labels,
+// visible text – never markup or classes: layout, styling and extra wording are free.
+//
+// THE CONTRACT
+//  API  client/src/api/slots.js exports listSlots(from, to) → Slot[] and createSlot(newSlot) → Slot
+//       (GET/POST /api/slots, openapi Slot / NewSlot). Times 'HH:MM', dates 'YYYY-MM-DD'.
+//
+//  Week view – routes.staffSlots ('/staff/slots'), employee and warden (RequireRole already in App.jsx)
+//  W1  <h1> "Slots of the week". Loads listSlots(monday, sunday) of the current week (Mon–Sun, hut time).
+//  W2  One region per day (<section> with a heading), 7 in order Mon→Sun; the heading contains the day as
+//      formatDate gives it (e.g. "Mon 2 Nov"). Today's section has aria-current="date".
+//  W3  Each slot of a day shows its label and time range (formatTimeRange) inside that day's section.
+//  W4  A slot is a button (its accessible name contains the label); activating it shows its tables
+//      ("T1 – 4 seats" style: name and seats) inside the same day, and aria-expanded tells the state.
+//  W5  Buttons "Previous week" / "Next week" load the week before / after (listSlots called again).
+//  W6  A link "Add slot" to routes.newSlot ('/staff/slots/new').
+//  W7  A day without slots says "No slots"; a load error is shown in a role="alert".
+//
+//  New slot form – routes.newSlot ('/staff/slots/new'), employee and warden
+//  N1  <h1> "New slot". Fields labelled "Date", "Start time", "End time", "Label"; one row per table with
+//      fields labelled "Table name" and "Seats" (one row at the start); buttons "Add table", and
+//      "Remove table" per row (not shown, or disabled, when only one row is left).
+//  N2  "Total capacity: N seats" updates with the rows.
+//  N3  A select "Copy tables from" lists the slots of ±15 days (from listSlots) and replaces the rows
+//      with the chosen slot's tables.
+//  N4  Submit button "Create slot". Client checks before calling the API, errors next to the field:
+//      empty label → on "Label"; end not after start → on "End time"; duplicated table names → on the
+//      second "Table name"; seats < 1 → on that "Seats". createSlot is not called then.
+//  N5  Valid form → createSlot({date, startTime, endTime, label, tables:[{name, seats(number)}]}),
+//      then back to the week view (routes.staffSlots, ?date= of the new slot is welcome but optional).
+//  N6  Server 409 → "Overlaps an existing slot" shown (alert or on a time field); other errors in an alert.
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as authApi from '../../../src/api/auth.js';
+import { ApiError } from '../../../src/api/client.js';
+import * as slotsApi from '../../../src/api/slots.js';
+import NewSlotPage from '../../../src/pages/staff/NewSlotPage.jsx';
+import SlotsWeekPage from '../../../src/pages/staff/SlotsWeekPage.jsx';
+import { renderPage } from '../../helpers/renderPage.jsx';
+import { employee } from '../../helpers/users.js';
+
+vi.mock('../../../src/api/auth.js', () => ({ me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
+vi.mock('../../../src/api/slots.js', () => ({ listSlots: vi.fn(), createSlot: vi.fn() }));
+
+// "Now": Wednesday 4 November 2026, 10:00 in the hut → the current week is Mon 2 – Sun 8 Nov.
+const NOW = new Date(2026, 10, 4, 10, 0);
+
+const slot = (over) => ({
+  id: 1,
+  date: '2026-11-04',
+  startTime: '19:00',
+  endTime: '20:30',
+  label: 'Dinner',
+  status: 'open',
+  past: false,
+  tables: [
+    { id: 11, name: 'T1', seats: 4 },
+    { id: 12, name: 'T2', seats: 6 },
+  ],
+  ...over,
+});
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true, toFake: ['Date'] });
+  vi.mocked(authApi.me).mockResolvedValue(employee);
+  vi.mocked(slotsApi.listSlots).mockResolvedValue([]);
+});
+afterEach(() => vi.useRealTimers());
+
+// ---------------------------------------------------------------- week view
+
+describe('SlotsWeekPage (MH-02 FE1)', () => {
+  const renderWeek = () => renderPage(<SlotsWeekPage />, { path: '/staff/slots' });
+  const days = () => screen.getAllByRole('region');
+
+  it('W1: loads the slots of the current week, Monday to Sunday', async () => {
+    renderWeek();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Slots of the week' })).toBeInTheDocument();
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenCalledWith('2026-11-02', '2026-11-08'));
+  });
+
+  it('W2: shows the seven days in order, today marked', async () => {
+    renderWeek();
+    await waitFor(() => expect(days()).toHaveLength(7));
+    const names = ['Mon 2 Nov', 'Tue 3 Nov', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Sat 7 Nov', 'Sun 8 Nov'];
+    days().forEach((day, i) => expect(within(day).getByRole('heading')).toHaveTextContent(names[i]));
+    expect(days()[2]).toHaveAttribute('aria-current', 'date');
+    expect(days().filter((d) => d.getAttribute('aria-current') === 'date')).toHaveLength(1);
+  });
+
+  it('W3/W7: each slot appears in its own day; empty days say "No slots"', async () => {
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([
+      slot({ id: 1, date: '2026-11-04', label: 'Dinner', startTime: '19:00', endTime: '20:30' }),
+      slot({ id: 2, date: '2026-11-06', label: 'Lunch', startTime: '12:00', endTime: '14:00' }),
+    ]);
+    renderWeek();
+    await screen.findByText(/Dinner/);
+    const [mon, , wed, , fri] = days();
+    expect(within(wed).getByText(/Dinner/)).toBeInTheDocument();
+    expect(within(wed).getByText(/19:00 – 20:30/)).toBeInTheDocument();
+    expect(within(fri).getByText(/Lunch/)).toBeInTheDocument();
+    expect(within(mon).getByText('No slots')).toBeInTheDocument();
+  });
+
+  it('W4: a slot opens in place and shows its tables', async () => {
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([slot()]);
+    renderWeek();
+    const button = await screen.findByRole('button', { name: /Dinner/ });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/T2/)).not.toBeInTheDocument();
+
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    const wed = days()[2];
+    expect(within(wed).getByText(/T1/)).toHaveTextContent(/4/);
+    expect(within(wed).getByText(/T2/)).toHaveTextContent(/6/);
+  });
+
+  it('W5: the arrows load the previous and the next week', async () => {
+    renderWeek();
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenCalledWith('2026-11-02', '2026-11-08'));
+    await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-11-09', '2026-11-15'));
+    expect(within(days()[0]).getByRole('heading')).toHaveTextContent('Mon 9 Nov');
+    await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-10-26', '2026-11-01'));
+  });
+
+  it('W6: "Add slot" leads to the new slot form', async () => {
+    renderWeek();
+    const link = await screen.findByRole('link', { name: /Add slot/ });
+    expect(link).toHaveAttribute('href', expect.stringMatching(/^\/staff\/slots\/new/));
+  });
+
+  it('W7: a load error is shown in an alert', async () => {
+    vi.mocked(slotsApi.listSlots).mockRejectedValue(new ApiError(500, 'Something went wrong, please try again'));
+    renderWeek();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong, please try again');
+  });
+});
+
+// ---------------------------------------------------------------- new slot form
+
+describe('NewSlotPage (MH-02 FE2)', () => {
+  const renderForm = () => renderPage(<NewSlotPage />, { path: '/staff/slots/new' });
+  const tableNames = () => screen.getAllByLabelText('Table name');
+  const seatFields = () => screen.getAllByLabelText('Seats');
+
+  async function fillValid({ date = '2026-11-05', start = '19:00', end = '20:30', label = 'Dinner' } = {}) {
+    await screen.findByRole('heading', { level: 1, name: 'New slot' });
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: date } });
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: start } });
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: end } });
+    const labelField = screen.getByLabelText('Label');
+    await userEvent.clear(labelField);
+    if (label) await userEvent.type(labelField, label);
+    await userEvent.clear(tableNames()[0]);
+    await userEvent.type(tableNames()[0], 'T1');
+    await userEvent.clear(seatFields()[0]);
+    await userEvent.type(seatFields()[0], '4');
+  }
+
+  const submit = () => userEvent.click(screen.getByRole('button', { name: 'Create slot' }));
+
+  it('N1: has the slot fields and one table row to start', async () => {
+    renderForm();
+    expect(await screen.findByRole('heading', { level: 1, name: 'New slot' })).toBeInTheDocument();
+    for (const label of ['Date', 'Start time', 'End time', 'Label']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+    expect(tableNames()).toHaveLength(1);
+    expect(seatFields()).toHaveLength(1);
+  });
+
+  it('N1/N2: tables can be added and removed, and the total capacity follows', async () => {
+    renderForm();
+    await fillValid();
+    expect(screen.getByText(/Total capacity: 4 seats/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add table' }));
+    expect(tableNames()).toHaveLength(2);
+    await userEvent.type(tableNames()[1], 'T2');
+    await userEvent.type(seatFields()[1], '6');
+    expect(screen.getByText(/Total capacity: 10 seats/)).toBeInTheDocument();
+
+    const removeButtons = screen.getAllByRole('button', { name: /Remove table/ });
+    await userEvent.click(removeButtons[0]);
+    expect(tableNames()).toHaveLength(1);
+    expect(tableNames()[0]).toHaveValue('T2');
+    expect(screen.getByText(/Total capacity: 6 seats/)).toBeInTheDocument();
+    const lastRemove = screen.queryByRole('button', { name: /Remove table/ });
+    if (lastRemove) expect(lastRemove).toBeDisabled(); // a slot keeps at least one table
+  });
+
+  it('N3: "Copy tables from" loads nearby slots and copies their tables', async () => {
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([
+      slot({ id: 7, date: '2026-11-03', label: 'Big dinner', tables: [
+        { id: 1, name: 'A', seats: 8 },
+        { id: 2, name: 'B', seats: 2 },
+      ] }),
+    ]);
+    renderForm();
+    await screen.findByRole('heading', { level: 1, name: 'New slot' });
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenCalledWith('2026-10-20', '2026-11-19'));
+
+    const copy = screen.getByLabelText('Copy tables from');
+    await waitFor(() => expect(within(copy).getByRole('option', { name: /Big dinner/ })).toBeInTheDocument());
+    await userEvent.selectOptions(copy, within(copy).getByRole('option', { name: /Big dinner/ }));
+
+    expect(tableNames().map((f) => f.value)).toEqual(['A', 'B']);
+    expect(seatFields().map((f) => f.value)).toEqual(['8', '2']);
+    expect(screen.getByText(/Total capacity: 10 seats/)).toBeInTheDocument();
+  });
+
+  it('N4: client checks put each error next to its field and do not call the server', async () => {
+    renderForm();
+    await fillValid({ start: '20:00', end: '19:00', label: '' });
+    await userEvent.click(screen.getByRole('button', { name: 'Add table' }));
+    await userEvent.type(tableNames()[1], 'T1'); // same name as the first row
+    await userEvent.type(seatFields()[1], '0');
+    await submit();
+
+    expect(screen.getByLabelText('Label')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('End time')).toHaveAttribute('aria-invalid', 'true');
+    expect(tableNames()[1]).toHaveAttribute('aria-invalid', 'true');
+    expect(seatFields()[1]).toHaveAttribute('aria-invalid', 'true');
+    expect(tableNames()[0]).not.toHaveAttribute('aria-invalid', 'true');
+    expect(slotsApi.createSlot).not.toHaveBeenCalled();
+  });
+
+  it('N5: a valid form creates the slot with numeric seats, then returns to the week view', async () => {
+    vi.mocked(slotsApi.createSlot).mockResolvedValue(slot({ id: 99, date: '2026-11-05' }));
+    renderForm();
+    await fillValid();
+    await userEvent.click(screen.getByRole('button', { name: 'Add table' }));
+    await userEvent.type(tableNames()[1], 'T2');
+    await userEvent.type(seatFields()[1], '6');
+    await submit();
+
+    expect(slotsApi.createSlot).toHaveBeenCalledWith({
+      date: '2026-11-05',
+      startTime: '19:00',
+      endTime: '20:30',
+      label: 'Dinner',
+      tables: [
+        { name: 'T1', seats: 4 },
+        { name: 'T2', seats: 6 },
+      ],
+    });
+    expect(await screen.findByText(/^Landed on \/staff\/slots(\?|$)/)).toBeInTheDocument();
+  });
+
+  it('N6: an overlap refused by the server (409) is shown to the employee', async () => {
+    vi.mocked(slotsApi.createSlot).mockRejectedValue(new ApiError(409, 'Overlaps an existing slot'));
+    renderForm();
+    await fillValid();
+    await submit();
+    expect(await screen.findByText(/Overlaps an existing slot/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'New slot' })).toBeInTheDocument(); // stays on the form
+  });
+
+  it('N6: other server errors are shown in an alert', async () => {
+    vi.mocked(slotsApi.createSlot).mockRejectedValue(new ApiError(500, 'Something went wrong, please try again'));
+    renderForm();
+    await fillValid();
+    await submit();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong, please try again');
+  });
+});
