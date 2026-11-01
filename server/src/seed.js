@@ -1,27 +1,23 @@
-// Demo data (U10), to develop and try the app: `npm run seed` from the repository root.
-// It REPLACES every user, slot and booking of the database in DB_PATH / DATA_DIR and logs everybody out.
-// Never used by the tests: they start from their own empty temporary database (planning DoD).
+// Demo data (U10), to develop and try the app. Run with `npm run seed` from the repository root (seedCli.js):
+// it REPLACES every user, slot and booking of the database in DB_PATH / DATA_DIR and logs everybody out.
+// This module only exports the data and seed(db, today): importing it changes nothing, so a test can run
+// seed() on its own temporary database with a fixed day. The other tests never rely on these data.
 //
 // Dates are relative to today (now() of clock.js, so FAKE_NOW moves them too): slots from 7 days ago
 // to 14 days ahead, so there are always past days, today and future days to look at.
 // Demo accounts and passwords: README, "Demo accounts" (same accounts as the client mocks, api/mocks/auth.js).
 // More demo cases (full slot, almost full, slot closing within 2 h…) come with C3.
-import { existsSync } from 'node:fs';
-import sqlite3 from 'sqlite3';
-import { now } from './clock.js';
-import { config } from './config.js';
 import * as bookingDao from './dao/bookingDao.js';
-import { closeDb, getDb } from './dao/db.js';
 import * as slotDao from './dao/slotDao.js';
 import { withTransaction } from './dao/transaction.js';
 import * as userDao from './dao/userDao.js';
 import { hashPassword } from './services/authService.js';
 
-const FIRST_DAY = -7; // one week ago
-const LAST_DAY = 14; // two weeks ahead
+export const FIRST_DAY = -7; // one week ago
+export const LAST_DAY = 14; // two weeks ahead
 
 // key: used by BOOKINGS below. Phones in E.164, as the registration saves them.
-const USERS = [
+export const USERS = [
   { key: 'hannah', firstName: 'Hannah', lastName: 'Hiker', email: 'hiker@example.com', password: 'hikerpass', phone: '+393331111111', notes: 'Registered mountain guide', emergencyContact: 'Paul Hiker +393331112222', role: 'hiker' },
   { key: 'eric', firstName: 'Eric', lastName: 'Employee', email: 'employee@example.com', password: 'employeepass', role: 'employee' },
   { key: 'wendy', firstName: 'Wendy', lastName: 'Warden', email: 'warden@example.com', password: 'wardenpass', phone: '+393333333333', role: 'warden' },
@@ -32,14 +28,14 @@ const USERS = [
 ];
 
 // Lunch and dinner have different tables on purpose: there is no fixed table set (MH-02).
-const LUNCH_TABLES = [
+export const LUNCH_TABLES = [
   { name: 'T1', seats: 4 },
   { name: 'T2', seats: 4 },
   { name: 'T3', seats: 4 },
   { name: 'T4', seats: 6 },
   { name: 'T5', seats: 8 },
 ];
-const DINNER_TABLES = [
+export const DINNER_TABLES = [
   { name: 'T1', seats: 2 },
   { name: 'T2', seats: 4 },
   { name: 'T3', seats: 4 },
@@ -49,7 +45,7 @@ const DINNER_TABLES = [
 
 // key: day of the slot (0 = today) + slot key, used by BOOKINGS. The second dinner turn starts when the
 // first one ends (adjacent turns are allowed, MH-02) and exists only on Saturdays.
-const SLOT_TYPES = [
+export const SLOT_TYPES = [
   { key: 'lunch', label: 'Lunch', startTime: '12:00', endTime: '14:00', tables: LUNCH_TABLES },
   { key: 'dinner1', label: 'Dinner – 1st turn', startTime: '19:00', endTime: '20:30', tables: DINNER_TABLES },
   { key: 'dinner2', label: 'Dinner – 2nd turn', startTime: '20:30', endTime: '22:00', tables: DINNER_TABLES, saturdayOnly: true },
@@ -59,7 +55,7 @@ const SATURDAY = 6;
 // A few bookings. Tables follow the allocation rule (planning 4.3 B: fewest tables, then fewest seats
 // left over, then lowest ids), taking into account the bookings listed before them in the same slot.
 // createdDaysAgo: when the booking was made, before its slot.
-const BOOKINGS = [
+export const BOOKINGS = [
   // Past days: the week view shows them greyed out with their bookings.
   { day: -3, slot: 'dinner1', hiker: 'marco', partySize: 4, tables: { T2: 4 }, createdDaysAgo: 6 },
   { day: -3, slot: 'dinner1', hiker: 'hannah', partySize: 6, tables: { T4: 6 }, createdDaysAgo: 5 },
@@ -110,9 +106,12 @@ async function deleteAll(db) {
 /**
  * Replaces users, slots and bookings with the demo data. Passwords are hashed before the transaction
  * (scrypt is slow); everything else is written in one transaction: all of it or nothing.
+ * Does not touch the sessions (seedCli.js logs everybody out) and does not close the database.
+ * @param {object} db connection from db.js
  * @param {Date} today now() of clock.js: the day the demo dates start from, and the time bookings were made before
+ * @returns {Promise<{ users: number, slots: number, bookings: number, from: string, to: string }>}
  */
-async function seed(db, today) {
+export async function seed(db, today) {
   // One hash per user, never shared: each has its own random salt, even with the same demo password.
   const hashes = new Map();
   for (const { key, password } of USERS) hashes.set(key, await hashPassword(password));
@@ -151,43 +150,4 @@ async function seed(db, today) {
       to: localDate(today, LAST_DAY),
     };
   });
-}
-
-/**
- * Logs everybody out: after the seed the user ids start again from 1, so an old session could
- * point to another user. Does nothing when sessions.db does not exist yet (server never started).
- */
-function deleteSessions(file) {
-  if (!existsSync(file)) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const sessions = new sqlite3.Database(file, (err) => err && reject(err));
-    sessions.serialize(() => {
-      sessions.run('PRAGMA busy_timeout = 5000');
-      sessions.run('DELETE FROM sessions', (err) => {
-        sessions.close();
-        // No table yet: nobody has ever logged in.
-        if (err && !/no such table/.test(err.message)) reject(err);
-        else resolve();
-      });
-    });
-  });
-}
-
-if (config.env === 'production') {
-  console.error('The seed deletes every user, slot and booking: it never runs when NODE_ENV is production.');
-  process.exit(1);
-}
-
-try {
-  const summary = await seed(await getDb(), now());
-  await deleteSessions(config.sessionsDbPath);
-  console.log(
-    `Demo data ready in ${config.dbPath}: ${summary.users} users, ${summary.slots} slots ` +
-      `(${summary.from} → ${summary.to}), ${summary.bookings} bookings. Everybody has been logged out.`,
-  );
-} catch (err) {
-  console.error('Seed failed, the database is unchanged:', err);
-  process.exitCode = 1;
-} finally {
-  await closeDb();
 }

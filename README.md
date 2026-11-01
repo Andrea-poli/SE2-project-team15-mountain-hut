@@ -91,7 +91,8 @@ server/src/
   routes/             one file per area: auth, publicSlots, bookings, slots, availability, testSupport
   middleware/         errorHandler, notFound
   notifications/      notifier.js: bookingConfirmed() hook (called by MH-01, filled by MH-03)
-  seed.js             demo data (npm run seed), dates relative to today
+  seed.js             demo data and seed(db, today), dates relative to today; no side effects on import
+  seedCli.js          npm run seed: production check, runs seed(), logs everybody out
 server/test/          setupTestDb.js (temporary DB per file), helpers/, unit/, integration/
 client/src/           React app (App.jsx is a placeholder until U7 Common UI)
 client/test/          unit tests (React Testing Library)
