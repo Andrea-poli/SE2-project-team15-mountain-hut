@@ -46,6 +46,14 @@ export function loadConfig(env) {
     }
   }
 
+  // MH-03: without SMTP_HOST the confirmation emails are only printed on the console (mailer.js).
+  // Fine in development, but in production nobody would get them and nobody would notice: stop instead.
+  if (nodeEnv === 'production' && !env.SMTP_HOST) {
+    throw new ConfigError(
+      'SMTP_HOST is missing: in production booking confirmation emails must be sent (see .env.example).',
+    );
+  }
+
   return {
     env: nodeEnv,
     port: Number(env.PORT || 3001),

@@ -2,6 +2,7 @@
 // Content agreed with the PO (SE2-Polito/AY26-27-Mountain-Hut issue #24): a booking reference,
 // the date, the time slot, the party size, the party requirements, the name of the hiker who booked.
 // Table numbers are NOT included. Pure function: no I/O, easy to test.
+import { bookingReference } from '../../bookingReference.js';
 
 const SUBJECT = 'Your booking at the mountain hut is confirmed';
 
@@ -12,12 +13,9 @@ function formatDate(isoDate) {
   return date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** Booking reference shown to the hiker, e.g. id 7 → "MH-000007". */
-export function bookingReference(id) {
-  return `MH-${String(id).padStart(6, '0')}`;
-}
-
-/** Party requirements (MH-05, later sprint): a list of { allergies, description }. Empty → no section. */
+// Party requirements belong to MH-05 (a later sprint): GET /api/bookings/:id has no `requirements`
+// field yet. When MH-05 adds it as a list of { allergies, description }, this section appears by itself;
+// until then the list is missing and nothing is printed.
 function requirementLines(requirements) {
   if (!Array.isArray(requirements) || requirements.length === 0) return [];
   return [
@@ -29,7 +27,7 @@ function requirementLines(requirements) {
 
 /**
  * @param {object} booking as returned by GET /api/bookings/:id
- *   { id, slot: { date, startTime, endTime, label }, partySize, requirements? }
+ *   { id, slot: { date, startTime, endTime, label }, partySize, ... } – `requirements` only after MH-05
  * @param {object} hiker { firstName, lastName, email }
  * @returns {{ subject: string, text: string }}
  */

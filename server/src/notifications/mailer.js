@@ -3,6 +3,7 @@
 //                                 read back through GET /api/test/emails (routes/testSupport.js)
 //   - SMTP_HOST set            → real SMTP server (e.g. a test mailbox such as Ethereal or Mailtrap in the demo)
 //   - otherwise (local dev)    → the email is printed on the server console instead of being sent
+//                                 (never in production: config.js stops the server when SMTP_HOST is missing)
 // Nodemailer's jsonTransport builds the full message without any network: used for capture and console.
 
 import nodemailer from 'nodemailer';
@@ -25,7 +26,9 @@ export function clearCapturedEmails() {
 
 /** Reads the settings at call time, so tests can change env variables between cases. */
 function transportFor(env) {
-  if (isTestEnv(env.NODE_ENV || 'development')) return { kind: 'capture', transport: nodemailer.createTransport({ jsonTransport: true }) };
+  if (isTestEnv(env.NODE_ENV || 'development')) {
+    return { kind: 'capture', transport: nodemailer.createTransport({ jsonTransport: true }) };
+  }
   if (env.SMTP_HOST) {
     return {
       kind: 'smtp',
