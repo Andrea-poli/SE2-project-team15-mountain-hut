@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    // VITE_* variables (e.g. VITE_USE_MOCKS) are read from the same root .env, not from client/.
+    envDir: repoRoot,
     server: {
       port: 5173,
       // If 5173 is busy, stop with a clear error instead of moving to 5174 (the E2E port).

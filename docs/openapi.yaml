@@ -1,0 +1,1016 @@
+openapi: 3.0.3
+info:
+  title: Mountain Hut API
+  version: 0.1.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  description: |
+    Backend API of the Mountain Hut web application (SE2 project, Team 15).
+
+    ## General conventions
+
+    * **Errors** - every error response has the `Error` body: `{"error": "message"}`.
+      `401` = not logged in; `403` = logged in but the role is not allowed
+      (the warden passes every employee check); `404` is also returned for a
+      resource that exists but belongs to someone else, so it does not reveal
+      that it exists.
+    * **Authentication** - cookie-based session (`sessionCookie`). The cookie is
+      set by `POST /api/auth/register` and `POST /api/auth/login` (httpOnly,
+      sameSite=lax) and is accepted by every endpoint marked with
+      `sessionCookie` security.
+    * **Dates and times** - dates are valid calendar dates in `YYYY-MM-DD`
+      format, and times are `HH:MM` (24 h), both in hut local time (`TZ`,
+      default Europe/Rome); `createdAt` is ISO 8601 UTC. Dates that do not
+      exist on the calendar are invalid and date-taking endpoints return `400`.
+      A client may display 12-hour times locally, but it must convert back to
+      `HH:MM` before calling the API.
+    * **Slot time rules** - a new slot must start strictly after the current
+      hut-local time. A slot is `past` once its start time is at or before the
+      current hut-local time.
+    * **Booking window** - there is no maximum advance-booking window. A hiker
+      can book any staff-defined slot up to 2 hours before its start; within
+      2 hours, the slot is no longer bookable and `POST /api/bookings` returns
+      `400`.
+    * **Allocation rule** - first try to seat the whole party at one table,
+      possibly sharing it with other parties. Split the party only when no
+      single table has enough free seats; then use as few tables as possible,
+      leaving the fewest unused free seats on the selected tables. On a tie,
+      use the lowest table ids. There is no minimum party size per table or
+      requirement that selected tables be adjacent. Example: tables 6, 4, 4,
+      party of 8 → the two 4s; party of 5 → the 6. The availability check and
+      booking use the same rule.
+    * **Unknown routes** - any request under `/api` that matches no path+method
+      below returns `404` with the `Error` body.
+    * **Test-only routes** - endpoints tagged `test-utils` exist only when
+      `NODE_ENV` is `test` or `e2e`; they are never part of a release build.
+
+servers:
+  - url: http://localhost:3001
+    description: Local development (the Vite dev server proxies /api here)
+
+# Endpoints without an explicit `security` (logout, me) accept the session
+# cookie by default; public endpoints override it with `security: []`.
+security:
+  - sessionCookie: []
+
+tags:
+  - name: auth
+    description: Registration, login, logout and current user
+  - name: public
+    description: >
+      Anonymous endpoints (no login), grouped under /api/public so they never
+      pass through the staff router. SlotPicker data.
+  - name: bookings
+    description: Table bookings
+  - name: slots
+    description: Slot and table management, staff only
+  - name: test-utils
+    description: Only available when NODE_ENV is test/e2e
+
+paths:
+
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new hiker (and log them in)
+      description: >
+        Creates a hiker account only (staff accounts are created by the seed).
+        On success the user is already logged in: the response sets the
+        session cookie. Hiker registration requires first name, last name,
+        email, password and mobile number. Notes and emergency-contact details
+        are optional.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+            example:
+              firstName: Mario
+              lastName: Rossi
+              email: mario.rossi@example.com
+              password: segretissimopw
+              phone: '+39 333 0000000'
+              notes: Registered mountain guide
+              emergencyContact: '+39 333 0000001'
+      responses:
+        '201':
+          description: User created and logged in; sets the session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: >
+            Missing or invalid body: missing required registration details,
+            email not well formed, or password shorter than 8 characters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Password must be at least 8 characters long'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Email already in use'
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginCredentials'
+            example:
+              email: mario.rossi@example.com
+              password: segretissimopw
+      responses:
+        '200':
+          description: Logged in; sets (refreshes) the session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Missing email or password, or malformed body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Email and password are required'
+        '401':
+          description: Wrong email or wrong password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Invalid email or password'
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      description: Destroys the session and expires the cookie. Idempotent.
+      operationId: logout
+      responses:
+        '204':
+          description: Logged out (also when no session was active)
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Current logged-in user
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: The logged-in user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Not logged in'
+
+  /api/public/slots:
+    get:
+      tags: [public]
+      summary: All meal slots on a day
+      description: >
+        Used by the SlotPicker (date → time → party size) on both the
+        availability page and the booking page. All slots with status `open`
+        are returned, including full slots and slots that have started or start
+        within 2 hours. `bookingState` is `tooLate` when booking is closed,
+        otherwise `full` when no seats remain, or `bookable`. The SlotPicker
+        disables full and too-late slots and shows the reason. No seat counts
+        are exposed. A hut may define multiple slots per day with different
+        start times and durations; there is no fixed meal schedule.
+      operationId: listPublicSlots
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200':
+          description: All slots of the day, ordered by start time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicSlot'
+              example:
+                - id: 3
+                  label: Lunch
+                  startTime: '12:00'
+                  endTime: '14:00'
+                  bookingState: tooLate
+                - id: 4
+                  label: Dinner - 1st turn
+                  startTime: '19:00'
+                  endTime: '20:30'
+                  bookingState: full
+                - id: 5
+                  label: Dinner - 2nd turn
+                  startTime: '21:00'
+                  endTime: '22:30'
+                  bookingState: bookable
+        '400':
+          description: Missing or invalid date (not a valid YYYY-MM-DD calendar date)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'date must be YYYY-MM-DD'
+
+  /api/public/slots/{id}/availability:
+    get:
+      tags: [public]
+      summary: Is there room for a party in this slot, and how would they sit?
+      description: >
+        Sub-resource of a public slot: the check always concerns one slot,
+        so the slot (`{id}`, its numeric id) is the path and the party size
+        the query. Checks one slot
+        only and never suggests alternatives (PO). A closed
+        slot, a slot in the past, or a slot starting within 2 hours answers
+        `200` with `available: false` and an empty `split` - never an error,
+        so the answer can be shown in place of the check result. Each item of
+        `split` lists the tables selected by the allocation rule and the
+        party seats assigned to each. Show hikers the seat split, not table
+        names.
+      operationId: checkAvailability
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/PartySize'
+      responses:
+        '200':
+          description: Availability of the slot for the given party
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+              examples:
+                available:
+                  summary: Party fits, split over three tables
+                  value:
+                    available: true
+                    split:
+                      - { slotTableId: 9, tableName: T1, seats: 2 }
+                      - { slotTableId: 7, tableName: T2, seats: 3 }
+                      - { slotTableId: 8, tableName: T3, seats: 1 }
+                closedOrTooLate:
+                  summary: Slot closed, already started, or starting within 2 hours
+                  value:
+                    available: false
+                    split: []
+                notAvailable:
+                  summary: Slot open but not enough seats for the party
+                  value:
+                    available: false
+                    split: []
+        '400':
+          description: >
+            `id` in the path is not a positive integer, or missing/invalid
+            partySize (partySize < 1).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'partySize must be a positive integer'
+        '404':
+          description: Unknown slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Slot not found'
+
+  /api/bookings:
+    post:
+      tags: [bookings]
+      summary: Book a table for a party
+      description: >
+        Hikers only. The server re-reads the seats inside a transaction and
+        assigns tables with the allocation rule. A slot holds its tables for
+        its entire duration. A hiker may have at most one booking for a given
+        slot. A booking for a slot starting within 2 hours is refused with 400. 
+        On success, the confirmation email hook is called after the commit: 
+        if the email fails, the booking stays valid.
+      operationId: createBooking
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewBooking'
+            example:
+              slotId: 3
+              partySize: 3
+      responses:
+        '201':
+          description: Booking created and confirmed
+          headers:
+            Location:
+              description: Path of the new booking
+              schema:
+                type: string
+                example: /api/bookings/100
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: >
+            Invalid body, slot not open, or the slot starts in less than
+            2 hours.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                closed:
+                  value: { error: 'This slot is closed' }
+                deadline:
+                  value: { error: 'Bookings are accepted up to 2 hours before the slot starts' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not a hiker (employee or warden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Only hikers can book'
+        '404':
+          description: Unknown slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Slot not found'
+        '409':
+          description: >
+            The party does not fit in the remaining free seats (including
+            when another booking took seats before validation), or this hiker
+            already has a booking for this slot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notAvailable:
+                  value: { error: 'Not enough seats available for this party' }
+                alreadyBooked:
+                  value: { error: 'You already have a booking for this slot' }
+
+  /api/bookings/{id}:
+    get:
+      tags: [bookings]
+      summary: Read one booking (owner only)
+      description: >
+        Only the hiker who made the booking can read it. All other users,
+        including staff, receive 404 so the existence of another person's
+        booking is not revealed.
+      operationId: getBooking
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The booking with its slot and tables
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: The booking id is not a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'id must be a positive integer'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown booking, or booking of another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Booking not found'
+
+  /api/slots:
+    get:
+      tags: [slots]
+      summary: Slots of a date range, with their tables
+      description: >
+        Employee and warden only (the warden passes every employee check);
+        hikers receive 403.
+        Used by the weekly view (past days greyed out, `past` flag) and by the
+        "copy tables from" menu of the new-slot form. Slots can have different
+        table layouts; staff may reuse a previous slot's table configuration,
+        and there is no single fixed table set. No slot detail endpoint exists for
+        the moment: the tables are read from this list.
+      operationId: listSlots
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First valid calendar date, YYYY-MM-DD (inclusive)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-11-02'
+        - name: to
+          in: query
+          required: true
+          description: Last valid calendar date, YYYY-MM-DD (inclusive)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-11-08'
+      responses:
+        '200':
+          description: >
+            Slots ordered by date, then start time; `tables` ordered by natural
+            name order (text alphabetically, digit sequences numerically, e.g.
+            T2 before T10).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Slot'
+        '400':
+          description: >
+            Missing or invalid calendar dates, `to` before `from`, or a range
+            longer than 31 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'The range cannot exceed 31 days'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+
+    post:
+      tags: [slots]
+      summary: Create a meal slot with its tables
+      description: >
+        Employee and warden only; hikers receive 403. The slot must start
+        strictly after the current hut-local time and must not overlap any
+        existing slot of the same day (adjacent turns are allowed:
+        end == next start). Each slot has its own table configuration and may
+        reuse a previous slot's configuration. A slot has at least one table;
+        table names are unique within the slot.
+      operationId: createSlot
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewSlot'
+            example:
+              date: '2026-11-02'
+              startTime: '19:00'
+              endTime: '20:30'
+              label: Dinner - 1st turn
+              tables:
+                - { name: T1, seats: 4 }
+                - { name: T2, seats: 4 }
+                - { name: T3, seats: 6 }
+      responses:
+        '201':
+          description: Slot created with its tables
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Slot'
+        '400':
+          description: >
+            Invalid body: missing or invalid calendar date, malformed
+            date/times, end not after start, slot not starting in the future,
+            missing or empty label, no tables, duplicated table names,
+            seats < 1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                endBeforeStart:
+                  value: { error: 'endTime must be after startTime' }
+                duplicatedNames:
+                  value: { error: 'Table names must be unique within the slot' }
+                noTables:
+                  value: { error: 'A slot needs at least one table' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The slot overlaps an existing slot of the same day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Overlaps an existing slot'
+
+  /api/test/emails:
+    get:
+      tags: [test-utils]
+      summary: Emails captured by the test mailer
+      description: >
+        Available only when NODE_ENV is test or e2e; in any other environment
+        the route is not mounted at all. Used by the tests to assert that a
+        booking triggers exactly one confirmation email.
+      operationId: listCapturedEmails
+      security: []
+      parameters:
+        - name: recipient
+          in: query
+          required: false
+          description: Filter by recipient address
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Captured emails, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapturedEmail'
+        '404':
+          description: Route not mounted outside test/e2e environments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'No API endpoint for GET /api/test/emails'
+
+components:
+  parameters:
+    Date:
+      name: date
+      in: query
+      required: true
+      description: Valid calendar date of the meal, YYYY-MM-DD, hut local time
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: '2026-11-02'
+    Id:
+      name: id
+      in: path
+      required: true
+      description: >
+        Numeric resource id: a slot under /api/public/slots, a booking under
+        /api/bookings. The path segment before it names the resource type.
+      schema:
+        type: integer
+        minimum: 1
+      example: 100
+    PartySize:
+      name: partySize
+      in: query
+      required: true
+      description: >
+        Size of the whole party, the hiker included. At least 1; no upper
+        limit for now (the slot capacity is the real limit).
+      schema:
+        type: integer
+        minimum: 1
+      example: 3
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: >
+        Express session cookie (httpOnly, sameSite=lax), set by register and
+        login, stored in sessions.db. In development the client goes through
+        the Vite proxy, so the cookie is same-origin and CORS is never needed.
+
+  schemas:
+    User:
+      type: object
+      description: >
+        A user as seen by the client. Never contains the password or its hash.
+        Notes and emergency-contact details are optional hiker profile fields.
+      required: [id, firstName, lastName, email, phone, role]
+      properties:
+        id:
+          type: integer
+          example: 1
+        firstName:
+          type: string
+          example: Mario
+        lastName:
+          type: string
+          example: Rossi
+        email:
+          type: string
+          format: email
+          example: mario.rossi@example.com
+        phone:
+          type: string
+          nullable: true
+          description: Optional for staff, required for hikers. Must be a valid mobile number.
+          example: '+39 333 1234567'
+        notes:
+          type: string
+          nullable: true
+          description: Optional notes on a hiker's profile.
+        emergencyContact:
+          type: string
+          nullable: true
+          description: Optional free-text emergency-contact details.
+        role:
+          type: string
+          enum: [hiker, employee, warden]
+          example: hiker
+
+    NewUser:
+      type: object
+      description: >
+        Hiker registration form. Mobile number is required; notes and
+        emergency-contact details are optional.
+      required: [firstName, lastName, email, password, phone]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          example: Mario
+        lastName:
+          type: string
+          minLength: 1
+          example: Rossi
+        email:
+          type: string
+          format: email
+          example: mario.rossi@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Plain over the wire; stored as salt + scrypt hash, never logged or returned.
+          example: segretissimopw
+        phone:
+          type: string
+          format: phone number
+          example: '+39 333 1234567'
+        notes:
+          type: string
+          nullable: true          
+          description: Optional notes on the hiker's profile.
+        emergencyContact:
+          type: string
+          nullable: true
+          description: Optional free-text emergency-contact details.
+
+    LoginCredentials:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: mario.rossi@example.com
+        password:
+          type: string
+          format: password
+          example: segretissimopw
+
+    PublicSlot:
+      type: object
+      description: Open slot, as shown in the SlotPicker "time" menu.
+      required: [id, startTime, endTime, label, bookingState]
+      properties:
+        id:
+          type: integer
+          example: 3
+        label:
+          type: string
+          example: Lunch
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '12:00'
+        endTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '14:00'
+        bookingState:
+          type: string
+          description: >
+            `tooLate` when the slot has started or starts within 2 hours;
+            `full` when no seats remain; else `bookable` .
+          enum: [bookable, full, tooLate]
+          example: bookable
+
+    Availability:
+      type: object
+      description: >
+        Result of a seat check for one slot and one party. `split` is the
+        proposed seating: one entry per allocated table with its id, its
+        name and the seats the party takes there (e.g. "2 + 3 + 1 seats").
+        Empty when the party does not fit.
+      required: [available, split]
+      properties:
+        available:
+          type: boolean
+          example: true
+        split:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allocation'
+
+    NewBooking:
+      type: object
+      description: >
+        Creates one booking for the authenticated hiker. Party size has no
+        configured maximum; available seats are the limit.
+      required: [slotId, partySize]
+      properties:
+        slotId:
+          type: integer
+          minimum: 1
+          example: 3
+        partySize:
+          type: integer
+          minimum: 1
+          description: The whole party, the hiker included.
+          example: 3
+
+    SlotSummary:
+      type: object
+      description: The slot inside a booking.
+      required: [id, date, startTime, endTime, label]
+      properties:
+        id:
+          type: integer
+          example: 3
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-02'
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '19:00'
+        endTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '20:30'
+        label:
+          type: string
+          example: Dinner - 1st turn
+
+    Allocation:
+      type: object
+      description: >
+        One table's share of a party's seating. `seats` is the number of party
+        members at this table, not its capacity. Show hikers the seat split
+        (for example, "2 + 3 + 1 seats"), not table names.
+      required: [slotTableId, tableName, seats]
+      properties:
+        slotTableId:
+          type: integer
+          description: Id of the row in slot_tables, unique within the slot.
+          example: 9
+        tableName:
+          type: string
+          example: T2
+        seats:
+          type: integer
+          minimum: 1
+          example: 3
+
+    Booking:
+      type: object
+      required: [id, slot, partySize, tables, status, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 100
+        slot:
+          $ref: '#/components/schemas/SlotSummary'
+        partySize:
+          type: integer
+          minimum: 1
+          example: 3
+        tables:
+          type: array
+          description: >
+            Tables assigned to the party (allocation rule) - same shape as
+            the `split` of the availability check.
+          items:
+            $ref: '#/components/schemas/Allocation'
+        status:
+          type: string
+          description: >
+            Will be implemented in a future story; for now always `confirmed`.
+          enum: [confirmed, cancelled]
+          example: confirmed
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC; the reference time for time-based rules.
+          example: '2026-10-30T09:12:00Z'
+
+    SlotTable:
+      type: object
+      required: [id, name, seats]
+      properties:
+        id:
+          type: integer
+          example: 7
+        name:
+          type: string
+          description: Table name; may contain letters, numbers, or both.
+          example: T1
+        seats:
+          type: integer
+          description: Total seats of the table (not the free ones).
+          minimum: 1
+          example: 4
+
+    Slot:
+      type: object
+      description: A slot with its tables, as shown in the weekly view card.
+      required: [id, date, startTime, endTime, label, status, past, tables]
+      properties:
+        id:
+          type: integer
+          example: 12
+        date:
+          type: string
+          description: Valid calendar date in hut local time.
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-02'
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '19:00'
+        endTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '20:30'
+        label:
+          type: string
+          minLength: 1
+          example: Dinner - 1st turn
+        status:
+          type: string
+          description: Will be implemented in a future story; for now always `open`
+          enum: [open, closed]
+          example: open
+        past:
+          type: boolean
+          description: True when the slot start is at or before the current hut-local time.
+          example: false
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotTable'
+
+    NewSlotTable:
+      type: object
+      required: [name, seats]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Table name; may contain letters, numbers, or both.
+          example: T1
+        seats:
+          type: integer
+          minimum: 1
+          example: 4
+
+    NewSlot:
+      type: object
+      required: [date, startTime, endTime, label, tables]
+      properties:
+        date:
+          type: string
+          description: Valid calendar date in hut local time.
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-02'
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '19:00'
+        endTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '20:30'
+        label:
+          type: string
+          minLength: 1
+          example: Dinner - 1st turn
+        tables:
+          type: array
+          minItems: 1
+          description: At least one table; names unique within the slot.
+          items:
+            $ref: '#/components/schemas/NewSlotTable'
+
+    CapturedEmail:
+      type: object
+      description: Email stored by the test/E2E mailer instead of being sent.
+      required: [to, subject, text, sentAt]
+      properties:
+        to:
+          type: string
+          format: email
+          example: mario.rossi@example.com
+        subject:
+          type: string
+          example: 'Your booking at the mountain hut is confirmed'
+        text:
+          type: string
+          description: >
+            Confirmation body includes the booking reference, hiker name,
+            slot date and time, party size and party requirements when present.
+            It does not include table numbers.
+        sentAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T09:12:01Z'
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Not found
