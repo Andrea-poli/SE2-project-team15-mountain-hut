@@ -614,6 +614,28 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: 'No API endpoint for GET /api/test/emails'
+    delete:
+      tags: [test-utils]
+      summary: Empty the captured mailbox
+      description: >
+        Available only when NODE_ENV is test or e2e; in any other environment
+        the route is not mounted at all. Removes every captured email, so each
+        E2E test can start from an empty mailbox and count exactly the emails
+        its own booking sent. Added by MH-03 BE1 (not in the first version of
+        the contract).
+      operationId: clearCapturedEmails
+      security: []
+      responses:
+        '204':
+          description: Mailbox emptied
+        '404':
+          description: Route not mounted outside test/e2e environments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'No API endpoint for DELETE /api/test/emails'
 
 components:
   parameters:
