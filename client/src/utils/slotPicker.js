@@ -17,7 +17,10 @@ export function slotOptionLabel(slot) {
   return name + (STATE_SUFFIX[slot.bookingState] ?? '');
 }
 
-/** Initial value from the URL (?date=&slotId=&partySize=), so a link can prefill the form. Invalid parts are dropped. */
+/**
+ * Initial value from the URL (?date=&slotId=&partySize=), so a link can prefill the form.
+ * Invalid parts are dropped.
+ */
 export function slotPickerValueFromParams(params) {
   const date = params.get('date');
   const slotId = params.get('slotId');
