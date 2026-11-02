@@ -29,6 +29,7 @@ export function validateNewBooking(body) {
 }
 
 // Index bookings_one_per_hiker_slot (schema.sql): one confirmed booking per hiker per slot.
+// Safety net behind hasConfirmedBooking(): even if a check is missed, the database never accepts a second one.
 const isSecondBooking = (err) =>
   err?.code === 'SQLITE_CONSTRAINT' &&
   /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
@@ -53,6 +54,8 @@ export async function createBooking(hiker, body) {
     saved = await withTransaction(db, async () => {
       const slot = await slotDao.findById(db, slotId);
       if (!slot) throw new NotFound(MESSAGES.slotNotFound);
+      // Before the other checks: a hiker who already booked gets this message even if the slot is now full or closed.
+      if (await bookingDao.hasConfirmedBooking(db, slotId, hiker.id)) throw new Conflict(MESSAGES.alreadyBooked);
       if (slot.status !== 'open') throw new BadRequest(MESSAGES.slotClosed);
       if (bookingClosed(slot, now())) throw new BadRequest(MESSAGES.tooLate);
 
