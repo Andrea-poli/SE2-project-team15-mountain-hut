@@ -12,7 +12,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.js'],
-      exclude: ['src/index.js'],
+      exclude: ['src/index.js', 'src/seedCli.js'],
       reporter: ['text', 'html', 'lcov'],
     },
   },
