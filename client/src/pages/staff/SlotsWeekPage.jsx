@@ -160,10 +160,12 @@ export default function SlotsWeekPage() {
                   <p className="text-body-secondary mb-0">No slots</p>
                 )}
                 {!day.isPast && (
-                  // Placeholder for future "Add slot" button; currently don't redirect
-                  <Button variant="outline-primary" className="w-100 mt-3">
-                    + Add slot
-                  </Button>
+                  <Link
+                    to={`${routes.newSlot}?date=${day.isoDate}`}
+                    className="btn btn-outline-primary w-100 mt-3"
+                  >
+                    Add slot
+                  </Link>
                 )}
               </div>
             </section>

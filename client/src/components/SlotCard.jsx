@@ -23,7 +23,8 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
         <span className="mh-slot-card-line">{tableCount} {tableCount === 1 ? 'table' : 'tables'}</span>
         <span className="mh-slot-card-line">{seatCount} {seatCount === 1 ? 'seat' : 'seats'}</span>
       </button>
-      <div id={detailsId} className="px-2 pb-2" hidden={!expanded}>
+      {expanded && (
+        <div id={detailsId} className="px-2 pb-2">
           <ListGroup variant="flush">
             {slot.tables.map((table) => (
               <ListGroup.Item key={table.id} className="d-flex justify-content-between gap-3 px-2">
@@ -31,7 +32,8 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
               </ListGroup.Item>
             ))}
           </ListGroup>
-      </div>
+        </div>
+      )}
     </Card>
   );
 }
