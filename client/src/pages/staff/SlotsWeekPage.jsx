@@ -6,10 +6,12 @@ import { useEffect, useState } from 'react';
 import Alert from 'react-bootstrap/Alert';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
+import { Link } from 'react-router';
 import Spinner from 'react-bootstrap/Spinner';
-import { listSlots } from '../../api/slot.js';
-import SlotCard, { SlotDetails } from '../../components/SlotCard.jsx';
+import { listSlots } from '../../api/slots.js';
+import SlotCard from '../../components/SlotCard.jsx';
 import './SlotsWeekPage.css';
+import { routes } from '../../routes.js';
 import {
   addDays,
   formatDate,
@@ -54,7 +56,6 @@ export default function SlotsWeekPage() {
   const loading = loadedRange !== rangeKey;
   const error = slotResult.rangeKey === rangeKey ? slotResult.error : null;
   const slots = slotResult.rangeKey === rangeKey ? slotResult.slots : [];
-  const selectedSlot = slots.find((slot) => slot.id === selectedSlotId);
   const canShowWeek = !loading && !error;
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
@@ -78,27 +79,32 @@ export default function SlotsWeekPage() {
       <title>Slots of the week – Mountain Hut</title>
       <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4">
         <h1 className="mb-0">Slots of the week</h1>
-        <nav className="d-flex flex-nowrap align-items-center justify-content-center gap-2" aria-label="Week navigation">
-          <Button
-            variant="outline-primary"
-            className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
-            aria-label="Previous week"
-            onClick={() => moveWeek(-7)}
-          >
-            <ChevronLeft aria-hidden="true" size={20} />
-          </Button>
-          <p className="mh-week-range mb-0 flex-grow-1 text-center fw-semibold" aria-live="polite">
-            {formatWeekRange(weekStart, weekEnd)}
-          </p>
-          <Button
-            variant="outline-primary"
-            className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
-            aria-label="Next week"
-            onClick={() => moveWeek(7)}
-          >
-            <ChevronRight aria-hidden="true" size={20} />
-          </Button>
-        </nav>
+        <div className="d-flex flex-wrap align-items-center justify-content-center gap-3">
+          <nav className="d-flex flex-nowrap align-items-center justify-content-center gap-2" aria-label="Week navigation">
+            <Button
+              variant="outline-primary"
+              className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
+              aria-label="Previous week"
+              onClick={() => moveWeek(-7)}
+            >
+              <ChevronLeft aria-hidden="true" size={20} />
+            </Button>
+            <p className="mh-week-range mb-0 flex-grow-1 text-center fw-semibold" aria-live="polite">
+              {formatWeekRange(weekStart, weekEnd)}
+            </p>
+            <Button
+              variant="outline-primary"
+              className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
+              aria-label="Next week"
+              onClick={() => moveWeek(7)}
+            >
+              <ChevronRight aria-hidden="true" size={20} />
+            </Button>
+          </nav>
+          <Link to={routes.newSlot} className="btn btn-primary">
+            New Slot
+          </Link>
+        </div>
       </div>
 
       {error && <Alert variant="danger" role="alert">{error}</Alert>}
@@ -126,6 +132,7 @@ export default function SlotsWeekPage() {
             <section
               key={day.isoDate}
               className={`mh-day rounded-3 overflow-hidden${day.isPast ? ' mh-day-past' : ''}${day.isToday ? ' mh-day-today' : ''}`}
+              aria-current={day.isToday ? 'date' : undefined}
               aria-labelledby={`day-${day.isoDate}`}
             >
               <header className="mh-day-header d-flex align-items-center gap-2 p-2 border-bottom">
@@ -142,7 +149,7 @@ export default function SlotsWeekPage() {
                         key={slot.id}
                         slot={slot}
                         isPastDay={day.isPast}
-                        selected={selectedSlotId === slot.id}
+                        expanded={selectedSlotId === slot.id}
                         onSelect={(selected) =>
                           setSelectedSlotId((current) => (current === selected.id ? null : selected.id))
                         }
@@ -153,6 +160,7 @@ export default function SlotsWeekPage() {
                   <p className="text-body-secondary mb-0">No slots</p>
                 )}
                 {!day.isPast && (
+                  // Placeholder for future "Add slot" button; currently don't redirect
                   <Button variant="outline-primary" className="w-100 mt-3">
                     + Add slot
                   </Button>
@@ -163,7 +171,6 @@ export default function SlotsWeekPage() {
         </div>
       )}
 
-      {canShowWeek && selectedSlot && <SlotDetails slot={selectedSlot} />}
     </>
   );
 }

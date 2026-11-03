@@ -1,4 +1,4 @@
-// Slot endpoints (openapi.yaml, tag slots).
+// Slots endpoints (openapi.yaml, tag slots).
 // Mocks are loaded only when VITE_USE_MOCKS is true (same pattern as api/auth.js).
 import { apiFetch, useMocks } from './client.js';
 
