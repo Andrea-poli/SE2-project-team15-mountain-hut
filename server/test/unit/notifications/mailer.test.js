@@ -1,5 +1,6 @@
 // MH-03 BT1 – mailer.js: which transport is used, the captured mailbox of the tests, errors.
 // Vitest runs with NODE_ENV=test (vitest.config.js): emails are captured, never sent.
+import nodemailer from 'nodemailer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   capturedEmails,
@@ -64,6 +65,68 @@ describe('mailer', () => {
     await sendMail(email, { NODE_ENV: 'development' });
     expect(log).toHaveBeenCalledWith('[mail] to hannah@example.com: Hello\nBody\n');
     expect(capturedEmails()).toEqual([]);
+  });
+
+  // Real SMTP (demo and release): nodemailer.createTransport is replaced, so no network is used.
+  // The test checks the settings passed to Nodemailer and that nothing is captured or printed.
+  describe('with SMTP_HOST outside the tests', () => {
+    function fakeSmtp() {
+      const transport = { sendMail: vi.fn().mockResolvedValue({ messageId: 'smtp-1' }) };
+      const createTransport = vi.spyOn(nodemailer, 'createTransport').mockReturnValue(transport);
+      return { transport, createTransport };
+    }
+
+    it('sends through the SMTP server, with port 587 and no TLS or login by default', async () => {
+      const { transport, createTransport } = fakeSmtp();
+      const log = vi.spyOn(console, 'log');
+      // No NODE_ENV = development, as when the server is started with npm run dev.
+      const info = await sendMail(email, { SMTP_HOST: 'smtp.example.com' });
+
+      expect(createTransport).toHaveBeenCalledWith({
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        auth: undefined,
+      });
+      expect(transport.sendMail).toHaveBeenCalledWith({
+        from: 'Mountain Hut <no-reply@mountain-hut.example>',
+        to: 'hannah@example.com',
+        subject: 'Hello',
+        text: 'Body',
+      });
+      expect(info).toEqual({ messageId: 'smtp-1' });
+      expect(capturedEmails()).toEqual([]);
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    it('reads port, TLS, login and sender from the env variables (production too)', async () => {
+      const { transport, createTransport } = fakeSmtp();
+      await sendMail(email, {
+        NODE_ENV: 'production',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_PORT: '465',
+        SMTP_SECURE: 'true',
+        SMTP_USER: 'hut',
+        SMTP_PASS: 'secret',
+        MAIL_FROM: 'Hut <hut@example.com>',
+      });
+
+      expect(createTransport).toHaveBeenCalledWith({
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        auth: { user: 'hut', pass: 'secret' },
+      });
+      expect(transport.sendMail).toHaveBeenCalledWith(expect.objectContaining({ from: 'Hut <hut@example.com>' }));
+    });
+
+    it('throws when the SMTP server refuses the email', async () => {
+      const { transport } = fakeSmtp();
+      transport.sendMail.mockRejectedValue(new Error('535 Authentication failed'));
+      await expect(sendMail(email, { NODE_ENV: 'development', SMTP_HOST: 'smtp.example.com' })).rejects.toThrow(
+        '535 Authentication failed',
+      );
+    });
   });
 
   it('uses the transport set with setTransport, until it is reset', async () => {
