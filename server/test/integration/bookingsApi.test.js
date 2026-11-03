@@ -7,11 +7,13 @@
 //   GET  /api/bookings/:id         owner only: 200 / 400 / 401 / 404
 //
 // Needs the backend base (common/base-backend: DAOs, auth, sessions) and MH-01 BE1a/BE1b/BE2.
-// Until they are on the branch, this file fails: that is expected (see the PR).
+// Written before that code; since BE1b/BE2 landed (PR #18) all of it passes, plus the cases added after.
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { setNow } from '../../src/clock.js';
+import { BOOKING_STATUS } from '../../src/dao/bookingDao.js';
 import { getDb } from '../../src/dao/db.js';
 import * as slotDao from '../../src/dao/slotDao.js';
 import * as userDao from '../../src/dao/userDao.js';
@@ -303,6 +305,66 @@ describe('POST /api/bookings', () => {
     expect((await book(agent, slot.id, 5)).status).toBe(409);
     const other = await loggedIn();
     expect((await book(other.agent, slot.id, 4)).status).toBe(201);
+  });
+
+  // ---- added after MH-01 BE1b/BE2 landed (cases the first version did not cover) ----
+
+  it('"already booked" wins over the other refusals: same hiker, slot now full → 409 already booked', async () => {
+    // BE1b review: a hiker who already booked gets that message, not "not enough seats".
+    const slot = await createSlot({ seats: [4] });
+    const { agent } = await loggedIn();
+    expect((await book(agent, slot.id, 2)).status).toBe(201);
+    const other = await loggedIn();
+    expect((await book(other.agent, slot.id, 2)).status).toBe(201); // slot now full
+    expectError(await book(agent, slot.id, 1), 409, 'You already have a booking for this slot');
+  });
+
+  it('"already booked" wins over the 2 h deadline too', async () => {
+    const slot = await createSlot({ date: TODAY, startTime: '12:00', endTime: '14:00' }); // exactly 2 h away
+    const { agent } = await loggedIn();
+    expect((await book(agent, slot.id, 2)).status).toBe(201);
+    setNow(`${TODAY}T10:30`); // now less than 2 h before the start
+    expectError(await book(agent, slot.id, 2), 409, 'You already have a booking for this slot');
+  });
+
+  it('a cancelled booking frees its seats and lets the same hiker book the slot again', async () => {
+    const slot = await createSlot({ seats: [4] });
+    const { agent } = await loggedIn();
+    const first = (await book(agent, slot.id, 4)).body;
+    const db = await getDb();
+    await db.run(`UPDATE bookings SET status = '${BOOKING_STATUS.CANCELLED}' WHERE id = ?`, [first.id]);
+
+    const res = await book(agent, slot.id, 4);
+    expect(res.status).toBe(201);
+    expect(res.body.id).not.toBe(first.id);
+  });
+
+  it('on equal choices, seats the party at the lowest table id (contract tie rule)', async () => {
+    const slot = await createSlot({ seats: [4, 4] });
+    const { agent } = await loggedIn();
+    const res = await book(agent, slot.id, 3);
+    expect(res.status).toBe(201);
+    expect(res.body.tables).toEqual([expect.objectContaining({ tableName: 'T1', seats: 3 })]);
+  });
+
+  it('seats a new party around the seats already taken, without overbooking any table', async () => {
+    const slot = await createSlot({ seats: [6, 4, 4] });
+    const first = await loggedIn();
+    expect((await book(first.agent, slot.id, 5)).status).toBe(201); // takes 5 of the 6
+    const second = await loggedIn();
+    const res = await book(second.agent, slot.id, 5); // 1 + 4 + 4 free: two tables needed
+    expect(res.status).toBe(201);
+    expect(res.body.tables.reduce((sum, t) => sum + t.seats, 0)).toBe(5);
+    expect(res.body.tables.length).toBe(2);
+    const db = await getDb();
+    const over = await db.get(
+      `SELECT COUNT(*) AS n FROM (
+         SELECT st.id FROM slot_tables st JOIN booking_tables bt ON bt.slot_table_id = st.id
+         JOIN bookings b ON b.id = bt.booking_id AND b.status = 'confirmed'
+         WHERE st.slot_id = ? GROUP BY st.id HAVING SUM(bt.seats) > st.seats)`,
+      [slot.id],
+    );
+    expect(over.n).toBe(0);
   });
 });
 
