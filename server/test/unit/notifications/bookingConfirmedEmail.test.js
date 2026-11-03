@@ -58,7 +58,7 @@ describe('bookingConfirmedEmail', () => {
     expect(bookingConfirmedEmail({ ...booking, partySize: 1 }, hiker).text).toContain('Party size: 1 person');
   });
 
-  it('keeps the date of the slot on the daylight saving days and at the end of the year', () => {
+  it('shows the right date also on the days the clocks change and on 31 December', () => {
     const on = (date) => bookingConfirmedEmail({ ...booking, slot: { ...booking.slot, date } }, hiker).text;
     expect(on('2026-03-29')).toMatch(dateLine('Sunday', '29 March 2026'));
     expect(on('2026-10-25')).toMatch(dateLine('Sunday', '25 October 2026'));
@@ -75,7 +75,7 @@ describe('bookingConfirmedEmail', () => {
     expect(text).toContain('Time: 19:00 – 20:30');
   });
 
-  it('has no requirements section until MH-05 adds them', () => {
+  it('prints no requirements section when there are none', () => {
     expect(bookingConfirmedEmail(booking, hiker).text).not.toContain('Party requirements');
     expect(bookingConfirmedEmail({ ...booking, requirements: [] }, hiker).text).not.toContain('Party requirements');
   });

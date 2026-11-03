@@ -28,15 +28,16 @@ describe('/api/test/emails (NODE_ENV=test)', () => {
   });
 
   it('lists the confirmation emails, oldest first', async () => {
-    await bookingConfirmed(booking(1), hiker('hannah@example.com'));
-    await bookingConfirmed(booking(2), hiker('anna@example.com'));
+    // Sent in an order that is neither by booking id nor by recipient: only the sending order fits.
+    await bookingConfirmed(booking(2), hiker('hannah@example.com'));
+    await bookingConfirmed(booking(1), hiker('anna@example.com'));
 
     const res = await request(app).get('/api/test/emails').expect(200);
     expect(res.body.map((e) => e.to)).toEqual(['hannah@example.com', 'anna@example.com']);
     expect(res.body[0]).toEqual({
       to: 'hannah@example.com',
       subject: 'Your booking at the mountain hut is confirmed',
-      text: expect.stringContaining('Booking reference: MH-000001'),
+      text: expect.stringContaining('Booking reference: MH-000002'),
       sentAt: expect.any(String),
     });
   });
