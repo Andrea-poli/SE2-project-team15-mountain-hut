@@ -16,6 +16,7 @@
     "test": "npm run test --workspaces --if-present",
     "coverage": "npm run coverage --workspaces --if-present",
     "lint": "eslint .",
+    "seed": "npm run seed -w server",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
