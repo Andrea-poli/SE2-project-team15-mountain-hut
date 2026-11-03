@@ -1,0 +1,80 @@
+.mh-week-range {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.mh-week-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.mh-day {
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  background-color: var(--mh-surface);
+}
+
+.mh-day-today {
+  border-color: var(--mh-highlight);
+}
+
+.mh-day-today .mh-day-header {
+  background-color: color-mix(in srgb, var(--mh-highlight), white 72%);
+  border-bottom-color: var(--mh-highlight);
+}
+
+.mh-day-past {
+  color: var(--mh-muted);
+  background-color: color-mix(in srgb, var(--mh-bg), var(--mh-surface) 55%);
+}
+
+.mh-day-past .mh-day-header {
+  background-color: var(--mh-bg);
+}
+
+.mh-today-label {
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--bs-border-radius-pill);
+  background-color: var(--mh-highlight);
+  color: var(--mh-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+
+.mh-slot-card-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.mh-slot-card-name {
+  font-weight: 600;
+  font-size: 1.15rem;
+}
+
+
+.mh-slot-card-past {
+  opacity: 0.65;
+}
+
+@media (min-width: 768px) {
+  .mh-week-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .mh-week-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .mh-week-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+}
