@@ -36,7 +36,17 @@ Open http://localhost:5173. In development the client calls `/api/...` on its ow
 
 ## Demo accounts
 
-`npm run seed` fills the development database with demo data: slots from 7 days ago to 14 days ahead (lunch, dinner, and a second dinner turn on Saturdays, tables T1–T5) and a few bookings. Dates are relative to today, so the data never gets old: run it again whenever you want a fresh start. It **replaces** every user, slot and booking and logs everybody out; it refuses to run when `NODE_ENV=production`. Tests never use it.
+`npm run seed` fills the development database with demo data: slots from 7 days ago to 14 days ahead (lunch, dinner, and a second dinner turn on Saturdays, tables T1–T5) and a few bookings. Dates are relative to today, so the data never gets old: run it again whenever you want a fresh start. It **replaces** every user, slot and booking and logs everybody out; it refuses to run when `NODE_ENV=production`. The E2E tests start from the same data (loaded at every E2E start); unit and integration tests never use it.
+
+Demo cases, ready to show:
+
+| Case | Where |
+|---|---|
+| Party split over two tables ("2 + 8 seats") | tomorrow's dinner |
+| Almost full (1 seat left) | tomorrow's lunch |
+| Full (listed, cannot be chosen) | the dinner in 3 days |
+| Busy past days (greyed out) | 3, 2 and 1 days ago |
+| Booking closing within 2 hours | today's lunch: set `FAKE_NOW=<today>T10:30` in `.env` and restart, it shows "booking closed" |
 
 | Role | Email | Password |
 |---|---|---|

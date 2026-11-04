@@ -6,7 +6,12 @@
 // Dates are relative to today (now() of clock.js, so FAKE_NOW moves them too): slots from 7 days ago
 // to 14 days ahead, so there are always past days, today and future days to look at.
 // Demo accounts and passwords: README, "Demo accounts" (same accounts as the client mocks, api/mocks/auth.js).
-// More demo cases (full slot, almost full, slot closing within 2 h…) come with C3.
+// Demo cases (C3), where to find them – the E2E tests also start from these data (server/src/index.js):
+//   split party "2 + 8 seats": tomorrow's dinner · almost full (1 seat left): tomorrow's lunch ·
+//   full: the dinner in 3 days · busy past days: 3, 2 and 1 days ago · cancelled booking: lunch in 3 days ·
+//   closing within 2 h: today's lunch, with FAKE_NOW=<today>T10:30 (README, Demo accounts).
+// The E2E specs rely on some days: keep tomorrow's dinner at 12 free seats (MH-04), today's and day 2's
+// slots as they are (MH-02), and days 4–14 without bookings (MH-01). Run npm run test:e2e after any change.
 import * as bookingDao from './dao/bookingDao.js';
 import * as slotDao from './dao/slotDao.js';
 import { withTransaction } from './dao/transaction.js';
@@ -71,6 +76,19 @@ export const BOOKINGS = [
   // A cancelled booking does not take seats: T1 is free again for the next one.
   { day: 3, slot: 'lunch', hiker: 'anna', partySize: 4, tables: { T1: 4 }, createdDaysAgo: 3, status: bookingDao.BOOKING_STATUS.CANCELLED },
   { day: 3, slot: 'lunch', hiker: 'marco', partySize: 4, tables: { T1: 4 }, createdDaysAgo: 1 },
+  // C3 – tomorrow's lunch almost full: 25 of 26 seats, 1 left.
+  { day: 1, slot: 'lunch', hiker: 'marco', partySize: 8, tables: { T5: 8 }, createdDaysAgo: 2 },
+  { day: 1, slot: 'lunch', hiker: 'hannah', partySize: 6, tables: { T4: 6 }, createdDaysAgo: 2 },
+  { day: 1, slot: 'lunch', hiker: 'anna', partySize: 4, tables: { T1: 4 }, createdDaysAgo: 1 },
+  { day: 1, slot: 'lunch', hiker: 'luca', partySize: 7, tables: { T2: 4, T3: 3 }, createdDaysAgo: 1 },
+  // C3 – the dinner in 3 days full: 24 of 24 seats (Anna's 8 on the two 4s, T5 is already Marco's).
+  { day: 3, slot: 'dinner1', hiker: 'marco', partySize: 8, tables: { T5: 8 }, createdDaysAgo: 2 },
+  { day: 3, slot: 'dinner1', hiker: 'hannah', partySize: 6, tables: { T4: 6 }, createdDaysAgo: 2 },
+  { day: 3, slot: 'dinner1', hiker: 'anna', partySize: 8, tables: { T2: 4, T3: 4 }, createdDaysAgo: 1 },
+  { day: 3, slot: 'dinner1', hiker: 'luca', partySize: 2, tables: { T1: 2 }, createdDaysAgo: 1 },
+  // C3 – busier past days.
+  { day: -2, slot: 'lunch', hiker: 'anna', partySize: 6, tables: { T4: 6 }, createdDaysAgo: 4 },
+  { day: -2, slot: 'dinner1', hiker: 'marco', partySize: 4, tables: { T2: 4 }, createdDaysAgo: 4 },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
