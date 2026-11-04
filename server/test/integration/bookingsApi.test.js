@@ -13,7 +13,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { setNow } from '../../src/clock.js';
-import { BOOKING_STATUS } from '../../src/dao/bookingDao.js';
+import * as bookingDao from '../../src/dao/bookingDao.js';
 import { getDb } from '../../src/dao/db.js';
 import * as slotDao from '../../src/dao/slotDao.js';
 import * as userDao from '../../src/dao/userDao.js';
@@ -134,6 +134,23 @@ describe('GET /api/public/slots', () => {
     expect(state[atLimit.id]).toBe('bookable');
   });
 
+  it('a slot both full and within 2 hours is tooLate, not full (tooLate wins, contract PublicSlot)', async () => {
+    // Filled directly with the DAO: the API would refuse this booking, the slot is already closed.
+    const slot = await createSlot({ date: TODAY, startTime: '11:30', endTime: '12:30', seats: [4] });
+    const { user } = await loggedIn();
+    const db = await getDb();
+    await bookingDao.create(db, {
+      slotId: slot.id,
+      hikerId: user.id,
+      partySize: 4,
+      createdAt: '2026-11-01T09:00:00.000Z',
+      tables: [{ slotTableId: slot.tables[0].id, seats: 4 }],
+    });
+
+    const res = await request(app).get(`/api/public/slots?date=${TODAY}`);
+    expect(res.body).toEqual([expect.objectContaining({ id: slot.id, bookingState: 'tooLate' })]);
+  });
+
   it('answers an empty list for a day without slots', async () => {
     const res = await request(app).get('/api/public/slots?date=2026-11-09');
     expect(res.status).toBe(200);
@@ -206,7 +223,8 @@ describe('POST /api/bookings', () => {
   });
 
   it('accepts a party exactly as big as the free seats, and refuses one person more with 409', async () => {
-    // PO, issue #12: "with 6 free seats split over 3 tables of 2, a party of 6 is available".
+    // PO, issue #12: "with 6 free seats split over 3 tables of 2, a party of 6 is available"
+    // (here: 5 free seats over two 4-seat tables, so 5 fits and 6 does not).
     const slot = await createSlot({ seats: [4, 4] });
     const first = await loggedIn();
     expect((await book(first.agent, slot.id, 3)).status).toBe(201); // 5 free seats left
@@ -332,7 +350,7 @@ describe('POST /api/bookings', () => {
     const { agent } = await loggedIn();
     const first = (await book(agent, slot.id, 4)).body;
     const db = await getDb();
-    await db.run(`UPDATE bookings SET status = '${BOOKING_STATUS.CANCELLED}' WHERE id = ?`, [first.id]);
+    await db.run(`UPDATE bookings SET status = '${bookingDao.BOOKING_STATUS.CANCELLED}' WHERE id = ?`, [first.id]);
 
     const res = await book(agent, slot.id, 4);
     expect(res.status).toBe(201);
