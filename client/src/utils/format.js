@@ -58,20 +58,20 @@ export function formatWeekRange(start, end) {
   if (sameMonth) {
     return `${formatPart(start, { day: 'numeric' })} – ${formatPart(end, {
       day: 'numeric',
-      month: 'long',
+      month: 'short',
       year: 'numeric',
     })}`;
   }
   if (sameYear) {
-    return `${formatPart(start, { day: 'numeric', month: 'long' })} – ${formatPart(end, {
+    return `${formatPart(start, { day: 'numeric', month: 'short' })} – ${formatPart(end, {
       day: 'numeric',
-      month: 'long',
+      month: 'short',
       year: 'numeric',
     })}`;
   }
-  return `${formatPart(start, { day: 'numeric', month: 'long', year: 'numeric' })} – ${formatPart(end, {
+  return `${formatPart(start, { day: 'numeric', month: 'short', year: 'numeric' })} – ${formatPart(end, {
     day: 'numeric',
-    month: 'long',
+    month: 'short',
     year: 'numeric',
   })}`;
 }

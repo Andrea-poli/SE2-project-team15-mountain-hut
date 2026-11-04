@@ -1,6 +1,5 @@
 .mh-week-range {
   min-width: 0;
-  white-space: nowrap;
 }
 
 .mh-week-grid {
@@ -51,13 +50,34 @@
 }
 
 .mh-slot-card-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
   font-weight: 600;
   font-size: 1.15rem;
 }
 
+.mh-slot-card-last-line {
+  padding-right: 1.5rem;
+}
 
-.mh-slot-card-past {
-  opacity: 0.65;
+.mh-slot-card-past {  
+  border-style: dashed;  
+}  
+
+.mh-slot-card-past .btn {  
+  --bs-btn-color: var(--mh-muted);  
+  --bs-btn-hover-color: var(--mh-muted);  
+}  
+
+.mh-past-label {  
+  padding: 0 0.375rem;  
+  border: var(--bs-border-width) solid var(--mh-muted);  
+  border-radius: var(--bs-border-radius-pill);  
+  color: var(--mh-muted);  
+  font-size: 0.75rem;  
+  font-weight: 600;  
 }
 
 @media (min-width: 768px) {
