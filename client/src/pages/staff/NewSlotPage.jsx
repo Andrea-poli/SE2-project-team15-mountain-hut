@@ -290,7 +290,12 @@ export default function NewSlotPage() {
               ))}
             </Form.Group>
             <div className="mb-3">
-              <Button type="button" variant="outline-primary" onClick={addTable}>
+              <Button  
+                type="button"
+                variant="outline-primary"
+                className="d-inline-flex align-items-center gap-1"
+                onClick={addTable}
+              >
                 <Plus aria-hidden="true" size={18} />
                 Add table
               </Button>
