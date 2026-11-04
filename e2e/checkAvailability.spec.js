@@ -45,7 +45,7 @@ test.describe('Check availability as a guest', () => {
 
   test('is public, accessible and has no horizontal scroll', async ({ page }) => {
     await expect(page).toHaveTitle('Check availability – Mountain Hut');
-    await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeEnabled();
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
   });
