@@ -61,12 +61,12 @@ describe('PageLayout', () => {
     expect(within(navbar()).getByRole('button', { name: 'Log out' })).toBeInTheDocument();
   });
 
-  it('employee and warden: only Slots, and the logo leads to the slots', async () => {
+  it('employee and warden: Slots and Check availability, and the logo leads to the slots', async () => {
     for (const user of [employee, warden]) {
       vi.mocked(authApi.me).mockResolvedValue(user);
       const { unmount } = renderPage(<p>Page content</p>, { path: '/x', layout: <PageLayout /> });
       expect(await within(navbar()).findByText(user.firstName)).toBeInTheDocument();
-      expect(linkNames(), user.role).toEqual(['Mountain Hut', 'Slots']);
+      expect(linkNames(), user.role).toEqual(['Mountain Hut', 'Slots', 'Check availability']);
       expect(within(navbar()).getByRole('link', { name: 'Mountain Hut' })).toHaveAttribute('href', '/staff/slots');
       unmount();
     }
