@@ -2,7 +2,7 @@
 // the party size and the seat split (never table names, openapi Allocation).
 // MH-03 FE1: the "email sent" line. The server emails the hiker who booked, who is the logged-in user here.
 // 404 = unknown or someone else's booking (the server does not say which), 400 = id is not a number.
-import { CalendarCheck } from 'lucide-react';
+import { CalendarCheck, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
@@ -81,8 +81,11 @@ export default function BookingConfirmedPage() {
               <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
             </dl>
             {user?.email && (
-              <p className="mt-3 mb-0">
-                A confirmation email has been sent to <strong className="text-break">{user.email}</strong>.
+              <p className="d-flex align-items-start gap-2 mt-3 mb-0 p-3 rounded-3 border border-success-subtle bg-success-subtle">
+                <Mail aria-hidden="true" size={20} className="text-success flex-shrink-0 mt-1" />
+                <span>
+                  A confirmation email has been sent to <strong className="text-break">{user.email}</strong>.
+                </span>
               </p>
             )}
           </Card.Body>
