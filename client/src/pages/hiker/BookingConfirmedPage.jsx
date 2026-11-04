@@ -1,6 +1,6 @@
 // MH-01 FE2 – Booking confirmed (hikers only). Reads GET /api/bookings/:id and shows the slot,
 // the party size and the seat split (never table names, openapi Allocation).
-// MH-03 FE1 adds the "email sent" line here (agreed exception to the file rule): see the marker below.
+// MH-03 FE1: the "email sent" line. The server emails the hiker who booked, who is the logged-in user here.
 // 404 = unknown or someone else's booking (the server does not say which), 400 = id is not a number.
 import { CalendarCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -9,6 +9,7 @@ import Col from 'react-bootstrap/Col';
 import Row from 'react-bootstrap/Row';
 import { Link, useParams } from 'react-router';
 import { getBooking } from '../../api/bookings.js';
+import { useAuth } from '../../auth/useAuth.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
@@ -33,6 +34,7 @@ function useBooking(id) {
 
 export default function BookingConfirmedPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const result = useBooking(id);
 
   if (!result) return <Loading />;
@@ -78,7 +80,11 @@ export default function BookingConfirmedPage() {
               <dt className="col-sm-4">Seating</dt>
               <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
             </dl>
-            {/* MH-03 FE1: "A confirmation email has been sent to …" goes here. */}
+            {user?.email && (
+              <p className="mt-3 mb-0">
+                A confirmation email has been sent to <strong className="text-break">{user.email}</strong>.
+              </p>
+            )}
           </Card.Body>
         </Card>
       </Col>
