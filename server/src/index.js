@@ -7,7 +7,7 @@ import { closeDb, getDb } from './dao/db.js';
 import { seed } from './seed.js';
 import { closeSessionStore } from './session.js';
 
-// E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from an empty database.
+// E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from a new database with the demo data.
 // Only in e2e, so the development database is never touched; before createApp(), which will open sessions.db (U5).
 if (config.env === 'e2e') {
   rmSync(config.dbPath, { force: true });

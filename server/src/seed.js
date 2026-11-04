@@ -1,7 +1,8 @@
 // Demo data (U10), to develop and try the app. Run with `npm run seed` from the repository root (seedCli.js):
 // it REPLACES every user, slot and booking of the database in DB_PATH / DATA_DIR and logs everybody out.
 // This module only exports the data and seed(db, today): importing it changes nothing, so a test can run
-// seed() on its own temporary database with a fixed day. The other tests never rely on these data.
+// seed() on its own temporary database with a fixed day. Unit and integration tests never rely on these data;
+// the E2E server loads them at start (index.js), so the E2E tests do: changing them can break the E2E.
 //
 // Dates are relative to today (now() of clock.js, so FAKE_NOW moves them too): slots from 7 days ago
 // to 14 days ahead, so there are always past days, today and future days to look at.
