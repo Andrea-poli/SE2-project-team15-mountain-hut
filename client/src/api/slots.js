@@ -17,5 +17,5 @@ export async function listSlots(from, to) {
 // POST /api/slots → 201 Slot | 400 InvalidSlot | 401 NotLoggedIn | 403 Forbidden
 export async function createSlot(slot) {
   if (useMocks) return (await mocks()).createSlot(slot);
-  return apiFetch('/api/slots', { method: 'POST', body: JSON.stringify(slot)});
+  return apiFetch('/api/slots', { method: 'POST', body: slot });
 }

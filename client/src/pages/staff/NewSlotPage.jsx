@@ -28,6 +28,12 @@ function validateSlotForm({ values, tables }) {
   if (values.startTime && values.endTime && values.endTime <= values.startTime) {
     errors.endTime = 'End time must be after start time';
   }
+  const now = new Date();
+  const nowText = `${toLocalIsoDate(now)}T${String(now.getHours()).padStart(2, '0')}
+    :${String(now.getMinutes()).padStart(2, '0')}`;
+  if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
+    errors.startTime = 'The slot must start in the future';
+  }
 
   const seenNames = new Set();
   tables.forEach((table, index) => {
@@ -129,14 +135,14 @@ export default function NewSlotPage() {
 
     setSubmitting(true);
     try {
-      await createSlot({
+      const created = await createSlot({
         ...values,
         label: values.label.trim(),
         tables: tables.map(({ name, seats }) => ({ name: name.trim(), seats: Number(seats) })),
       });
       const [year, month, day] = values.date.split('-').map(Number);
       const week = toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
-      navigate(`${routes.staffSlots}?week=${week}`);
+      navigate(`${routes.staffSlots}?week=${week}`, { state: { created } });
     } catch (error) {
       showGeneralError(error.message);
     } finally {
@@ -182,6 +188,7 @@ export default function NewSlotPage() {
               onChange={updateValue}
               onBlur={() => recheck('date', formValues)}
               error={errors.date}
+              min={toLocalIsoDate(new Date())}
               required
             />
             <div className="row">
