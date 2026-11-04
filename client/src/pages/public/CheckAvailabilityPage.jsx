@@ -7,8 +7,8 @@
 // - not available: "Not available", no link and no alternative slots (PO: the user checks another slot);
 // - any change to the form removes the result, which would no longer match it.
 // The result is a card (✓ green / ✕ grey dashed) with the slot checked; its text is in a role="status" region
-// that is always in the page, so screen readers announce it. The checked values go in the URL
-// (?date=&slotId=&partySize=, like the Book page), so a refresh keeps them.
+// that is always in the page, so screen readers announce it. The form values go in the URL
+// (?date=&slotId=&partySize=, like the Book page) at every change, so a refresh keeps them.
 import { CalendarPlus, CircleCheck, CircleX, LogIn, Search } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
@@ -81,6 +81,7 @@ export default function CheckAvailabilityPage() {
     latest.current += 1;
     setValue(next);
     setResult(null);
+    setParams(slotPickerValueToParams(next), { replace: true }); // a refresh keeps the values, also half filled
   }
 
   async function handleSubmit(event) {
@@ -89,7 +90,6 @@ export default function CheckAvailabilityPage() {
 
     const request = ++latest.current;
     const checked = value;
-    setParams(slotPickerValueToParams(checked), { replace: true }); // a refresh keeps the values
     setChecking(true);
     setResult(null);
     try {
