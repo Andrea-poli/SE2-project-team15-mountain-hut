@@ -6,27 +6,36 @@
 //   to book" (back to the prefilled Book page after login); staff → nothing (staff do not book online);
 // - not available: "Not available", no link and no alternative slots (PO: the user checks another slot);
 // - any change to the form removes the result, which would no longer match it.
-// The result is written in a role="status" region that is always in the page, so screen readers announce it.
+// The result is a card (✓ green / ✕ grey dashed) with the slot checked; its text is in a role="status" region
+// that is always in the page, so screen readers announce it. The checked values go in the URL
+// (?date=&slotId=&partySize=, like the Book page), so a refresh keeps them.
+import { CalendarPlus, CircleCheck, CircleX, LogIn, Search } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
 import Row from 'react-bootstrap/Row';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { checkAvailability } from '../../api/availability.js';
+import { listPublicSlots } from '../../api/publicSlots.js';
 import { hasRole } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import SlotPicker from '../../components/SlotPicker.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
-import { seatSplitText } from '../../utils/booking.js';
-import { slotPickerFieldIds, slotPickerValueToParams, validateSlotPicker } from '../../utils/slotPicker.js';
+import { peopleText, seatSplitText } from '../../utils/booking.js';
+import { formatDate, formatTimeRange } from '../../utils/format.js';
+import {
+  slotPickerFieldIds,
+  slotPickerValueFromParams,
+  slotPickerValueToParams,
+  validateSlotPicker,
+} from '../../utils/slotPicker.js';
 
 const ID_PREFIX = 'check';
 const FIELD_IDS = slotPickerFieldIds(ID_PREFIX);
-const EMPTY = { date: '', slotId: null, partySize: '' };
 
 /**
  * What comes after "Available", by role: the Book page link, the login link, or nothing for staff.
@@ -38,21 +47,27 @@ function NextStep({ checked }) {
   const bookUrl = `${routes.book}?${slotPickerValueToParams(checked)}`;
   if (user?.role === 'hiker') {
     return (
-      <Link to={bookUrl} className="btn btn-primary w-100">
+      <Link to={bookUrl} className="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2">
+        <CalendarPlus aria-hidden="true" size={18} />
         Book this table
       </Link>
     );
   }
   return (
-    <Link to={`${routes.login}?next=${encodeURIComponent(bookUrl)}`} className="btn btn-outline-primary w-100">
+    <Link
+      to={`${routes.login}?next=${encodeURIComponent(bookUrl)}`}
+      className="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2"
+    >
+      <LogIn aria-hidden="true" size={18} />
       Log in or register to book
     </Link>
   );
 }
 
 export default function CheckAvailabilityPage() {
-  const [value, setValue] = useState(EMPTY);
-  // { checked: the form value it answers, available, split } or null.
+  const [params, setParams] = useSearchParams();
+  const [value, setValue] = useState(() => slotPickerValueFromParams(params));
+  // { checked: the form value it answers, slot: the slot checked (or null), available, split } or null.
   const [result, setResult] = useState(null);
   const [checking, setChecking] = useState(false);
   const { errors, generalError, generalRef, checkOnSubmit, recheck, showGeneralError } = useFormErrors(
@@ -74,11 +89,19 @@ export default function CheckAvailabilityPage() {
 
     const request = ++latest.current;
     const checked = value;
+    setParams(slotPickerValueToParams(checked), { replace: true }); // a refresh keeps the values
     setChecking(true);
     setResult(null);
     try {
-      const answer = await checkAvailability(checked.slotId, Number(checked.partySize));
-      if (request === latest.current) setResult({ checked, ...answer });
+      // The slot's label and times for the card: the same list the SlotPicker loads (only the day checked).
+      const [answer, slot] = await Promise.all([
+        checkAvailability(checked.slotId, Number(checked.partySize)),
+        listPublicSlots(checked.date).then(
+          (slots) => slots.find((s) => s.id === checked.slotId) ?? null,
+          () => null, // without it the card just has no slot line
+        ),
+      ]);
+      if (request === latest.current) setResult({ checked, slot, ...answer });
     } catch (err) {
       if (request === latest.current) showGeneralError(err.message);
     } finally {
@@ -104,30 +127,59 @@ export default function CheckAvailabilityPage() {
                 errors={errors}
                 onBlurField={(name) => recheck(name, value)}
               />
-              <Button type="submit" className="w-100 mt-2" disabled={checking}>
+              <Button
+                type="submit"
+                className="w-100 mt-2 d-flex align-items-center justify-content-center gap-2"
+                disabled={checking}
+              >
+                <Search aria-hidden="true" size={18} />
                 {checking ? 'Checking…' : 'Check'}
               </Button>
             </Form>
 
-            {/* Always in the page, so its new text is announced; empty until there is a result. */}
-            <div role="status" className="mt-4">
+            {/* Always in the page, so the result is announced; the border appears with a result. */}
+            <div
+              className={
+                result ? `mt-4 p-3 border rounded-3 border-${result.available ? 'success' : 'secondary'}` : 'mt-4'
+              }
+              style={result && !result.available ? { borderStyle: 'dashed' } : undefined}
+            >
+              <div role="status">
+                {result && (
+                  <>
+                    <p className="d-flex align-items-center gap-2 fs-5 fw-semibold mb-1">
+                      {result.available ? (
+                        <CircleCheck aria-hidden="true" size={24} className="text-success flex-shrink-0" />
+                      ) : (
+                        <CircleX aria-hidden="true" size={24} className="text-secondary flex-shrink-0" />
+                      )}
+                      {result.available ? 'Available' : 'Not available'} for{' '}
+                      {peopleText(Number(result.checked.partySize))}
+                    </p>
+                    {result.slot && (
+                      <p className="text-body-secondary mb-1">
+                        {result.slot.label} · {formatDate(result.checked.date)} ·{' '}
+                        {formatTimeRange(result.slot.startTime, result.slot.endTime)}
+                      </p>
+                    )}
+                    <p className="mb-0">
+                      {result.available ? (
+                        <>
+                          Seating: <strong>{seatSplitText(result.split)}</strong>
+                        </>
+                      ) : (
+                        'You can check another day or time.'
+                      )}
+                    </p>
+                  </>
+                )}
+              </div>
               {result?.available && (
-                <p className="mb-0">
-                  <strong>Available</strong> for {result.checked.partySize}: {seatSplitText(result.split)}.
-                </p>
-              )}
-              {result && !result.available && (
-                <p className="mb-0">
-                  <strong>Not available</strong> for {result.checked.partySize} in this slot. You can check another
-                  day or time.
-                </p>
+                <div className="mt-3">
+                  <NextStep checked={result.checked} />
+                </div>
               )}
             </div>
-            {result?.available && (
-              <div className="mt-3">
-                <NextStep checked={result.checked} />
-              </div>
-            )}
           </Card.Body>
         </Card>
       </Col>
