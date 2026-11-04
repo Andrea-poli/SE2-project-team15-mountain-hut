@@ -94,12 +94,27 @@ export default function SlotsWeekPage() {
     setSearchParams(nextParams);
   }
 
+  function moveToToday() {
+    setSelectedSlotId(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('week', toLocalIsoDate(currentWeek));
+    setSearchParams(nextParams);
+  }
+
   return (
     <>
       <title>Slots of the week – Mountain Hut</title>
       <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4">
         <h1 className="mb-0">Slots of the week</h1>
         <div className="d-flex flex-wrap align-items-center justify-content-center gap-3">
+          <Button
+            variant="outline-primary"
+            className="mh-week-today flex-shrink-0"
+            onClick={moveToToday}
+            disabled={from === toLocalIsoDate(currentWeek)}
+          >
+            Today
+          </Button>
           <nav className="d-flex flex-nowrap align-items-center justify-content-center gap-2" aria-label="Week navigation">
             <Button
               variant="outline-primary"
