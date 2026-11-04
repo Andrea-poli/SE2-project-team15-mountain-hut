@@ -1,11 +1,13 @@
 // MH-02 FE1 – Slots view (staff only). Reads GET /api/slots?from=YYYY-MM-DD&to=YYYY-MM-DD and displays a weekly
 // schedule with a compact summary of each slot. Each slot can be expanded to view its details.
-// The week can be navigated with previous/next buttons, past and current day are distinguished.
+// The week can be navigated with previous/next buttons, past and current day are distinguished. Using a link to 
+// the "New slot" page prefilled the date in it. This page then displays a success message when a new slot is created.
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Alert from 'react-bootstrap/Alert';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { listSlots } from '../../api/slots.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import Loading from '../../components/Loading.jsx';
@@ -15,6 +17,7 @@ import { routes } from '../../routes.js';
 import {
   addDays,
   formatDate,
+  formatTimeRange,
   formatWeekRange,
   startOfWeek,
   toLocalIsoDate,
@@ -29,6 +32,8 @@ function parseWeekStart(value) {
 }
 
 export default function SlotsWeekPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentWeek = startOfWeek(new Date());
   const requestedWeek = searchParams.get('week');
@@ -41,6 +46,23 @@ export default function SlotsWeekPage() {
   const todayDate = toLocalIsoDate(new Date());
   const [slotResult, setSlotResult] = useState({ rangeKey: null, slots: [], error: null });
   const [selectedSlotId, setSelectedSlotId] = useState(null);
+  const [createdSlot, setCreatedSlot] = useState(() => location.state?.created ?? null);
+  const currentUrl = useRef(`${location.pathname}${location.search}`);
+
+  // If a slot was just created, clear the state so that the success message is not shown again on page reload.
+  useEffect(() => {
+    if (location.state?.created) {
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }
+  }, [location.pathname, location.search, location.state, navigate]);
+
+  // If the URL changes (e.g. the user navigates to a different week), clear the created slot state 
+  // so that the success message is not shown for the new week.
+  useEffect(() => {
+    const url = `${location.pathname}${location.search}`;
+    if (currentUrl.current !== url) setCreatedSlot(null);
+    currentUrl.current = url;
+  }, [location.pathname, location.search]);
 
   // If the requested week is not the same as the current week, update the URL to reflect the current week.
   useEffect(() => {
@@ -143,6 +165,17 @@ export default function SlotsWeekPage() {
         </div>
       </div>
 
+      {createdSlot && (
+        <Alert
+          variant="success"
+          dismissible
+          role="status"
+          onClose={() => setCreatedSlot(null)}
+        >
+          Slot created: {createdSlot.label}, {formatDate(createdSlot.date)},{' '}
+          {formatTimeRange(createdSlot.startTime, createdSlot.endTime)}
+        </Alert>
+      )}
       <ErrorMessage message={error} />
       {loading && <Loading />}
       {canShowWeek && !hasSlots && (
