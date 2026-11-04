@@ -115,7 +115,7 @@ export default function SlotsWeekPage() {
           >
             Today
           </Button>
-          <nav className="d-flex flex-nowrap align-items-center justify-content-center gap-2" aria-label="Week navigation">
+          <nav className="mh-week-navigation" aria-label="Week navigation">
             <Button
               variant="outline-primary"
               className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
@@ -124,7 +124,7 @@ export default function SlotsWeekPage() {
             >
               <ChevronLeft aria-hidden="true" size={20} />
             </Button>
-            <p className="mh-week-range mb-0 flex-grow-1 text-center fw-semibold" aria-live="polite">
+            <p className="mh-week-range mb-0 text-center fw-semibold" aria-live="polite">
               {formatWeekRange(weekStart, weekEnd)}
             </p>
             <Button

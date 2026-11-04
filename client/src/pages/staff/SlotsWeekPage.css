@@ -1,3 +1,14 @@
+.mh-week-navigation {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 20rem;
+  width: 20rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .mh-week-range {
   min-width: 0;
 }
