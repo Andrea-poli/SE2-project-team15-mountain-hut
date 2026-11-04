@@ -15,7 +15,9 @@
 //  W4  A slot is a button (its accessible name contains the label); activating it shows its tables
 //      ("T1 – 4 seats" style: name and seats) inside the same day, and aria-expanded tells the state.
 //  W5  Buttons "Previous week" / "Next week" load the week before / after (listSlots called again).
-//  W6  A link "Add slot" to routes.newSlot ('/staff/slots/new').
+//  W6  One link "New slot" at the top (outside the days, also in an empty week) → routes.newSlot; and in each
+//      day from today on a link "Add slot" → routes.newSlot?date=<that day> (form prefilled). Past days: none.
+//      (team decision 4 Nov, group chat: "both")
 //  W7  A day without slots says "No slots"; a load error is shown in a role="alert".
 //
 //  New slot form – routes.newSlot ('/staff/slots/new'), employee and warden
@@ -131,10 +133,25 @@ describe('SlotsWeekPage (MH-02 FE1)', () => {
     await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-10-26', '2026-11-01'));
   });
 
-  it('W6: "Add slot" leads to the new slot form', async () => {
+  it('W6: one "New slot" link at the top (also in an empty week) leads to the form', async () => {
     renderWeek();
-    const link = await screen.findByRole('link', { name: /Add slot/ });
-    expect(link).toHaveAttribute('href', expect.stringMatching(/^\/staff\/slots\/new/));
+    const top = await screen.findByRole('link', { name: /^New slot$/i });
+    expect(top).toHaveAttribute('href', '/staff/slots/new');
+    expect(days().some((day) => day.contains(top))).toBe(false); // not inside a day
+  });
+
+  it('W6: each day from today on has "Add slot" with that date prefilled; past days have none', async () => {
+    renderWeek();
+    await waitFor(() => expect(days()).toHaveLength(7));
+    // Now = Wed 4 Nov: Mon 2 and Tue 3 are past, Wed 4 – Sun 8 can get a new slot.
+    const [mon, tue, ...fromToday] = days();
+    expect(within(mon).queryByRole('link', { name: /Add slot/ })).not.toBeInTheDocument();
+    expect(within(tue).queryByRole('link', { name: /Add slot/ })).not.toBeInTheDocument();
+    const dates = ['2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08'];
+    fromToday.forEach((day, i) => {
+      const link = within(day).getByRole('link', { name: /Add slot/ });
+      expect(link).toHaveAttribute('href', `/staff/slots/new?date=${dates[i]}`);
+    });
   });
 
   it('W7: a load error is shown in an alert', async () => {

@@ -39,8 +39,11 @@ test.describe('Staff slots (employee)', () => {
   });
 
   test('creates a slot with the tables copied from another one', async ({ page }, testInfo) => {
-    await page.getByRole('link', { name: /Add slot/ }).click();
+    // Wednesday's own "Add slot" (W6): the form opens with that date already filled in.
+    const wednesday = page.getByRole('region').filter({ has: page.getByRole('heading', { name: /Wed 4 Nov/ }) });
+    await wednesday.getByRole('link', { name: /Add slot/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'New slot' })).toBeVisible();
+    await expect(page.getByLabel('Date', { exact: true })).toHaveValue('2026-11-04');
 
     // The E2E database is shared by the desktop and phone runs: each run creates its slot on its own
     // free afternoon hour (15:00 desktop, 16:00 phone), so the second run is not refused as an overlap.
