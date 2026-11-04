@@ -7,7 +7,8 @@
 //  C1  Page at routes.checkAvailability ('/availability'), public (no login). <h1> "Check availability",
 //      <title> "Check availability – Mountain Hut".
 //  C2  Uses the shared SlotPicker (MH-01 FE1): fields labelled "Date", "Time", "Number of people".
-//  C3  A button named "Check", disabled until the three fields are valid (isSlotPickerComplete).
+//  C3  A button named "Check", always enabled (like Log in, Register and Book). An incomplete check shows
+//      the SlotPicker field errors and focuses the first wrong field; nothing is sent.
 //  C4  Check calls checkAvailability(slotId, partySize) exported by client/src/api/availability.js
 //      (GET /api/public/slots/{id}/availability?partySize=), with numbers. Button disabled while waiting.
 //  C5  Available → a role="status" region (live, announced) containing "Available" and the seat split
@@ -109,17 +110,26 @@ describe('CheckAvailabilityPage', () => {
     await waitFor(() => expect(document.title).toBe('Check availability – Mountain Hut'));
   });
 
-  it('C3: Check is disabled until date, time and party size are all valid', async () => {
+  it('C3: Check is always enabled; an empty check shows the field errors and focuses the first field', async () => {
     renderCheck();
     await screen.findByRole('heading', { level: 1, name: 'Check availability' });
-    expect(checkButton()).toBeDisabled();
-    await fill({ people: '' });
-    expect(checkButton()).toBeDisabled();
-    await userEvent.type(screen.getByLabelText('Number of people'), '0');
-    expect(checkButton()).toBeDisabled();
-    await userEvent.clear(screen.getByLabelText('Number of people'));
-    await userEvent.type(screen.getByLabelText('Number of people'), '6');
     expect(checkButton()).toBeEnabled();
+    await userEvent.click(checkButton());
+    expect(screen.getByLabelText('Date')).toHaveAccessibleDescription(/Choose a date\./);
+    expect(screen.getByLabelText('Number of people')).toHaveAccessibleDescription(/Enter the number of people/);
+    expect(screen.getByLabelText('Date')).toHaveFocus();
+    expect(availabilityApi.checkAvailability).not.toHaveBeenCalled();
+  });
+
+  it('C3: a missing party size is flagged on its field, which gets the focus', async () => {
+    renderCheck();
+    await fill({ people: '' });
+    await userEvent.click(checkButton());
+    const party = screen.getByLabelText('Number of people');
+    expect(party).toHaveAccessibleDescription(/Enter the number of people, at least 1\./);
+    expect(party).toHaveAttribute('aria-invalid', 'true');
+    expect(party).toHaveFocus();
+    expect(availabilityApi.checkAvailability).not.toHaveBeenCalled();
   });
 
   it('C4: checks the chosen slot and party size, with numbers', async () => {
