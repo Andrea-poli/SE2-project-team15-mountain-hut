@@ -316,6 +316,12 @@ describe('GET /api/slots', () => {
     expect(res.body[0].tables.map((t) => t.name)).toEqual(['T1', 'T2', 'T10']);
   });
 
+  it('keeps the entry order for names that compare equal (T1 and t1)', async () => {
+    await insertSlot({ tables: [{ name: 't1', seats: 2 }, { name: 'T1', seats: 4 }] });
+    const res = await list(employee, TOMORROW, TOMORROW);
+    expect(res.body[0].tables.map((t) => t.name)).toEqual(['t1', 'T1']);
+  });
+
   it('marks as past the slots starting at or before now (2 Nov, 10:00)', async () => {
     const yesterday = await insertSlot({ date: YESTERDAY, startTime: '19:00', endTime: '20:30' });
     const started = await insertSlot({ date: TODAY, startTime: '08:00', endTime: '09:30' });
