@@ -156,3 +156,26 @@ const mockSlots = mockSlotDefinitions.map((definition, index) => {
 export async function listSlots(from, to) {
   return mockSlots.filter((slot) => slot.date >= from && slot.date <= to);
 }
+
+export async function createSlot(slot) {
+  if (mockSlots.some((existing) =>
+    existing.date === slot.date && slot.startTime < existing.endTime && slot.endTime > existing.startTime
+  )) {
+    const error = new Error('Overlaps an existing slot');
+    error.status = 409;
+    throw error;
+  }
+
+  const created = {
+    ...slot,
+    id: Math.max(0, ...mockSlots.map(({ id }) => id)) + 1,
+    status: 'open',
+    past: false,
+    tables: slot.tables.map((table, index) => ({
+      ...table,
+      id: Date.now() + index,
+    })),
+  };
+  mockSlots.push(created);
+  return created;
+}
