@@ -5,59 +5,19 @@
 // - every test registers new hikers, so "one booking per hiker per slot" never gets in the way;
 // - the tests use 6–16 Nov, where the seed has no bookings (3 Nov belongs to the MH-04 spec), one day each;
 //   the ones that fill a slot take a different day in each project, so the second run finds it empty.
-import { randomUUID } from 'node:crypto';
 import { expectAccessible } from './helpers/axe.js';
+import { bookByApi, confirm, fillForm, registerHiker, slotId } from './helpers/booking.js';
 import { expect, test } from './helpers/clock.js';
 import { expectNoHorizontalScroll } from './helpers/layout.js';
 
 const LUNCH = 'Lunch, 12:00 – 14:00';
 const DINNER = 'Dinner – 1st turn, 19:00 – 20:30';
-const PASSWORD = 'mountain-hut-e2e';
 
 /** A day of November 2026; `perProject`: the next day in the phone project. */
 function day(n, { perProject = false } = {}) {
   const shift = perProject && test.info().project.name === 'phone' ? 1 : 0;
   return `2026-11-${String(n + shift).padStart(2, '0')}`;
 }
-
-/** Registers a new hiker through `request` (page.request or an API context): the session cookie stays there. */
-async function registerHiker(request) {
-  const hiker = {
-    firstName: 'Erika',
-    lastName: 'Escursionista',
-    email: `hiker-${randomUUID()}@example.com`,
-    password: PASSWORD,
-    phone: '+393331234567',
-  };
-  const res = await request.post('/api/auth/register', { data: hiker });
-  expect(res.status(), await res.text()).toBe(201);
-  return hiker;
-}
-
-/** Id of the slot named `label` (e.g. "Lunch") on `date`, from the public API. */
-async function slotId(request, date, label) {
-  const res = await request.get(`/api/public/slots?date=${date}`);
-  expect(res.ok()).toBe(true);
-  const slot = (await res.json()).find((s) => s.label === label);
-  expect(slot, `${label} on ${date}`).toBeDefined();
-  return slot.id;
-}
-
-/** Books through the API for the hiker logged in on `request`; returns the new booking. */
-async function bookByApi(request, date, label, partySize) {
-  const res = await request.post('/api/bookings', { data: { slotId: await slotId(request, date, label), partySize } });
-  expect(res.status(), await res.text()).toBe(201);
-  return res.json();
-}
-
-/** Fills the booking form: the time menu is filled once the slots of the day are there. */
-async function fillForm(page, { date, time, partySize }) {
-  await page.getByLabel('Date', { exact: true }).fill(date);
-  await page.getByLabel('Time', { exact: true }).selectOption({ label: time });
-  await page.getByLabel('Number of people', { exact: true }).fill(String(partySize));
-}
-
-const confirm = (page) => page.getByRole('button', { name: 'Confirm booking' }).click();
 
 async function expectConfirmation(page, { date, time, people, seating }) {
   await expect(page).toHaveURL(/\/bookings\/\d+$/);

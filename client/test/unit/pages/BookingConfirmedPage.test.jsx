@@ -115,4 +115,37 @@ describe('BookingConfirmedPage', () => {
     expect(screen.getByRole('link', { name: 'Book a table' })).toHaveAttribute('href', '/book');
     expect(screen.queryByText('This booking does not exist or is not yours.')).not.toBeInTheDocument();
   });
+
+  describe('the "email sent" line (MH-03)', () => {
+    it('names the email of the logged-in hiker', async () => {
+      // An address found nowhere else (not in BOOKING, not in the users helper): only user.email can produce it.
+      const email = 'ottavia.pellegrini@example.org';
+      vi.mocked(authApi.me).mockResolvedValue({ ...hiker, email });
+      vi.mocked(bookingsApi.getBooking).mockResolvedValue(BOOKING);
+      renderConfirmed();
+      await screen.findByRole('heading', { level: 1, name: 'Booking confirmed' });
+      expect(screen.getByText(/has been sent to/)).toHaveTextContent(
+        /^A confirmation email has been sent to ottavia\.pellegrini@example\.org\.$/,
+      );
+    });
+
+    it.each([null, ''])('is not shown when the hiker has no email (%j)', async (email) => {
+      vi.mocked(authApi.me).mockResolvedValue({ ...hiker, email });
+      vi.mocked(bookingsApi.getBooking).mockResolvedValue(BOOKING);
+      renderConfirmed();
+      await screen.findByRole('heading', { level: 1, name: 'Booking confirmed' });
+      expect(document.body).not.toHaveTextContent(/has been sent/);
+    });
+
+    it.each([
+      [404, 'Booking not found', 'Booking not found'],
+      [500, 'Something went wrong. Please try again.', 'Booking'],
+    ])('is not shown when the booking cannot be read (%i)', async (status, message, heading) => {
+      vi.mocked(bookingsApi.getBooking).mockRejectedValue(new ApiError(status, message));
+      renderConfirmed();
+      await screen.findByRole('heading', { level: 1, name: heading });
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/has been sent/);
+    });
+  });
 });
