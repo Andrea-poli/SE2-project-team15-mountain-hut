@@ -27,6 +27,19 @@ export async function allocationsForSlot(db, slotId) {
 }
 
 /**
+ * True if the hiker already has a confirmed booking for this slot (one per hiker per slot, MH-01).
+ * Cancelled bookings do not count, like the index bookings_one_per_hiker_slot.
+ */
+export async function hasConfirmedBooking(db, slotId, hikerId) {
+  const row = await db.get('SELECT 1 FROM bookings WHERE slot_id = ? AND hiker_id = ? AND status = ?', [
+    slotId,
+    hikerId,
+    BOOKING_STATUS.CONFIRMED,
+  ]);
+  return Boolean(row);
+}
+
+/**
  * Inserts a booking and the seats it takes at each table, and returns it like findById.
  * Call it inside withTransaction (transaction.js), after re-reading the seats with allocationsForSlot:
  * the booking and its tables are saved together or not at all.
