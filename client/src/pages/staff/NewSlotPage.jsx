@@ -29,8 +29,9 @@ function validateSlotForm({ values, tables }) {
     errors.endTime = 'End time must be after start time';
   }
   const now = new Date();
-  const nowText = `${toLocalIsoDate(now)}T${String(now.getHours()).padStart(2, '0')}
-    :${String(now.getMinutes()).padStart(2, '0')}`;
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const nowText = `${toLocalIsoDate(now)}T${hours}:${minutes}`;
   if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
     errors.startTime = 'The slot must start in the future';
   }
