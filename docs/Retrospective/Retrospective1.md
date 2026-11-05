@@ -1,8 +1,6 @@
 RETROSPECTIVE (Team 15) – Sprint 1
 =====================================
 
-The retrospective should include _at least_ the following
-sections:
 
 - [process measures](#process-measures)
 - [quality measures](#quality-measures)
@@ -22,8 +20,6 @@ sections:
 - Code review completed
 - Code present on VCS
 - End-to-End tests performed
-
-> Please refine your DoD
 
 Additional DoD:
 
@@ -50,9 +46,10 @@ Additional DoD:
 |-----------------------|-------|------------|--------------|---------------|----------------|-------------|--------------|
 | Alessandro Vallillo   | 12    | 16h00m     | 16h15m       | 1h20m         | 0h33m          | 1h21m       | 0h34m        |
 | Andrea Romano         | 12    | 16h00m     | 16h10m       | 1h20m         | 0h30m          | 1h21m       | 0h35m        |
-| Federico Angeloni     | 15    | 16h00m     | 16h05m       | 1h04m         | 0h24m          | 1h04m       | 0h28m        |
+| Federico Angeloni     | 15    | 16h00m     | 15h50m       | 1h04m         | 0h24m          | 1h03m       | 0h28m        |
 | Mohammad Mahdi Faraji | 12    | 16h00m     | 15h45m       | 1h20m         | 0h25m          | 1h19m       | 0h27m        |
-| Yaël Vincent          | 13    | 16h00m     | 16h15m       | 1h14m         | 0h22m          | 1h15m       | 0h33m        |
+| Yaël Vincent          | 13    | 16h00m     | 16h30m       | 1h14m         | 0h22m          | 1h16m       | 0h33m        |
+
 
 How the values are computed:
 - Tasks ($n$): the tasks assigned to the person, plus the shared meetings (M1, M2, M3) counted once for each person with their own time. C4 counts for both Federico Angeloni and Mohammad Mahdi Faraji (1h each)
