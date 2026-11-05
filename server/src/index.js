@@ -2,10 +2,12 @@
 import { rmSync } from 'node:fs';
 import { config } from './config.js';
 import { createApp } from './app.js';
+import { now } from './clock.js';
 import { closeDb, getDb } from './dao/db.js';
+import { seed } from './seed.js';
 import { closeSessionStore } from './session.js';
 
-// E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from an empty database.
+// E2E (Playwright starts the server with NODE_ENV=e2e): every run starts from a new database with the demo data.
 // Only in e2e, so the development database is never touched; before createApp(), which will open sessions.db (U5).
 if (config.env === 'e2e') {
   rmSync(config.dbPath, { force: true });
@@ -15,6 +17,9 @@ if (config.env === 'e2e') {
 // Opens the database (and creates or migrates its tables) before accepting requests:
 // a wrong DB_PATH or a broken schema stops the server here, with the SQLite error.
 await getDb();
+
+// E2E: the demo data (users, slots, bookings) computed on FAKE_NOW, so the story tests find known slots.
+if (config.env === 'e2e') await seed(await getDb(), now());
 
 const app = createApp();
 
