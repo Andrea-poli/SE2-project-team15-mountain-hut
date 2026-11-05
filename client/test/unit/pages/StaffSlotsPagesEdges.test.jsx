@@ -176,9 +176,13 @@ describe('NewSlotPage – edge cases', () => {
     expect(screen.getByText('Total capacity: 1 seat')).toBeInTheDocument();
   });
 
-  it('Cancel goes back to the week of the date the form was opened for', async () => {
-    renderForm('/staff/slots/new?date=2026-11-05');
+  it.each([
+    ['the Monday of the date the form opened with', '/staff/slots/new?date=2026-11-05', '/staff/slots?week=2026-11-02'],
+    ['the current week when the form was opened without a date', '/staff/slots/new', '/staff/slots'],
+    ['the current week when the date in the address is not a date', '/staff/slots/new?date=tomorrow', '/staff/slots'],
+  ])('Cancel goes back to %s', async (_what, url, landed) => {
+    renderForm(url);
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-    expect(await screen.findByText('Landed on /staff/slots?week=2026-11-05')).toBeInTheDocument();
+    expect(await screen.findByText(`Landed on ${landed}`)).toBeInTheDocument();
   });
 });

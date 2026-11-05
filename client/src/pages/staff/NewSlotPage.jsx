@@ -19,6 +19,19 @@ import './NewSlotPage.css';
 
 const makeTable = () => ({ name: '', seats: '' });
 
+/** Monday ('YYYY-MM-DD') of the week of a 'YYYY-MM-DD' date, or null when the text is not a date. */
+function weekOf(isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate ?? '')) return null;
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
+}
+
+/** The week view of the week of `isoDate`, or the current week when there is no date. */
+function weekViewUrl(isoDate) {
+  const week = weekOf(isoDate);
+  return week ? `${routes.staffSlots}?week=${week}` : routes.staffSlots;
+}
+
 function validateSlotForm({ values, tables }) {
   const errors = {};
   if (!values.date) errors.date = 'Date is required';
@@ -141,9 +154,7 @@ export default function NewSlotPage() {
         label: values.label.trim(),
         tables: tables.map(({ name, seats }) => ({ name: name.trim(), seats: Number(seats) })),
       });
-      const [year, month, day] = values.date.split('-').map(Number);
-      const week = toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
-      navigate(`${routes.staffSlots}?week=${week}`, { state: { created } });
+      navigate(weekViewUrl(values.date), { state: { created } });
     } catch (error) {
       showGeneralError(error.message);
     } finally {
@@ -308,7 +319,7 @@ export default function NewSlotPage() {
                 type="button"
                 variant="outline-primary"
                 disabled={submitting}
-                onClick={() => navigate(`${routes.staffSlots}?week=${searchParams.get('date')}`)}
+                onClick={() => navigate(weekViewUrl(searchParams.get('date')))}
               >
                 Cancel
               </Button>

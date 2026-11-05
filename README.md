@@ -45,7 +45,7 @@ Demo cases, ready to show:
 | Party split over two tables ("2 + 8 seats") | tomorrow's dinner |
 | Almost full (1 seat left) | tomorrow's lunch |
 | Full (listed, cannot be chosen) | the dinner in 3 days |
-| Busy past days (greyed out) | 3, 2 and 1 days ago |
+| Past days, greyed out with "Past" (their bookings are only in the data: no page lists bookings yet) | 3, 2 and 1 days ago in the staff week view |
 | Booking closing within 2 hours | today's lunch: set `FAKE_NOW=<today>T10:30` in `.env` and restart, it shows "booking closed" |
 
 | Role | Email | Password |
