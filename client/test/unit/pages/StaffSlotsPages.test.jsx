@@ -19,6 +19,8 @@
 //      day from today on a link "Add slot" → routes.newSlot?date=<that day> (form prefilled). Past days: none.
 //      (team decision 4 Nov, group chat: "both")
 //  W7  A day without slots says "No slots"; a load error is shown in a role="alert".
+//  W8  The week is in the URL (?week=<Monday>, a wrong value → the current week); a "Today" button brings
+//      back the current week. A slot that has started (past: true, or a past day) shows "Past".
 //
 //  New slot form – routes.newSlot ('/staff/slots/new'), employee and warden
 //  N1  <h1> "New slot". Fields labelled "Date", "Start time", "End time", "Label"; one row per table with
@@ -33,12 +35,16 @@
 //  N5  Valid form → createSlot({date, startTime, endTime, label, tables:[{name, seats(number)}]}),
 //      then back to the week view (routes.staffSlots, ?date= of the new slot is welcome but optional).
 //  N6  Server 409 → "Overlaps an existing slot" shown (alert or on a time field); other errors in an alert.
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+//  N7  A slot that has already started is refused on "Start time". After creating, the week view says
+//      "Slot created: <label>, <date>, <time>" (role="status"), and the message can be closed.
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as authApi from '../../../src/api/auth.js';
 import { ApiError } from '../../../src/api/client.js';
 import * as slotsApi from '../../../src/api/slots.js';
+import { AuthProvider } from '../../../src/auth/AuthContext.jsx';
 import NewSlotPage from '../../../src/pages/staff/NewSlotPage.jsx';
 import SlotsWeekPage from '../../../src/pages/staff/SlotsWeekPage.jsx';
 import { renderPage } from '../../helpers/renderPage.jsx';
@@ -118,8 +124,8 @@ describe('SlotsWeekPage (MH-02 FE1)', () => {
     await userEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');
     const wed = days()[2];
-    expect(within(wed).getByText(/T1/)).toHaveTextContent(/4/);
-    expect(within(wed).getByText(/T2/)).toHaveTextContent(/6/);
+    expect(within(wed).getByText(/T1/)).toHaveTextContent(/T1\D+4 seats?\b/);
+    expect(within(wed).getByText(/T2/)).toHaveTextContent(/T2\D+6 seats?\b/);
   });
 
   it('W5: the arrows load the previous and the next week', async () => {
@@ -131,6 +137,40 @@ describe('SlotsWeekPage (MH-02 FE1)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-10-26', '2026-11-01'));
+  });
+
+  it('W8: the week in the URL is shown; a wrong value shows the current week', async () => {
+    renderPage(<SlotsWeekPage />, { path: '/staff/slots', url: '/staff/slots?week=2026-11-30' });
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenCalledWith('2026-11-30', '2026-12-06'));
+    await waitFor(() => expect(within(days()[0]).getByRole('heading')).toHaveTextContent('Mon 30 Nov'));
+  });
+
+  it.each(['abc', '2026-02-30'])('W8: ?week=%s shows the current week', async (week) => {
+    renderPage(<SlotsWeekPage />, { path: '/staff/slots', url: `/staff/slots?week=${week}` });
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenCalledWith('2026-11-02', '2026-11-08'));
+    await waitFor(() => expect(within(days()[0]).getByRole('heading')).toHaveTextContent('Mon 2 Nov'));
+  });
+
+  it('W8: "Today" brings back the current week', async () => {
+    renderWeek();
+    await waitFor(() => expect(days()).toHaveLength(7));
+    await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-11-16', '2026-11-22'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Today' }));
+    await waitFor(() => expect(slotsApi.listSlots).toHaveBeenLastCalledWith('2026-11-02', '2026-11-08'));
+    await waitFor(() => expect(within(days()[0]).getByRole('heading')).toHaveTextContent('Mon 2 Nov'));
+  });
+
+  it('W8: a slot that has started shows "Past", a future one does not', async () => {
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([
+      slot({ id: 1, date: '2026-11-04', label: 'Breakfast', startTime: '08:00', endTime: '09:30', past: true }),
+      slot({ id: 2, date: '2026-11-04', label: 'Dinner', startTime: '19:00', endTime: '20:30', past: false }),
+    ]);
+    renderWeek();
+    expect(await screen.findByRole('button', { name: /Breakfast/ })).toHaveTextContent(/Past/);
+    expect(screen.getByRole('button', { name: /Dinner/ })).not.toHaveTextContent(/Past/);
   });
 
   it('W6: one "New slot" link at the top (also in an empty week) leads to the form', async () => {
@@ -270,6 +310,48 @@ describe('NewSlotPage (MH-02 FE2)', () => {
       ],
     });
     expect(await screen.findByText(/^Landed on \/staff\/slots(\?|$)/)).toBeInTheDocument();
+  });
+
+  it('N7: a slot that has already started is refused on "Start time"; one later today is accepted', async () => {
+    vi.mocked(slotsApi.createSlot).mockResolvedValue(slot({ id: 99, date: '2026-11-04' }));
+    renderForm();
+    // Now = Wed 4 Nov, 10:00.
+    await fillValid({ date: '2026-11-04', start: '09:00', end: '09:30' });
+    await submit();
+    expect(screen.getByLabelText('Start time')).toHaveAttribute('aria-invalid', 'true');
+    expect(slotsApi.createSlot).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '11:00' } });
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: '12:00' } });
+    await submit();
+    expect(slotsApi.createSlot).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-04', startTime: '11:00' }));
+  });
+
+  it('N7: after creating, the week view says "Slot created" with the slot, and the message can be closed', async () => {
+    const created = slot({ id: 99, date: '2026-11-05', label: 'Dinner', startTime: '19:00', endTime: '20:30' });
+    vi.mocked(slotsApi.createSlot).mockResolvedValue(created);
+    // Both pages, as in App.jsx: the form goes back to the real week view.
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/staff/slots/new']}>
+          <Routes>
+            <Route path="/staff/slots/new" element={<NewSlotPage />} />
+            <Route path="/staff/slots" element={<SlotsWeekPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+    await fillValid();
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([created]);
+    await submit();
+
+    const message = await screen.findByText(/^Slot created:/);
+    expect(message).toHaveTextContent('Slot created: Dinner, Thu 5 Nov, 19:00 – 20:30');
+    expect(message.closest('[role="status"]')).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Slots of the week' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByText(/^Slot created:/)).not.toBeInTheDocument();
   });
 
   it('N6: an overlap refused by the server (409) is shown to the employee', async () => {

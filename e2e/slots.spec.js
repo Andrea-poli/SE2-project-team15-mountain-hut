@@ -1,9 +1,8 @@
 // MH-02 FT1 – E2E of the staff slot pages (week view + new slot form), at desktop and 360 px.
 // Same contract as client/test/unit/pages/StaffSlotsPages.test.jsx (W1–W7, N1–N6).
 //
-// Data: the E2E server starts on an EMPTY database (server/src/index.js deletes it in e2e); the demo
-// seed (U10, PR #8) must be loaded at the E2E start (see the PR) for the accounts and slots below.
-// Until MH-02 BE1/BE2/FE1/FE2 exist, these tests fail: expected. Seed facts used
+// Data: the E2E server starts on a new database with the demo seed (U10), loaded by server/src/index.js
+// on the fixed E2E day. Seed facts used
 // (seed.js, today = E2E_NOW = Mon 2 Nov 2026): employee@example.com / employeepass, hiker@example.com /
 // hikerpass; every day has "Lunch" 12:00–14:00 and "Dinner – 1st turn" 19:00–20:30.
 import { expectAccessible } from './helpers/axe.js';
@@ -32,7 +31,7 @@ test.describe('Staff slots (employee)', () => {
     const dinner = today.getByRole('button', { name: /Dinner – 1st turn/ });
     await dinner.click();
     await expect(dinner).toHaveAttribute('aria-expanded', 'true');
-    await expect(today.getByText(/\d+ seats/).first()).toBeVisible();
+    await expect(today.getByText(/T5\D+8 seats?/)).toBeVisible(); // a table row: only there when open
 
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
@@ -61,6 +60,19 @@ test.describe('Staff slots (employee)', () => {
 
     await page.getByRole('button', { name: 'Create slot', exact: true }).click();
     await expect(page).toHaveURL(/\/staff\/slots(\?|$)/);
+
+    // The slot really exists: the message, then Wednesday shows it with the tables copied from Lunch
+    // (seed: T1–T3 of 4, T4 of 6, T5 of 8 → 5 tables, 26 seats).
+    await expect(page.getByRole('status').filter({ hasText: /^Slot created: Afternoon tea/ })).toBeVisible();
+    const wed = page.getByRole('region').filter({ has: page.getByRole('heading', { name: /Wed 4 Nov/ }) });
+    const tea = wed.getByRole('button', { name: new RegExp(`Afternoon tea.*${hour}:00`) });
+    await expect(tea).toContainText('5 tables');
+    await expect(tea).toContainText('26 seats');
+    await tea.click();
+    await expect(tea).toHaveAttribute('aria-expanded', 'true');
+    for (const [name, seats] of [['T1', 4], ['T2', 4], ['T3', 4], ['T4', 6], ['T5', 8]]) {
+      await expect(wed.getByText(new RegExp(`^${name}\\D+${seats} seats$`))).toBeVisible();
+    }
   });
 
   test('a slot overlapping an existing one is refused', async ({ page }) => {
