@@ -22,13 +22,18 @@ function renderRegister(url = '/register') {
   renderPage(<RegisterPage />, { path: '/register', url });
 }
 
-// Types the given values (label → text) and submits. The form appears after the startup check.
+// Fills the given values (label → text) and submits. The form appears after the startup check.
+// Each field is pasted in one go, not typed key by key: the page (phone field included) re-renders
+// once per field instead of once per letter. The tests about typing itself still use userEvent.type.
 async function fillAndSubmit(values = valid) {
+  const user = userEvent.setup({ delay: null });
   const button = await screen.findByRole('button', { name: 'Create account' });
   for (const [label, text] of Object.entries(values)) {
-    if (text) await userEvent.type(screen.getByLabelText(label), text);
+    if (!text) continue;
+    await user.click(screen.getByLabelText(label));
+    await user.paste(text);
   }
-  await userEvent.click(button);
+  await user.click(button);
 }
 
 describe('RegisterPage', () => {
