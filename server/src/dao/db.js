@@ -66,8 +66,12 @@ async function migrate(db) {
       );
     }
     if (version === SCHEMA_VERSION) return;
+    // Here version is 0 while MIGRATIONS is empty, so an old database and the loop body cannot be reached yet:
+    // remove this ignore with the first migration step and test it by opening a version-1 database.
+    /* v8 ignore start */
     if (version === 0) await db.exec(schema);
     for (const step of MIGRATIONS.slice(Math.max(version - 1, 0))) await db.exec(step);
+    /* v8 ignore stop */
     await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   });
 }

@@ -1,5 +1,6 @@
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import sqlite3 from 'sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { closeDb, getDb, openDatabase, SCHEMA_VERSION, sessionsDbPath } from '../../../src/dao/db.js';
 import { config } from '../../../src/config.js';
@@ -88,6 +89,21 @@ describe('database', () => {
     db = null;
 
     await expect(openDatabase(config.dbPath)).rejects.toThrow(/this code knows up to/);
+  });
+
+  it('reports the setup error even when closing the file after it fails too', async () => {
+    await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+    await db.close();
+    db = null;
+    const realClose = sqlite3.Database.prototype.close;
+    const close = vi.spyOn(sqlite3.Database.prototype, 'close').mockImplementationOnce(function failingClose(done) {
+      // Really close the file (the next test deletes it), then report a close error.
+      realClose.call(this, () => done(new Error('close failed')));
+    });
+
+    await expect(openDatabase(config.dbPath)).rejects.toThrow(/this code knows up to/);
+    expect(close).toHaveBeenCalledTimes(1);
+    close.mockRestore();
   });
 
   it('returns the shared connection, clears failed opens, and allows retries after closeDb', async () => {

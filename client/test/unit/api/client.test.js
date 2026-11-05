@@ -61,6 +61,22 @@ describe('apiFetch', () => {
     await expect(apiFetch('/api/auth/me')).rejects.toMatchObject({ status: 200 });
   });
 
+  it('warns about an unreadable answer only in development', async () => {
+    fetch.mockResolvedValue(reply(200, '<html>proxy error</html>'));
+    await expect(apiFetch('/api/x')).rejects.toBeInstanceOf(ApiError);
+    expect(console.warn).toHaveBeenCalledWith('Unreadable response from', '/api/x', '<html>proxy error</html>');
+
+    vi.mocked(console.warn).mockClear();
+    vi.stubEnv('DEV', false); // a production build
+    try {
+      fetch.mockResolvedValue(reply(200, '<html>proxy error</html>'));
+      await expect(apiFetch('/api/x')).rejects.toBeInstanceOf(ApiError);
+      expect(console.warn).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('gives status 0 when the server cannot be reached', async () => {
     fetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(apiFetch('/api/auth/me')).rejects.toMatchObject({ status: 0, message: 'Cannot reach the server.' });

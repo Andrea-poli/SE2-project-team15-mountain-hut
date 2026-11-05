@@ -22,4 +22,18 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Mountain Hut' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
+
+  it('loads the Register page on its own when its address is opened', async () => {
+    window.history.pushState({}, '', '/register');
+    try {
+      render(
+        <AuthProvider>
+          <App />
+        </AuthProvider>,
+      );
+      expect(await screen.findByRole('heading', { level: 1, name: 'Register' })).toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
 });

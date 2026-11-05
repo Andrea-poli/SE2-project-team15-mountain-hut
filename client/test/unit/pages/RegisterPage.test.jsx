@@ -211,6 +211,16 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('Landed on /')).toBeInTheDocument();
   });
 
+  it('treats a mobile number typed and then deleted as missing', async () => {
+    renderRegister();
+    const phone = await screen.findByLabelText('Mobile number');
+    await userEvent.type(phone, '340');
+    await userEvent.clear(phone);
+    await fillAndSubmit({ ...valid, 'Mobile number': '' });
+    expect(screen.getByLabelText('Mobile number')).toHaveAccessibleDescription(/^Enter your mobile number\./);
+    expect(authApi.register).not.toHaveBeenCalled();
+  });
+
   it('keeps next in the link to the login page', async () => {
     renderRegister('/register?next=%2Fbook');
     expect(await screen.findByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login?next=%2Fbook');
