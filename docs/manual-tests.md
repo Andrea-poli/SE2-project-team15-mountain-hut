@@ -26,6 +26,7 @@ One row per check: what was checked, result.
 | hiker@example.com books tomorrow's first dinner turn again (seed already has her booking there) → "You already have a booking for this slot" | Pass |
 | Full: the dinner in 3 days is listed "– full" and cannot be chosen; a past day cannot be chosen | Pass |
 | Closing within 2 h: `FAKE_NOW=<today>T10:30` in `.env`, restart → today's lunch shows "booking closed" and cannot be booked | Pass |
+| Closing within 2 h at the real time: in the afternoon, without `FAKE_NOW`, today's lunch is listed "– booking closed" and cannot be chosen | Pass |
 | Keyboard only and 360 px: date, time and number of people filled and submitted without the mouse, no horizontal scroll | Pass |
 
 ## MH-02 Define slot capacity
@@ -46,6 +47,7 @@ One row per check: what was checked, result.
 | After a booking, the server console (no SMTP_HOST) prints the email to the hiker with booking reference, name, date, slot and party size, and no table numbers (PO) | Pass |
 | With a test mailbox (SMTP_* of Ethereal in .env) the email arrives and its text reads well on a phone | Pass |
 | Hiker without phone or notes (marco.rossi@example.com) → email still complete, no "undefined" or empty lines | Pass |
+| After a booking, the confirmation page shows the green line "A confirmation email has been sent to <the hiker's email>" (MH-03 FE1) | Pass |
 
 ## MH-04 Check availability
 
@@ -54,5 +56,7 @@ One row per check: what was checked, result.
 | Guest: tomorrow's dinner, 12 people → "Available", "2 + 4 + 6 seats", link "Log in or register to book"; after logging in the Book page opens prefilled | Pass |
 | hiker@example.com: same check → "Book this table" opens the Book page prefilled; employee: no booking link | Pass |
 | Tomorrow's dinner for 13, and tomorrow's lunch for 2 (almost full) → "Not available", no booking link and no other slots suggested | Pass |
+| Guest: tomorrow's lunch for 1 (1 seat left) → "Available" with the seat split | Pass |
+| "Check" with empty fields → an error under each wrong field, focus on the first one, nothing sent (the button is always enabled) | Pass |
 | Changing any field after a result removes the result; a refresh keeps the values in the URL | Pass |
 | Keyboard only and 360 px: the result is announced (screen reader / role="status") and readable without horizontal scroll | Pass |
