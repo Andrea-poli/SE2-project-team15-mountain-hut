@@ -1,0 +1,10 @@
+.mh-table-box {
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background-color: var(--mh-surface);
+}
+
+.mh-copy-tables-box {
+  border: var(--bs-border-width) dashed var(--mh-primary);
+  border-radius: var(--bs-border-radius);
+}
