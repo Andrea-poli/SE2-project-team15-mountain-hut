@@ -19,9 +19,17 @@ import './NewSlotPage.css';
 
 const makeTable = () => ({ name: '', seats: '' });
 
+/** True when the text is a real calendar date written 'YYYY-MM-DD' (the value of <input type="date">). */
+function isIsoDate(text) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text ?? '')) return false;
+  const [year, month, day] = text.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
 /** Monday ('YYYY-MM-DD') of the week of a 'YYYY-MM-DD' date, or null when the text is not a date. */
 function weekOf(isoDate) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate ?? '')) return null;
+  if (!isIsoDate(isoDate)) return null;
   const [year, month, day] = isoDate.split('-').map(Number);
   return toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
 }
@@ -66,7 +74,8 @@ export default function NewSlotPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [values, setValues] = useState({
-    date: searchParams.get('date') || '',
+    // A ?date= that is not a date is ignored, so the form asks for one (the date field would look empty anyway).
+    date: isIsoDate(searchParams.get('date')) ? searchParams.get('date') : '',
     startTime: '',
     endTime: '',
     label: '',

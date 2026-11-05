@@ -177,9 +177,23 @@ describe('NewSlotPage – edge cases', () => {
   });
 
   it.each([
+    ['text', 'tomorrow'],
+    ['day that does not exist', '2026-02-30'],
+  ])('ignores a date in the address that is a %s, and asks for one', async (_what, date) => {
+    renderForm(`/staff/slots/new?date=${date}`);
+    const dateField = await screen.findByLabelText('Date');
+    expect(dateField).toHaveValue('');
+    await submit();
+    expect(dateField).toHaveAccessibleDescription(/Date is required/);
+    expect(dateField).toHaveFocus();
+    expect(slotsApi.createSlot).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['the Monday of the date the form opened with', '/staff/slots/new?date=2026-11-05', '/staff/slots?week=2026-11-02'],
     ['the current week when the form was opened without a date', '/staff/slots/new', '/staff/slots'],
     ['the current week when the date in the address is not a date', '/staff/slots/new?date=tomorrow', '/staff/slots'],
+    ['the current week when that day does not exist', '/staff/slots/new?date=2026-02-30', '/staff/slots'],
   ])('Cancel goes back to %s', async (_what, url, landed) => {
     renderForm(url);
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
