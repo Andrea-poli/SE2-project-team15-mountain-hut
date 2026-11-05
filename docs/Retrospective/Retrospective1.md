@@ -46,13 +46,13 @@ Additional DoD:
 
 - Hours per task  <span style="color:red">per person</span>  (average, standard deviation)
 
-| Person                | Tasks | Estimate mean | Estimate StDev | Actual mean | Actual StDev |
-|-----------------------|-------|---------------|----------------|-------------|--------------|
-| Alessandro Vallillo   | 12    | 1h20m         | 0h33m          | 1h21m       | 0h34m        |
-| Andrea Romano         | 12    | 1h20m         | 0h30m          | 1h21m       | 0h35m        |
-| Federico Angeloni     | 15    | 1h04m         | 0h24m          | 1h04m       | 0h28m        |
-| Mohammad Mahdi Faraji | 12    | 1h20m         | 0h25m          | 1h19m       | 0h27m        |
-| Yaël Vincent          | 13    | 1h14m         | 0h22m          | 1h15m       | 0h33m        |
+| Person                | Tasks | Hours est. | Hours actual | Estimate mean | Estimate StDev | Actual mean | Actual StDev |
+|-----------------------|-------|------------|--------------|---------------|----------------|-------------|--------------|
+| Alessandro Vallillo   | 12    | 16h00m     | 16h15m       | 1h20m         | 0h33m          | 1h21m       | 0h34m        |
+| Andrea Romano         | 12    | 16h00m     | 16h10m       | 1h20m         | 0h30m          | 1h21m       | 0h35m        |
+| Federico Angeloni     | 15    | 16h00m     | 16h05m       | 1h04m         | 0h24m          | 1h04m       | 0h28m        |
+| Mohammad Mahdi Faraji | 12    | 16h00m     | 15h45m       | 1h20m         | 0h25m          | 1h19m       | 0h27m        |
+| Yaël Vincent          | 13    | 16h00m     | 16h15m       | 1h14m         | 0h22m          | 1h15m       | 0h33m        |
 
 How the values are computed:
 - Tasks ($n$): the tasks assigned to the person, plus the shared meetings (M1, M2, M3) counted once for each person with their own time. C4 counts for both Federico Angeloni and Mohammad Mahdi Faraji (1h each)
