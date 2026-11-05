@@ -114,4 +114,25 @@ describe('AuthProvider', () => {
     expect(() => render(<Probe />)).toThrow('useAuth must be used inside <AuthProvider>');
     vi.mocked(console.error).mockRestore();
   });
+
+  it.each([
+    ['a user', (answer) => answer.resolve(hiker)],
+    ['an error', (answer) => answer.reject(new ApiError(500, 'Server down'))],
+  ])('ignores the startup answer (%s) when the provider is already unmounted', async (_case, settle) => {
+    const answer = {};
+    vi.mocked(authApi.me).mockReturnValue(
+      new Promise((resolve, reject) => Object.assign(answer, { resolve, reject })),
+    );
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    unmount(); // e.g. StrictMode's first run, or leaving the app before the answer
+    settle(answer);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(errors).not.toHaveBeenCalled(); // no state update on an unmounted provider
+    errors.mockRestore();
+  });
 });

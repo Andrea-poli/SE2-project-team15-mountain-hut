@@ -63,4 +63,9 @@ describe('CharacterCount', () => {
     act(() => vi.advanceTimersByTime(200));
     expect(liveRegion(container)).toHaveTextContent('You have 7 characters remaining');
   });
+
+  it('counts a missing value as empty', () => {
+    const { container } = render(<CharacterCount id="c" value={undefined} limit={10} />);
+    expect(container.querySelector('#c')).toHaveTextContent('You have 10 characters remaining');
+  });
 });

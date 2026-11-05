@@ -123,4 +123,15 @@ describe('PageLayout', () => {
     await waitFor(() => expect(within(navbar()).getByRole('link', { name: 'Log in' })).toBeInTheDocument());
     expect(authApi.logout).toHaveBeenCalledTimes(1);
   });
+
+  it('the logo closes the open menu and goes to the home page', async () => {
+    vi.mocked(authApi.me).mockRejectedValue(new ApiError(401, 'Not logged in'));
+    renderLayout('/somewhere');
+    const toggle = screen.getByRole('button', { name: 'Open menu' });
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(within(navbar()).getByRole('link', { name: 'Mountain Hut' }));
+    expect(await screen.findByText('Landed on /')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
 });

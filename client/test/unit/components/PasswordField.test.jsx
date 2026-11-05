@@ -67,4 +67,11 @@ describe('PasswordField', () => {
     expect(input).toHaveAttribute('autocorrect', 'off');
     expect(input).toHaveAttribute('spellcheck', 'false');
   });
+
+  it('works outside a form too (there is no submit to listen to)', async () => {
+    render(<PasswordField id="pw2" label="Password" toggleLabel="Show password" />);
+    const input = screen.getByLabelText('Password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(input).toHaveAttribute('type', 'text');
+  });
 });

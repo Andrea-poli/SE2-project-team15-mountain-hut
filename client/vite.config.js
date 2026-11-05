@@ -33,7 +33,8 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: 'v8',
         include: ['src/**/*.{js,jsx}'],
-        exclude: ['src/main.jsx'],
+        // main.jsx only mounts the app; the mocks (VITE_USE_MOCKS=true) are a development aid, never in the release.
+        exclude: ['src/main.jsx', 'src/api/mocks/**'],
         reporter: ['text', 'html', 'lcov'],
       },
     },

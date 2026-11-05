@@ -19,6 +19,27 @@ import './NewSlotPage.css';
 
 const makeTable = () => ({ name: '', seats: '' });
 
+/** True when the text is a real calendar date written 'YYYY-MM-DD' (the value of <input type="date">). */
+function isIsoDate(text) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text ?? '')) return false;
+  const [year, month, day] = text.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+/** Monday ('YYYY-MM-DD') of the week of a 'YYYY-MM-DD' date, or null when the text is not a date. */
+function weekOf(isoDate) {
+  if (!isIsoDate(isoDate)) return null;
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
+}
+
+/** The week view of the week of `isoDate`, or the current week when there is no date. */
+function weekViewUrl(isoDate) {
+  const week = weekOf(isoDate);
+  return week ? `${routes.staffSlots}?week=${week}` : routes.staffSlots;
+}
+
 function validateSlotForm({ values, tables }) {
   const errors = {};
   if (!values.date) errors.date = 'Date is required';
@@ -29,10 +50,15 @@ function validateSlotForm({ values, tables }) {
     errors.endTime = 'End time must be after start time';
   }
   const now = new Date();
+  const todayText = toLocalIsoDate(now);
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
-  const nowText = `${toLocalIsoDate(now)}T${hours}:${minutes}`;
-  if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
+  const nowText = `${todayText}T${hours}:${minutes}`;
+  if (values.date && values.date < todayText) {
+    // A past day: the date is wrong, whatever the time ('YYYY-MM-DD' strings compare like dates).
+    errors.date = 'The date cannot be in the past';
+  } else if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
+    // Today, at a time already passed: the start time is wrong.
     errors.startTime = 'The slot must start in the future';
   }
 
@@ -53,7 +79,8 @@ export default function NewSlotPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [values, setValues] = useState({
-    date: searchParams.get('date') || '',
+    // A ?date= that is not a date is ignored, so the form asks for one (the date field would look empty anyway).
+    date: isIsoDate(searchParams.get('date')) ? searchParams.get('date') : '',
     startTime: '',
     endTime: '',
     label: '',
@@ -141,9 +168,7 @@ export default function NewSlotPage() {
         label: values.label.trim(),
         tables: tables.map(({ name, seats }) => ({ name: name.trim(), seats: Number(seats) })),
       });
-      const [year, month, day] = values.date.split('-').map(Number);
-      const week = toLocalIsoDate(startOfWeek(new Date(year, month - 1, day)));
-      navigate(`${routes.staffSlots}?week=${week}`, { state: { created } });
+      navigate(weekViewUrl(values.date), { state: { created } });
     } catch (error) {
       showGeneralError(error.message);
     } finally {
@@ -308,7 +333,7 @@ export default function NewSlotPage() {
                 type="button"
                 variant="outline-primary"
                 disabled={submitting}
-                onClick={() => navigate(`${routes.staffSlots}?week=${searchParams.get('date')}`)}
+                onClick={() => navigate(weekViewUrl(searchParams.get('date')))}
               >
                 Cancel
               </Button>
