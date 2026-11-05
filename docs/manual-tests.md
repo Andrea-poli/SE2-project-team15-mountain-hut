@@ -2,7 +2,11 @@
 
 Part of the Definition of Done: every story is checked by hand with the seed data, on a phone-width window (360 px) and with the keyboard only.
 Run `npm run seed` before each section below: some checks book seats and would change the next ones.
-One row per check: what was checked, result.
+One row per check: what was checked, result. Minor axe findings that the E2E test lets through (printed by `e2e/helpers/axe.js`) are listed here too.
+
+## Minor axe violations
+
+None in the E2E run of 5 Nov 2026 (all scenarios, desktop and phone).
 
 ## Common base
 

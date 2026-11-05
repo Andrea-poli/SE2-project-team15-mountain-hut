@@ -23,7 +23,9 @@ describe('App', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('loads the Register page on its own when its address is opened', async () => {
+  // The Register page is loaded lazily: its first import (with the phone input library) can take a few seconds
+  // on a slow machine, so this test waits longer than the defaults (1 s for findBy, 5 s for the test).
+  it('loads the Register page on its own when its address is opened', { timeout: 15000 }, async () => {
     window.history.pushState({}, '', '/register');
     try {
       render(
@@ -31,7 +33,7 @@ describe('App', () => {
           <App />
         </AuthProvider>,
       );
-      expect(await screen.findByRole('heading', { level: 1, name: 'Register' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 1, name: 'Register' }, { timeout: 5000 })).toBeInTheDocument();
     } finally {
       window.history.pushState({}, '', '/');
     }
