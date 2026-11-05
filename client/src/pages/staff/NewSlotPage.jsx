@@ -50,10 +50,15 @@ function validateSlotForm({ values, tables }) {
     errors.endTime = 'End time must be after start time';
   }
   const now = new Date();
+  const todayText = toLocalIsoDate(now);
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
-  const nowText = `${toLocalIsoDate(now)}T${hours}:${minutes}`;
-  if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
+  const nowText = `${todayText}T${hours}:${minutes}`;
+  if (values.date && values.date < todayText) {
+    // A past day: the date is wrong, whatever the time ('YYYY-MM-DD' strings compare like dates).
+    errors.date = 'The date cannot be in the past';
+  } else if (values.date && values.startTime && `${values.date}T${values.startTime}` <= nowText) {
+    // Today, at a time already passed: the start time is wrong.
     errors.startTime = 'The slot must start in the future';
   }
 

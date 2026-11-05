@@ -35,8 +35,9 @@
 //  N5  Valid form → createSlot({date, startTime, endTime, label, tables:[{name, seats(number)}]}),
 //      then back to the week view (routes.staffSlots, ?date= of the new slot is welcome but optional).
 //  N6  Server 409 → "Overlaps an existing slot" shown (alert or on a time field); other errors in an alert.
-//  N7  A slot that has already started is refused on "Start time". After creating, the week view says
-//      "Slot created: <label>, <date>, <time>" (role="status"), and the message can be closed.
+//  N7  A slot that has already started is refused on "Start time", a slot on a past day on "Date".
+//      After creating, the week view says "Slot created: <label>, <date>, <time>" (role="status"),
+//      and the message can be closed.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -325,6 +326,18 @@ describe('NewSlotPage (MH-02 FE2)', () => {
     fireEvent.change(screen.getByLabelText('End time'), { target: { value: '12:00' } });
     await submit();
     expect(slotsApi.createSlot).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-04', startTime: '11:00' }));
+  });
+
+  it('N7: a slot on a past day is refused on "Date", not on "Start time"', async () => {
+    renderForm();
+    // Now = Wed 4 Nov, 10:00: Monday 2 Nov is a past day.
+    await fillValid({ date: '2026-11-02', start: '12:00', end: '13:00' });
+    await submit();
+    expect(screen.getByLabelText('Date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Date')).toHaveAccessibleDescription(/The date cannot be in the past/);
+    expect(screen.getByLabelText('Start time')).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText('Date')).toHaveFocus();
+    expect(slotsApi.createSlot).not.toHaveBeenCalled();
   });
 
   it('N7: after creating, the week view says "Slot created" with the slot, and the message can be closed', async () => {
