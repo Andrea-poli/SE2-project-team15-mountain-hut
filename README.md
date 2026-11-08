@@ -95,6 +95,8 @@ Without compose: `docker build -t mountain-hut .` then `docker run -p 3001:3001 
 
 The variables are read when the container starts: no secret is ever written into the image (it is public once published). The container runs as the non-root `node` user and has a health check on the API.
 
+**Check that a started container works** (e.g. after building it, or on another PC for the deployment test): on a fresh start (`docker compose down -v && docker compose up -d`) run `node docker/smoke-test.js` (or `node docker/smoke-test.js http://host:port`). It calls every API endpoint as a guest, a hiker, an employee and the warden, with the main error answers and the demo data, and prints PASS/FAIL per check (exit code 0 = all passed). It writes a new hiker, a booking and a slot, so run it once per fresh start. The confirmation email is checked in the mailbox (e.g. Ethereal → Messages). Needs Node 22 on the machine running it; without Node, run it inside the container: `docker compose exec mountain-hut node docker/smoke-test.js`.
+
 ## Tests
 
 - Tests never touch the development database: a Vitest setup file (`server/test/setupTestDb.js`) gives every server test file its own temporary DB before any import, and deletes it at the end. Nothing to call in the tests.

@@ -43,6 +43,7 @@ COPY --from=server-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server/package.json server/
 COPY server/src/ server/src/
+COPY docker/smoke-test.js docker/smoke-test.js
 COPY --from=client-build /app/client/dist client/dist
 COPY docker/entrypoint.sh /usr/local/bin/mountain-hut-entrypoint
 RUN chmod +x /usr/local/bin/mountain-hut-entrypoint \

@@ -20,9 +20,9 @@ export default [
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
-  // Server and root config files run in Node
+  // Server, root config files and the Docker smoke test run in Node
   {
-    files: ['server/**/*.js', '*.config.js'],
+    files: ['server/**/*.js', '*.config.js', 'docker/**/*.js'],
     languageOptions: { globals: globals.node },
   },
   // Time: only clock.js may read the real time, everything else uses now() (fixed in tests and E2E).
