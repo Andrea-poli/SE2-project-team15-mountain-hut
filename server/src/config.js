@@ -64,6 +64,8 @@ export function loadConfig(env) {
       : path.join(dataDir, 'sessions.db'),
     sessionSecret: env.SESSION_SECRET,
     fakeNow,
+    // D1: in production Express also serves the built client (npm run build -w client), on the same port as the API.
+    clientDist: nodeEnv === 'production' ? path.join(repoRoot, 'client', 'dist') : null,
   };
 }
 
