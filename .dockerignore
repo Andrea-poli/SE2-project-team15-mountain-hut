@@ -1,0 +1,30 @@
+# Keep the build context small and never send secrets or local data to the Docker daemon:
+# the image is built from the sources only (the Dockerfile installs its own dependencies).
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.vscode
+.idea
+
+# Local settings and data: never in an image (an image on DockerHub is public).
+.env
+.env.*
+!.env.example
+server/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Tests, reports and docs are not needed at run time.
+e2e/
+playwright-report/
+test-results/
+blob-report/
+server/test/
+client/test/
+docs/
+*.md
+!README.md

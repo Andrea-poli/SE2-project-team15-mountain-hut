@@ -81,6 +81,20 @@ Read from `.env` in the repository root (template: `.env.example`). Variables al
 | `DATA_DIR` | `server/data` | folder of `mountain-hut.db` and `sessions.db`; relative paths start from the repository root |
 | `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active |
 
+## Docker
+
+The image builds the whole application from this repository (client build + server with its production dependencies, Node 22). Every feature merged into `dev` is in the next build; the Dockerfile only changes for new runtime needs.
+
+1. Copy `.env.example` to `.env` next to `docker-compose.yml` and set:
+   - `SESSION_SECRET`: required, your own random text (e.g. `openssl rand -hex 32`);
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`: required in production for the confirmation emails. A free test mailbox from https://ethereal.email takes a minute: the emails are read there and reach nobody.
+2. `docker compose up --build` → http://localhost:3001 (`HOST_PORT=8080` in `.env` for another port).
+3. On the **first start** (empty volume) the demo data is loaded (see Demo accounts). The data lives in the volume `mountain-hut-data` and survives restarts. Back to fresh demo data: `docker compose down -v && docker compose up`. No demo data: `SEED_DEMO_DATA=false`.
+
+Without compose: `docker build -t mountain-hut .` then `docker run -p 3001:3001 -e SESSION_SECRET=… -e SMTP_HOST=… (the other SMTP_* the same way) -v mountain-hut-data:/data mountain-hut`. Don't pass a development `.env` with `--env-file`: its `DATA_DIR`/`PORT` would move the data out of the volume.
+
+The variables are read when the container starts: no secret is ever written into the image (it is public once published). The container runs as the non-root `node` user and has a health check on the API.
+
 ## Tests
 
 - Tests never touch the development database: a Vitest setup file (`server/test/setupTestDb.js`) gives every server test file its own temporary DB before any import, and deletes it at the end. Nothing to call in the tests.
