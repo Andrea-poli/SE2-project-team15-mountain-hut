@@ -28,6 +28,7 @@ describe('database', () => {
     );
 
     expect(tables).toEqual([
+      { name: 'booking_requirements' },
       { name: 'booking_tables' },
       { name: 'bookings' },
       { name: 'slot_tables' },
