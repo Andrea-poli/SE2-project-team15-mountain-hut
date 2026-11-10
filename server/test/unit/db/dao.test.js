@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../../src/dao/db.js';
 import * as bookingDao from '../../../src/dao/bookingDao.js';
 import * as slotDao from '../../../src/dao/slotDao.js';
+import { withTransaction } from '../../../src/dao/transaction.js';
 import * as userDao from '../../../src/dao/userDao.js';
 
 let db;
@@ -42,6 +43,7 @@ async function insertBooking(db, { slotId, hikerId, status = 'confirmed', create
 beforeEach(async () => {
   db = await getDb();
   await db.exec(`
+    DELETE FROM booking_requirements;
     DELETE FROM booking_tables;
     DELETE FROM bookings;
     DELETE FROM slot_tables;
@@ -305,5 +307,77 @@ describe('booking DAO', () => {
       createdAt: '2026-11-01T10:00:00.000Z',
     });
     await expect(bookingDao.findById(db, -1)).resolves.toBeNull();
+  });
+});
+
+describe('booking requirements DAO', () => {
+  // The example of the PO (MH-05): three requirements, two with allergies. Not in alphabetical order on purpose.
+  const PO_EXAMPLE = [
+    { hasAllergies: true, description: '1 vegan, peanut allergy' },
+    { hasAllergies: true, description: '1 shellfish allergy' },
+    { hasAllergies: false, description: '2 vegetarians' },
+  ];
+
+  async function newBooking(email) {
+    const slotId = await insertSlot(db);
+    const hikerId = await insertUser(db, { email });
+    return insertBooking(db, { slotId, hikerId });
+  }
+
+  it('saves the requirements and reads them back in the order they were entered', async () => {
+    const bookingId = await newBooking('requirements-order@example.com');
+
+    await bookingDao.saveRequirements(db, bookingId, PO_EXAMPLE);
+
+    await expect(bookingDao.findRequirements(db, bookingId)).resolves.toEqual(PO_EXAMPLE);
+    await expect(
+      db.all('SELECT has_allergies FROM booking_requirements WHERE booking_id = ? ORDER BY id', [bookingId]),
+    ).resolves.toEqual([{ has_allergies: 1 }, { has_allergies: 1 }, { has_allergies: 0 }]);
+  });
+
+  it('gives an empty list for a booking without requirements, and saving an empty list adds nothing', async () => {
+    const bookingId = await newBooking('requirements-none@example.com');
+
+    await bookingDao.saveRequirements(db, bookingId, []);
+
+    await expect(bookingDao.findRequirements(db, bookingId)).resolves.toEqual([]);
+    await expect(bookingDao.findRequirements(db, 999)).resolves.toEqual([]);
+    await expect(db.get('SELECT COUNT(*) AS count FROM booking_requirements')).resolves.toEqual({ count: 0 });
+  });
+
+  it('keeps the requirements of each booking apart, also when they are saved in turns', async () => {
+    const first = await newBooking('requirements-first@example.com');
+    const second = await newBooking('requirements-second@example.com');
+
+    await bookingDao.saveRequirements(db, first, [PO_EXAMPLE[0]]);
+    await bookingDao.saveRequirements(db, second, [PO_EXAMPLE[2]]);
+    await bookingDao.saveRequirements(db, first, [PO_EXAMPLE[1]]);
+
+    await expect(bookingDao.findRequirements(db, first)).resolves.toEqual([PO_EXAMPLE[0], PO_EXAMPLE[1]]);
+    await expect(bookingDao.findRequirements(db, second)).resolves.toEqual([PO_EXAMPLE[2]]);
+  });
+
+  it('inside a transaction, a refused requirement leaves neither the booking nor its requirements', async () => {
+    const slotId = await insertSlot(db);
+    const hikerId = await insertUser(db, { email: 'requirements-rollback@example.com' });
+    const slotTableId = await insertTable(db, slotId, 'A', 4);
+
+    await expect(
+      withTransaction(db, async () => {
+        const booking = await bookingDao.create(db, {
+          slotId,
+          hikerId,
+          partySize: 2,
+          createdAt: '2026-11-01T10:00:00.000Z',
+          tables: [{ slotTableId, seats: 2 }],
+        });
+        // The service checks descriptions first; here the CHECK of the table is the last safety net.
+        await bookingDao.saveRequirements(db, booking.id, [PO_EXAMPLE[0], { hasAllergies: false, description: '  ' }]);
+      }),
+    ).rejects.toThrow(/CHECK constraint failed/);
+
+    await expect(db.get('SELECT COUNT(*) AS count FROM bookings')).resolves.toEqual({ count: 0 });
+    await expect(db.get('SELECT COUNT(*) AS count FROM booking_tables')).resolves.toEqual({ count: 0 });
+    await expect(db.get('SELECT COUNT(*) AS count FROM booking_requirements')).resolves.toEqual({ count: 0 });
   });
 });

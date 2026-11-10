@@ -1,4 +1,5 @@
-// Bookings and the tables they take: SQL only, no business rules (planning 4.4). Results are camelCase.
+// Bookings, the tables they take and their party requirements: SQL only, no business rules (planning 4.4).
+// Results are camelCase.
 
 /**
  * Values of bookings.status. No CHECK in schema.sql on purpose: a new state
@@ -96,4 +97,33 @@ export async function findById(db, id) {
     status: row.status,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Saves the party requirements of a booking (MH-05), in the order of the list.
+ * Call it inside the transaction that saves the booking (withTransaction, transaction.js):
+ * the booking and its requirements are saved together or not at all.
+ * The service checks the values first: an empty description makes SQLite throw 'CHECK constraint failed'.
+ * @param {{ hasAllergies: boolean, description: string }[]} requirements  may be empty
+ */
+export async function saveRequirements(db, bookingId, requirements) {
+  for (const { hasAllergies, description } of requirements) {
+    await db.run('INSERT INTO booking_requirements (booking_id, has_allergies, description) VALUES (?, ?, ?)', [
+      bookingId,
+      hasAllergies ? 1 : 0,
+      description,
+    ]);
+  }
+}
+
+/**
+ * The party requirements of a booking, in the order they were entered (openapi Requirement); [] when none.
+ * @returns {Promise<{ hasAllergies: boolean, description: string }[]>}
+ */
+export async function findRequirements(db, bookingId) {
+  const rows = await db.all(
+    'SELECT has_allergies, description FROM booking_requirements WHERE booking_id = ? ORDER BY id',
+    [bookingId],
+  );
+  return rows.map((row) => ({ hasAllergies: row.has_allergies === 1, description: row.description }));
 }
