@@ -1,10 +1,10 @@
-// /api/slots – (MH-02) list and create slots with their tables (employee, warden)
+// /api/slots – (MH-02) list and create slots with their tables, (MH-09) copy a week (employee, warden)
 import { Router } from 'express';
 import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
 import { requireRole } from '../middleware/auth.js';
 import { BadRequest } from '../errors.js';
-import { createSlot, hasStarted } from '../services/slotService.js';
+import { copyWeek, createSlot, hasStarted } from '../services/slotService.js';
 
 const router = Router();
 
@@ -75,6 +75,19 @@ router.post('/', requireRole(['employee'], 'Staff only'), async (req, res) => {
 
   const slot = await createSlot(req.body);
   return res.status(201).json(slotResponse(slot));
+});
+
+// POST /api/slots/copy-week { from, to }
+//   → 201 { created: [Slot], skipped: [{ date, startTime, endTime, label, reason }] }
+//   | 400 (invalid dates, same week) | 401 | 403
+// Employee/warden only (MH-09); `from` and `to` are any date of the source and target weeks.
+router.post('/copy-week', requireRole(['employee'], 'Staff only'), async (req, res) => {
+  const { from, to } = req.body ?? {};
+  if (!isValidDate(from)) throw new BadRequest('from must be a valid calendar date');
+  if (!isValidDate(to)) throw new BadRequest('to must be a valid calendar date');
+
+  const { created, skipped } = await copyWeek(from, to);
+  return res.status(201).json({ created: created.map(slotResponse), skipped });
 });
 
 export default router;
