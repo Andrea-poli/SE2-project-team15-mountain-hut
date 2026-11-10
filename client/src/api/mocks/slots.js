@@ -1,4 +1,4 @@
-// Mock of GET /api/slots (VITE_USE_MOCKS=true): returns API-shaped slots for the requested range.
+// Mocks of the slots endpoints (VITE_USE_MOCKS=true): API-shaped slots kept in memory.
 import { addDays, startOfWeek, toLocalIsoDate } from '../../utils/format.js';
 
 const today = new Date();
@@ -153,8 +153,11 @@ const mockSlots = mockSlotDefinitions.map((definition, index) => {
   };
 });
 
+// Same order as the server (ORDER BY date, start_time, id): created or copied slots appear in the right place.
 export async function listSlots(from, to) {
-  return mockSlots.filter((slot) => slot.date >= from && slot.date <= to);
+  return mockSlots
+    .filter((slot) => slot.date >= from && slot.date <= to)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id - b.id);
 }
 
 export async function createSlot(slot) {
@@ -178,4 +181,59 @@ export async function createSlot(slot) {
   };
   mockSlots.push(created);
   return created;
+}
+
+// Mock of POST /api/slots/copy-week: same rules as the server. `from` and `to` are any day of the two weeks.
+export async function copyWeek(from, to) {
+  const toLocalDate = (isoDate) => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+  const sourceStart = startOfWeek(toLocalDate(from));
+  const targetStart = startOfWeek(toLocalDate(to));
+  const sourceFrom = toLocalIsoDate(sourceStart);
+  const sourceTo = toLocalIsoDate(addDays(sourceStart, 6));
+  if (sourceFrom === toLocalIsoDate(targetStart)) {
+    const error = new Error('Choose a different week to copy into');
+    error.status = 400;
+    throw error;
+  }
+
+  // Whole days between the two Mondays: Math.round absorbs the hour gained or lost with daylight saving time.
+  const shift = Math.round((targetStart - sourceStart) / 86400000);
+  const now = new Date();
+  const nowDate = toLocalIsoDate(now);
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const created = [];
+  const skipped = [];
+
+  const sourceSlots = mockSlots
+    .filter((slot) => slot.date >= sourceFrom && slot.date <= sourceTo)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  for (const slot of sourceSlots) {
+    const date = toLocalIsoDate(addDays(toLocalDate(slot.date), shift));
+    const { startTime, endTime, label } = slot;
+    if (date < nowDate || (date === nowDate && startTime <= nowTime)) {
+      skipped.push({ date, startTime, endTime, label, reason: 'past' });
+    } else if (mockSlots.some((existing) =>
+      existing.date === date && startTime < existing.endTime && endTime > existing.startTime
+    )) {
+      skipped.push({ date, startTime, endTime, label, reason: 'overlap' });
+    } else {
+      const tableId = Math.max(0, ...mockSlots.flatMap((existing) => existing.tables.map((table) => table.id)));
+      const copy = {
+        id: Math.max(0, ...mockSlots.map((existing) => existing.id)) + 1,
+        date,
+        startTime,
+        endTime,
+        label,
+        status: 'open',
+        past: false,
+        tables: slot.tables.map((table, index) => ({ id: tableId + index + 1, name: table.name, seats: table.seats })),
+      };
+      mockSlots.push(copy);
+      created.push(copy);
+    }
+  }
+  return { created, skipped };
 }
