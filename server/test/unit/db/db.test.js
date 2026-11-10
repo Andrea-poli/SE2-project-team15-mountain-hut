@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sqlite3 from 'sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -138,6 +138,119 @@ describe('database', () => {
   });
 });
 
+// U2: a database created by sprint 1 is at version 1 (schema.sql only). Opening it with this code must apply
+// the missing migration steps and keep every row. The file is written with sqlite3 directly, without db.js.
+describe('schema migrations', () => {
+  const versionOnePath = path.join(path.dirname(config.dbPath), 'version-1.db');
+  const tablesOfVersionOne = ['users', 'slots', 'slot_tables', 'bookings', 'booking_tables'];
+  const sprintOneData = `
+    INSERT INTO users (id, email, first_name, role) VALUES (1, 'hannah@example.com', 'Hannah', 'hiker');
+    INSERT INTO slots (id, date, start_time, end_time, label) VALUES (1, '2026-11-20', '12:00', '14:00', 'Lunch');
+    INSERT INTO slot_tables (id, slot_id, name, seats) VALUES (1, 1, 'T1', 4), (2, 1, 'T2', 6);
+    INSERT INTO bookings (id, slot_id, hiker_id, party_size, status, created_at)
+      VALUES (1, 1, 1, 3, 'confirmed', '2026-11-09T10:00:00.000Z'), (2, 1, 1, 2, 'cancelled', '2026-11-08T09:00:00.000Z');
+    INSERT INTO booking_tables (booking_id, slot_table_id, seats) VALUES (1, 1, 3);`;
+  let upgraded;
+
+  /** Runs a SQL script on the file with a plain sqlite3 connection, then closes it. */
+  function execOnFile(file, sql) {
+    return new Promise((resolve, reject) => {
+      const conn = new sqlite3.Database(file, (openErr) => {
+        if (openErr) return reject(openErr);
+        conn.exec(sql, (execErr) => conn.close((closeErr) => (execErr || closeErr ? reject(execErr || closeErr) : resolve())));
+      });
+    });
+  }
+
+  /** Rows of a query, read with a plain sqlite3 connection (the file is not opened through db.js). */
+  function allOnFile(file, sql) {
+    return new Promise((resolve, reject) => {
+      const conn = new sqlite3.Database(file, sqlite3.OPEN_READONLY, (openErr) => {
+        if (openErr) return reject(openErr);
+        conn.all(sql, (allErr, rows) => conn.close((closeErr) => (allErr || closeErr ? reject(allErr || closeErr) : resolve(rows))));
+      });
+    });
+  }
+
+  /** A version-1 database as sprint 1 left it: schema.sql, user_version 1 and some data. */
+  async function createVersionOneDatabase(extraSql = '') {
+    const schema = await readFile(new URL('../../../src/dao/schema.sql', import.meta.url), 'utf8');
+    await execOnFile(versionOnePath, `${schema} PRAGMA user_version = 1; ${sprintOneData} ${extraSql}`);
+  }
+
+  /** Every row of the version-1 tables, through `query(sql)`. */
+  async function rowsOfVersionOne(query) {
+    const rows = {};
+    for (const table of tablesOfVersionOne) rows[table] = await query(`SELECT * FROM ${table} ORDER BY rowid`);
+    return rows;
+  }
+
+  /** Tables and indexes with their SQL, to compare two databases. */
+  const schemaOf = (query) =>
+    query("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name");
+
+  beforeEach(async () => {
+    await rm(versionOnePath, { force: true });
+  });
+
+  afterEach(async () => {
+    await upgraded?.close();
+    upgraded = null;
+    await rm(versionOnePath, { force: true });
+  });
+
+  it('upgrades a version-1 database to the current version without losing data', async () => {
+    await createVersionOneDatabase();
+    const before = await rowsOfVersionOne((sql) => allOnFile(versionOnePath, sql));
+
+    upgraded = await openDatabase(versionOnePath);
+
+    expect(SCHEMA_VERSION).toBe(2);
+    await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
+    await expect(rowsOfVersionOne((sql) => upgraded.all(sql))).resolves.toEqual(before);
+    expect(before.bookings).toHaveLength(2);
+    await expect(upgraded.all('SELECT * FROM booking_requirements')).resolves.toEqual([]);
+  });
+
+  it('gives an upgraded database the same tables and indexes as a new one', async () => {
+    await createVersionOneDatabase();
+    upgraded = await openDatabase(versionOnePath);
+
+    const newSchema = await schemaOf((sql) => db.all(sql));
+    expect(newSchema).toContainEqual(expect.objectContaining({ type: 'index', name: 'booking_requirements_by_booking' }));
+    await expect(schemaOf((sql) => upgraded.all(sql))).resolves.toEqual(newSchema);
+  });
+
+  it('applies a step only once: an upgraded database reopens as it is, with its requirements', async () => {
+    await createVersionOneDatabase();
+    upgraded = await openDatabase(versionOnePath);
+    await upgraded.run('INSERT INTO booking_requirements (booking_id, has_allergies, description) VALUES (1, 1, ?)', [
+      '1 shellfish allergy',
+    ]);
+    await upgraded.close();
+
+    upgraded = await openDatabase(versionOnePath);
+
+    await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
+    await expect(upgraded.all('SELECT booking_id, has_allergies, description FROM booking_requirements')).resolves.toEqual([
+      { booking_id: 1, has_allergies: 1, description: '1 shellfish allergy' },
+    ]);
+  });
+
+  it('leaves a version-1 database as it was when a migration step fails', async () => {
+    // A table with the same name makes CREATE TABLE booking_requirements fail inside the migration transaction.
+    await createVersionOneDatabase('CREATE TABLE booking_requirements (id INTEGER PRIMARY KEY);');
+    const before = await rowsOfVersionOne((sql) => allOnFile(versionOnePath, sql));
+
+    await expect(openDatabase(versionOnePath)).rejects.toThrow(/booking_requirements already exists/);
+
+    await expect(allOnFile(versionOnePath, 'PRAGMA user_version')).resolves.toEqual([{ user_version: 1 }]);
+    await expect(rowsOfVersionOne((sql) => allOnFile(versionOnePath, sql))).resolves.toEqual(before);
+    await expect(allOnFile(versionOnePath, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'booking_requirements%'"))
+      .resolves.toEqual([]);
+  });
+});
+
 describe('database schema constraints', () => {
   it('requires a valid user role and unique case-insensitive email', async () => {
     await db.run('INSERT INTO users (email, first_name, role) VALUES (?, ?, ?)', [
@@ -234,6 +347,36 @@ describe('database schema constraints', () => {
         bookingValues,
       ),
     ).rejects.toThrow();
+  });
+
+  it('checks booking requirements and deletes them with their booking', async () => {
+    const { lastID: userId } = await db.run('INSERT INTO users (first_name, role) VALUES (?, ?)', ['Kilian', 'hiker']);
+    const { lastID: slotId } = await db.run(
+      'INSERT INTO slots (date, start_time, end_time, label) VALUES (?, ?, ?, ?)',
+      ['2026-11-02', '12:00', '13:00', 'Lunch'],
+    );
+    const { lastID: bookingId } = await db.run(
+      'INSERT INTO bookings (slot_id, hiker_id, party_size, created_at) VALUES (?, ?, ?, ?)',
+      [slotId, userId, 3, '2026-11-01T10:00:00.000Z'],
+    );
+    const insertRequirement = (id, hasAllergies, description) =>
+      db.run('INSERT INTO booking_requirements (booking_id, has_allergies, description) VALUES (?, ?, ?)', [
+        id,
+        hasAllergies,
+        description,
+      ]);
+
+    await insertRequirement(bookingId, 1, '1 vegan, peanut allergy');
+    await insertRequirement(bookingId, 0, '2 vegetarians');
+    await expect(insertRequirement(bookingId, 2, 'flag not 0 or 1')).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertRequirement(bookingId, null, 'missing flag')).rejects.toThrow(/NOT NULL constraint failed/);
+    await expect(insertRequirement(bookingId, 0, '')).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertRequirement(bookingId, 0, '   ')).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertRequirement(bookingId, 0, null)).rejects.toThrow(/NOT NULL constraint failed/);
+    await expect(insertRequirement(999, 0, 'unknown booking')).rejects.toThrow(/FOREIGN KEY constraint failed/);
+
+    await db.run('DELETE FROM bookings WHERE id = ?', [bookingId]);
+    await expect(db.get('SELECT COUNT(*) AS count FROM booking_requirements')).resolves.toEqual({ count: 0 });
   });
 });
 
