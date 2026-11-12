@@ -1,4 +1,4 @@
-// Slot creation and time-derived slot state.
+// Slot creation, copy of a week (MH-09) and time-derived slot state.
 import { now } from '../clock.js';
 import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
@@ -13,6 +13,8 @@ const MESSAGES = {
   invalidTable: 'Each table needs a name and a positive number of seats',
   duplicateTableNames: 'Table names must be unique within the slot',
   overlap: 'Overlaps an existing slot',
+  sameWeek: 'Choose a different week to copy into',
+  targetHasBookings: 'The target week has bookings: its schedule cannot be replaced',
 };
 
 /**
@@ -52,6 +54,11 @@ function validateNewSlot(slot) {
   }
 }
 
+/** True when two slots of the same day overlap. Adjacent turns (one ends when the other starts) do not. */
+function overlap(a, b) {
+  return a.startTime < b.endTime && b.startTime < a.endTime;
+}
+
 /**
  * Creates a slot and its tables atomically. Adjacent turns are allowed; an
  * overlap exists only when each slot starts before the other one ends.
@@ -62,10 +69,7 @@ export async function createSlot(slot) {
 
   return withTransaction(db, async (transactionDb) => {
     const sameDaySlots = await slotDao.findByDate(transactionDb, slot.date);
-    const overlaps = sameDaySlots.some(
-      (existing) => slot.startTime < existing.endTime && existing.startTime < slot.endTime,
-    );
-    if (overlaps) throw new Conflict(MESSAGES.overlap);
+    if (sameDaySlots.some((existing) => overlap(slot, existing))) throw new Conflict(MESSAGES.overlap);
 
     return slotDao.create(transactionDb, {
       date: slot.date,
@@ -74,5 +78,78 @@ export async function createSlot(slot) {
       label: slot.label.trim(),
       tables: slot.tables.map(({ name, seats }) => ({ name: name.trim(), seats })),
     });
+  });
+}
+
+// ---------------------------------------------------------------- MH-09: copy a week
+
+const DAY_MS = 86_400_000;
+
+// Calendar arithmetic on 'YYYY-MM-DD' strings, in UTC: a day is always 24 h, so a DST change never moves a date.
+const toDay = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`) / DAY_MS;
+const fromDay = (day) => new Date(day * DAY_MS).toISOString().slice(0, 10);
+
+/** Monday ('YYYY-MM-DD') of the week of a date: weeks are Monday to Sunday. */
+function mondayOf(isoDate) {
+  const day = toDay(isoDate);
+  const weekday = (new Date(day * DAY_MS).getUTCDay() + 6) % 7; // Monday = 0 … Sunday = 6
+  return fromDay(day - weekday);
+}
+
+/**
+ * Copies every slot of the week of `sourceWeek`, with its tables, into the week of `targetWeek` (MH-09).
+ * Each slot keeps its weekday, times and label; bookings are never copied.
+ * The target week's schedule is replaced (PO, issue #45): its slots that have not started are deleted, unless
+ * one of them has a confirmed booking, then the copy is refused (409) and nothing changes. Slots that have
+ * already started are never touched. A source slot that would not start in the future is skipped ('past');
+ * one that would overlap a target slot already under way is skipped too ('overlap', a rare case).
+ * Everything happens in one transaction.
+ * @param {string} sourceWeek any date of the source week ('YYYY-MM-DD', already validated)
+ * @param {string} targetWeek any date of the target week
+ * @returns {Promise<{ created: object[], replaced: object[], skipped: { date, startTime, endTime, label, reason }[] }>}
+ */
+export async function copyWeek(sourceWeek, targetWeek) {
+  const sourceMonday = mondayOf(sourceWeek);
+  const targetMonday = mondayOf(targetWeek);
+  if (sourceMonday === targetMonday) throw new BadRequest(MESSAGES.sameWeek);
+  const shift = toDay(targetMonday) - toDay(sourceMonday); // days between the two weeks
+  const sunday = (monday) => fromDay(toDay(monday) + 6);
+
+  const db = await getDb();
+  return withTransaction(db, async (transactionDb) => {
+    const sourceSlots = await slotDao.findInRange(transactionDb, sourceMonday, sunday(sourceMonday));
+    const targetSlots = await slotDao.findInRange(transactionDb, targetMonday, sunday(targetMonday));
+
+    // The existing schedule: replaced only if no slot that has not started has a confirmed booking.
+    const replaced = targetSlots.filter((slot) => !hasStarted(slot));
+    const booked = await slotDao.idsWithConfirmedBookings(
+      transactionDb,
+      replaced.map((slot) => slot.id),
+    );
+    if (booked.size > 0) throw new Conflict(MESSAGES.targetHasBookings);
+    for (const slot of replaced) await slotDao.remove(transactionDb, slot.id);
+    const kept = targetSlots.filter((slot) => hasStarted(slot)); // already under way: never touched
+
+    const created = [];
+    const skipped = [];
+    for (const source of sourceSlots) {
+      const copy = {
+        date: fromDay(toDay(source.date) + shift),
+        startTime: source.startTime,
+        endTime: source.endTime,
+        label: source.label,
+      };
+      let reason = null;
+      if (hasStarted(copy)) reason = 'past';
+      else if (kept.some((other) => other.date === copy.date && overlap(copy, other))) reason = 'overlap';
+
+      if (reason) {
+        skipped.push({ ...copy, reason });
+      } else {
+        const tables = source.tables.map(({ name, seats }) => ({ name, seats }));
+        created.push(await slotDao.create(transactionDb, { ...copy, tables }));
+      }
+    }
+    return { created, replaced, skipped };
   });
 }
