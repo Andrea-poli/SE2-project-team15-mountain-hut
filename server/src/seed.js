@@ -117,7 +117,7 @@ function demoSlots(today) {
 
 /** Deletes every row, in the order the foreign keys allow (RESTRICT: bookings before slots and users). */
 async function deleteAll(db) {
-  for (const table of ['booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
+  for (const table of ['booking_requirements', 'booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
     await db.run(`DELETE FROM ${table}`);
   }
 }
