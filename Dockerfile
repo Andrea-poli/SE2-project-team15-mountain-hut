@@ -5,8 +5,8 @@
 #   docker compose up --build        (see docker-compose.yml and the README, "Docker")
 #
 # Stage 1 builds the client; stage 2 installs the server's production dependencies (sqlite3 is a
-# native module: built here, on the same Debian base the image runs on); stage 3 is the small runtime.
-# Express serving client/dist is the production build of D1: the built client is already in the image.
+# native module: compiled here, on the same Debian base the image runs on); stage 3 is the small runtime.
+# In production Express serves the built client (client/dist) on the same port as the API (D1).
 
 # ---- 1. client build ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS client-build
@@ -19,9 +19,10 @@ COPY client/ client/
 RUN npm run build --workspace client
 
 # ---- 2. server production dependencies --------------------------------------------------------
-# sqlite3 is a native module: when npm finds no prebuilt binary it compiles it, which needs Python,
-# make and a C++ compiler. They stay in this stage only: the runtime image gets the compiled
-# node_modules, not the compilers.
+# sqlite3 is a native module and is ALWAYS compiled here (--build-from-source), against this image's own
+# glibc. Its prebuilt binary is not safe: on x86_64 it needs glibc 2.38 and bookworm has 2.36, so the server
+# crashed at start (GLIBC_2.38 not found, review of #42). Compiling needs Python, make and a C++ compiler:
+# they stay in this stage only, the runtime image gets the compiled node_modules, not the compilers.
 FROM node:22-bookworm-slim AS server-deps
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ \
@@ -30,7 +31,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
-RUN npm ci --workspace server --include-workspace-root=false --omit=dev
+RUN npm ci --workspace server --include-workspace-root=false --omit=dev --build-from-source=sqlite3
 
 # ---- 3. runtime ---------------------------------------------------------------------------------
 FROM node:22-bookworm-slim

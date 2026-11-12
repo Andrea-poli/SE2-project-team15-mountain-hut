@@ -13,7 +13,9 @@ services:
       - "${HOST_PORT:-3001}:3001"
     environment:
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env (see .env.example)}
-      SMTP_HOST: ${SMTP_HOST:-}
+      # Required like SESSION_SECRET: in production the server refuses to start without it (config.js, MH-03).
+      # If that rule changes, change this line too.
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in .env, e.g. a free test mailbox from https://ethereal.email}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}

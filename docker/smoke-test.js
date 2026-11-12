@@ -75,13 +75,13 @@ async function main() {
   r = await guest('GET', '/api/public/slots?date=2026-02-30');
   check('public slots with an impossible date → 400', r.status === 400, r.body?.error);
   r = await guest('GET', `/api/public/slots?date=${day(3)}`);
-  const dinnerIn3 = r.body.find((s) => s.label.startsWith('Dinner – 1st'));
+  const dinnerIn3 = r.body?.find?.((s) => s.label.startsWith('Dinner – 1st'));
   check('demo data: the dinner in 3 days is full', dinnerIn3?.bookingState === 'full');
   r = await guest('GET', `/api/public/slots/${lunch.id}/availability?partySize=1`);
   check('availability: tomorrow\'s lunch for 1 → available (1 seat left)',
-    r.status === 200 && r.body.available === true);
+    r.status === 200 && r.body?.available === true);
   r = await guest('GET', `/api/public/slots/${lunch.id}/availability?partySize=2`);
-  check('availability: tomorrow\'s lunch for 2 → not available', r.status === 200 && r.body.available === false);
+  check('availability: tomorrow\'s lunch for 2 → not available', r.status === 200 && r.body?.available === false);
   r = await guest('GET', `/api/public/slots/${dinner.id}/availability?partySize=12`);
   check('availability: tomorrow\'s dinner for 12 → available, split', r.body?.available === true,
     r.body?.split?.map((t) => t.seats).join(' + '));
@@ -132,7 +132,7 @@ async function main() {
   r = await hiker('POST', '/api/bookings', { slotId: lunch.id, partySize: 0 });
   check('party size 0 → 400', r.status === 400);
   r = await hiker('GET', `/api/public/slots?date=${day(0)}`);
-  const todayLunch = r.body.find((s) => s.label === 'Lunch')?.bookingState;
+  const todayLunch = r.body?.find?.((s) => s.label === 'Lunch')?.bookingState;
   // Today's 12:00 lunch closes at 10:00 (2-hour rule).
   const lunchRuleOk = hutHour >= 10 ? todayLunch === 'tooLate' : todayLunch !== 'tooLate';
   check('today\'s lunch follows the 2-hour rule', lunchRuleOk, `${todayLunch} at ${hutHour}h`);
@@ -146,8 +146,8 @@ async function main() {
   r = await employee('POST', '/api/auth/login', { email: 'employee@example.com', password: 'employeepass' });
   check('employee login → 200', r.status === 200 && r.body?.role === 'employee');
   r = await employee('GET', `/api/slots?from=${day(0)}&to=${day(6)}`);
-  check('employee: slots of the week, with tables → 200', r.status === 200 && r.body[0]?.tables?.length > 0,
-    `${r.body.length} slots`);
+  check('employee: slots of the week, with tables → 200', r.status === 200 && r.body?.[0]?.tables?.length > 0,
+    `${r.body?.length} slots`);
   r = await employee('GET', `/api/slots?from=${day(0)}&to=${day(40)}`);
   check('slots over more than 31 days → 400', r.status === 400, r.body?.error);
   const target = day(10);
@@ -173,13 +173,13 @@ async function main() {
   r = await warden('GET', `/api/slots?from=${day(0)}&to=${day(6)}`);
   check('warden passes the staff checks → 200', r.status === 200);
 
-  // ---------- web pages (served by Express once D1 is in)
+  // ---------- web pages (D1: Express serves client/dist in production, every non-API page gets the app)
   r = await guest('GET', '/');
-  if (r.status === 404) {
-    console.log('INFO  GET / → 404: the pages are not served yet (D1: Express serves client/dist)');
-  } else {
-    check('GET / → the web app (HTML with the React root)', r.status === 200 && /id="root"/.test(String(r.body)));
-  }
+  check('GET / → the web app (HTML with the React root)', r.status === 200 && /id="root"/.test(String(r.body)));
+  r = await guest('GET', '/staff/slots');
+  check('a page opened directly (/staff/slots) → the web app', r.status === 200 && /id="root"/.test(String(r.body)));
+  r = await guest('GET', '/assets/does-not-exist.js');
+  check('a missing asset → 404, not the app page', r.status === 404);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (bookingId) console.log(`A confirmation email for booking ${bookingId} should be in the mailbox of ${email}.`);

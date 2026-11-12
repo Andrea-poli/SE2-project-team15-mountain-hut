@@ -81,6 +81,7 @@ Read from `.env` in the repository root (template: `.env.example`). Variables al
 | `PORT` | `3001` | server port |
 | `TZ` | `Europe/Rome` | hut local time (set by the server if missing) |
 | `DATA_DIR` | `server/data` | folder of `mountain-hut.db` and `sessions.db`; relative paths start from the repository root |
+| `DB_PATH`, `SESSIONS_DB_PATH` | – | optional: the full path of one database file, instead of `DATA_DIR/mountain-hut.db` and `DATA_DIR/sessions.db` (tests and E2E use them for temporary files). Rarely needed; in Docker leave them out so the data stays in the volume |
 | `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active |
 | `NODE_ENV` | `development` | `production` serves the built client and requires an SMTP server (see Production); don't put it in `.env`: Vite would build in development mode |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | – | SMTP server for the confirmation emails (MH-03): required in production; in development, without `SMTP_HOST` the emails are printed on the console |
@@ -109,15 +110,15 @@ The image builds the whole application from this repository (client build + serv
 
 1. Copy `.env.example` to `.env` next to `docker-compose.yml` and set:
    - `SESSION_SECRET`: required, your own random text (e.g. `openssl rand -hex 32`);
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`: required in production for the confirmation emails. A free test mailbox from https://ethereal.email takes a minute: the emails are read there and reach nobody.
-2. `docker compose up --build` → http://localhost:3001 (`HOST_PORT=8080` in `.env` for another port).
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`: required in production for the confirmation emails (`docker compose` stops at once without `SMTP_HOST`). A free test mailbox from https://ethereal.email takes a minute: the emails are read there and reach nobody.
+2. `docker compose up --build` → the whole application (pages and API) on http://localhost:3001 (`HOST_PORT=8080` in `.env` for another port).
 3. On the **first start** (empty volume) the demo data is loaded (see Demo accounts). The data lives in the volume `mountain-hut-data` and survives restarts. Back to fresh demo data: `docker compose down -v && docker compose up`. No demo data: `SEED_DEMO_DATA=false`.
 
 Without compose: `docker build -t mountain-hut .` then `docker run -p 3001:3001 -e SESSION_SECRET=… -e SMTP_HOST=… (the other SMTP_* the same way) -v mountain-hut-data:/data mountain-hut`. Don't pass a development `.env` with `--env-file`: its `DATA_DIR`/`PORT` would move the data out of the volume.
 
 The variables are read when the container starts: no secret is ever written into the image (it is public once published). The container runs as the non-root `node` user and has a health check on the API.
 
-**Check that a started container works** (e.g. after building it, or on another PC for the deployment test): on a fresh start (`docker compose down -v && docker compose up -d`) run `node docker/smoke-test.js` (or `node docker/smoke-test.js http://host:port`). It calls every API endpoint as a guest, a hiker, an employee and the warden, with the main error answers and the demo data, and prints PASS/FAIL per check (exit code 0 = all passed). It writes a new hiker, a booking and a slot, so run it once per fresh start. The confirmation email is checked in the mailbox (e.g. Ethereal → Messages). Needs Node 22 on the machine running it; without Node, run it inside the container: `docker compose exec mountain-hut node docker/smoke-test.js`.
+**Check that a started container works** (e.g. after building it, or on another PC for the deployment test): on a fresh start (`docker compose down -v && docker compose up -d`) run `node docker/smoke-test.js` (or `node docker/smoke-test.js http://host:port`). It calls every API endpoint as a guest, a hiker, an employee and the warden, with the main error answers and the demo data, checks that the pages are served, and prints PASS/FAIL per check (exit code 0 = all passed). It writes a new hiker, a booking and a slot, so run it once per fresh start. The confirmation email is checked in the mailbox (e.g. Ethereal → Messages). Needs Node 22 on the machine running it; without Node, run it inside the container: `docker compose exec mountain-hut node docker/smoke-test.js`.
 
 ## Tests
 
