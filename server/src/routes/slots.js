@@ -77,17 +77,17 @@ router.post('/', requireRole(['employee'], 'Staff only'), async (req, res) => {
   return res.status(201).json(slotResponse(slot));
 });
 
-// POST /api/slots/copy-week { from, to }
-//   → 201 { created: [Slot], skipped: [{ date, startTime, endTime, label, reason }] }
-//   | 400 (invalid dates, same week) | 401 | 403
-// Employee/warden only (MH-09); `from` and `to` are any date of the source and target weeks.
+// POST /api/slots/copy-week { sourceWeek, targetWeek }
+//   → 201 { created: [Slot], replaced: [Slot], skipped: [{ date, startTime, endTime, label, reason }] }
+//   | 400 (invalid dates, same week) | 401 | 403 | 409 (the target week has bookings)
+// Employee/warden only (MH-09); sourceWeek and targetWeek are any date of the two weeks.
 router.post('/copy-week', requireRole(['employee'], 'Staff only'), async (req, res) => {
-  const { from, to } = req.body ?? {};
-  if (!isValidDate(from)) throw new BadRequest('from must be a valid calendar date');
-  if (!isValidDate(to)) throw new BadRequest('to must be a valid calendar date');
+  const { sourceWeek, targetWeek } = req.body ?? {};
+  if (!isValidDate(sourceWeek)) throw new BadRequest('sourceWeek must be a valid calendar date');
+  if (!isValidDate(targetWeek)) throw new BadRequest('targetWeek must be a valid calendar date');
 
-  const { created, skipped } = await copyWeek(from, to);
-  return res.status(201).json({ created: created.map(slotResponse), skipped });
+  const { created, replaced, skipped } = await copyWeek(sourceWeek, targetWeek);
+  return res.status(201).json({ created: created.map(slotResponse), replaced: replaced.map(slotResponse), skipped });
 });
 
 export default router;

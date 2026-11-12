@@ -14,6 +14,7 @@ const MESSAGES = {
   duplicateTableNames: 'Table names must be unique within the slot',
   overlap: 'Overlaps an existing slot',
   sameWeek: 'Choose a different week to copy into',
+  targetHasBookings: 'The target week has bookings: its schedule cannot be replaced',
 };
 
 /**
@@ -96,16 +97,20 @@ function mondayOf(isoDate) {
 }
 
 /**
- * Copies every slot of the week of `from`, with its tables, into the week of `to` (MH-09). Each slot keeps
- * its weekday, times and label; bookings are never copied. A slot is skipped, with its reason, when it would
- * not start in the future ('past') or when it overlaps a slot already there on that day. Everything is saved in one transaction.
- * @param {string} from any date of the source week ('YYYY-MM-DD', already validated)
- * @param {string} to any date of the target week
- * @returns {Promise<{ created: object[], skipped: { date, startTime, endTime, label, reason }[] }>}
+ * Copies every slot of the week of `sourceWeek`, with its tables, into the week of `targetWeek` (MH-09).
+ * Each slot keeps its weekday, times and label; bookings are never copied.
+ * The target week's schedule is replaced (PO, issue #45): its slots that have not started are deleted, unless
+ * one of them has a confirmed booking, then the copy is refused (409) and nothing changes. Slots that have
+ * already started are never touched. A source slot that would not start in the future is skipped ('past');
+ * one that would overlap a target slot already under way is skipped too ('overlap', a rare case).
+ * Everything happens in one transaction.
+ * @param {string} sourceWeek any date of the source week ('YYYY-MM-DD', already validated)
+ * @param {string} targetWeek any date of the target week
+ * @returns {Promise<{ created: object[], replaced: object[], skipped: { date, startTime, endTime, label, reason }[] }>}
  */
-export async function copyWeek(from, to) {
-  const sourceMonday = mondayOf(from);
-  const targetMonday = mondayOf(to);
+export async function copyWeek(sourceWeek, targetWeek) {
+  const sourceMonday = mondayOf(sourceWeek);
+  const targetMonday = mondayOf(targetWeek);
   if (sourceMonday === targetMonday) throw new BadRequest(MESSAGES.sameWeek);
   const shift = toDay(targetMonday) - toDay(sourceMonday); // days between the two weeks
   const sunday = (monday) => fromDay(toDay(monday) + 6);
@@ -113,11 +118,20 @@ export async function copyWeek(from, to) {
   const db = await getDb();
   return withTransaction(db, async (transactionDb) => {
     const sourceSlots = await slotDao.findInRange(transactionDb, sourceMonday, sunday(sourceMonday));
-    // The slots already in the target week, and the ones this copy creates: both block an overlapping copy.
     const targetSlots = await slotDao.findInRange(transactionDb, targetMonday, sunday(targetMonday));
+
+    // The existing schedule: replaced only if no slot that has not started has a confirmed booking.
+    const replaced = targetSlots.filter((slot) => !hasStarted(slot));
+    const booked = await slotDao.idsWithConfirmedBookings(
+      transactionDb,
+      replaced.map((slot) => slot.id),
+    );
+    if (booked.size > 0) throw new Conflict(MESSAGES.targetHasBookings);
+    for (const slot of replaced) await slotDao.remove(transactionDb, slot.id);
+    const kept = targetSlots.filter((slot) => hasStarted(slot)); // already under way: never touched
+
     const created = [];
     const skipped = [];
-
     for (const source of sourceSlots) {
       const copy = {
         date: fromDay(toDay(source.date) + shift),
@@ -127,17 +141,15 @@ export async function copyWeek(from, to) {
       };
       let reason = null;
       if (hasStarted(copy)) reason = 'past';
-      else if (targetSlots.some((other) => other.date === copy.date && overlap(copy, other))) reason = 'overlap';
+      else if (kept.some((other) => other.date === copy.date && overlap(copy, other))) reason = 'overlap';
 
       if (reason) {
         skipped.push({ ...copy, reason });
       } else {
         const tables = source.tables.map(({ name, seats }) => ({ name, seats }));
-        const slot = await slotDao.create(transactionDb, { ...copy, tables });
-        created.push(slot);
-        targetSlots.push(slot);
+        created.push(await slotDao.create(transactionDb, { ...copy, tables }));
       }
     }
-    return { created, skipped };
+    return { created, replaced, skipped };
   });
 }
