@@ -64,8 +64,10 @@ export function loadConfig(env) {
       : path.join(dataDir, 'sessions.db'),
     sessionSecret: env.SESSION_SECRET,
     fakeNow,
-    // D1: in production Express also serves the built client (npm run build -w client), on the same port as the API.
+    // D1: in production Express also serves the built client (npm run build), on the same port as the API.
     clientDist: nodeEnv === 'production' ? path.join(repoRoot, 'client', 'dist') : null,
+    // MH-03: SMTP server of the confirmation emails (mailer.js reads the SMTP_* variables when it sends).
+    smtpHost: env.SMTP_HOST || null,
   };
 }
 

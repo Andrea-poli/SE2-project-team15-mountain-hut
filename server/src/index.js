@@ -34,7 +34,7 @@ const server = app.listen(config.port, (err) => {
   }
   const what = config.clientDist ? 'Mountain Hut' : 'Mountain Hut API';
   console.log(`${what} on http://localhost:${config.port} (${config.env}, TZ=${process.env.TZ})`);
-  if (config.env === 'production') console.log(`Confirmation emails sent through ${process.env.SMTP_HOST}`);
+  if (config.env === 'production') console.log(`Confirmation emails sent through ${config.smtpHost}`);
   if (config.fakeNow) {
     console.warn(
       [

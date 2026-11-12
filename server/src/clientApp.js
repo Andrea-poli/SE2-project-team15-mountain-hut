@@ -12,7 +12,7 @@ import express from 'express';
 export function clientRouter(distDir) {
   const indexHtml = path.join(distDir, 'index.html');
   if (!existsSync(indexHtml)) {
-    throw new Error(`The built client is missing (${indexHtml}): run "npm run build -w client" first.`);
+    throw new Error(`The built client is missing (${indexHtml}): run "npm run build" first.`);
   }
   const router = express.Router();
   // Vite puts a content hash in every file name under assets/: browsers can keep them for a year.
