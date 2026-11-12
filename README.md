@@ -66,6 +66,8 @@ Other hikers with bookings: `marco.rossi@example.com`, `anna.bianchi@example.com
 | `npm run lint` | ESLint on the whole repository |
 | `npm run seed` | replaces the development data with the demo data (see Demo accounts) |
 | `npm run test:e2e` | Playwright E2E tests: starts its own server (port 3101) and client (port 5174) |
+| `npm run build` | builds the client for production into `client/dist` |
+| `npm start` | starts the server only; with `NODE_ENV=production` it also serves `client/dist` |
 
 Single workspace: `npm test -w server`, `npm run dev -w client`, …
 
@@ -80,6 +82,26 @@ Read from `.env` in the repository root (template: `.env.example`). Variables al
 | `TZ` | `Europe/Rome` | hut local time (set by the server if missing) |
 | `DATA_DIR` | `server/data` | folder of `mountain-hut.db` and `sessions.db`; relative paths start from the repository root |
 | `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active |
+| `NODE_ENV` | `development` | `production` serves the built client and requires an SMTP server (see Production); don't put it in `.env`: Vite would build in development mode |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | – | SMTP server for the confirmation emails (MH-03): required in production; in development, without `SMTP_HOST` the emails are printed on the console |
+
+## Production
+
+In production the whole application runs on **one port**: Express serves the API under `/api` and the built client for every other address (a page such as `/staff/slots` opened directly, or refreshed, gets the app). The Docker image does this for you (see Docker); without Docker:
+
+```bash
+npm ci                                 # dependencies (the first time)
+npm run build                          # client → client/dist (VITE_USE_MOCKS must not be true in .env)
+NODE_ENV=production npm start          # Windows PowerShell: $env:NODE_ENV="production"; npm start
+```
+
+Then open http://localhost:3001. In production:
+
+- `SESSION_SECRET` is required, as always; `FAKE_NOW` is refused.
+- Emails are always sent through an SMTP server: set the `SMTP_*` variables, or the server does not start (emails never get lost silently). No SMTP account? https://ethereal.email creates a free test mailbox in one click (`SMTP_HOST=smtp.ethereal.email`, `SMTP_PORT=587`, `SMTP_SECURE=false`, user and password from the page): the emails reach nobody and are read under Messages.
+- The server stops at start with a clear message if `client/dist` is missing: run `npm run build` first.
+- The session cookie gets the `Secure` flag only over HTTPS.
+- Demo data: `npm run seed` refuses `NODE_ENV=production`; load it before (it replaces every user, slot and booking).
 
 ## Tests
 
