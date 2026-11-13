@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mountain Hut API
-  version: 0.1.0
+  version: 0.2.0
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -44,6 +44,34 @@ info:
       below returns `404` with the `Error` body.
     * **Test-only routes** - endpoints tagged `test-utils` exist only when
       `NODE_ENV` is `test` or `e2e`; they are never part of a release build.
+    * **Change window (MH-06)** - a booking can be changed only while at least
+      48 hours remain before its slot starts (PO, issue #43: for a meal on
+      20 Nov at 13:00, changes close on 18 Nov at 13:00, that instant included).
+      A change must also respect the one-booking-per-slot rule. Cancelling
+      (MH-08) has **no** time limit (PO, issue #8).
+    * **Emails (MH-03, MH-06, MH-08)** - every change to a booking is notified
+      by email to the hiker (PO, issue #41, MH-06 clarification): a new booking,
+      a change and a cancellation each send one email, after the commit; if
+      the email fails, the operation stays valid.
+    * **Party requirements (MH-05)** - a booking has a list of requirements,
+      each with its own allergies flag (a checkbox set by the hiker, PO issue #4)
+      and a description (PO issue #29). The list may be empty.
+    * **Hikers created by staff (MH-07)** - staff can book for a hiker who is
+      not registered. Quick entry (name and optional phone) creates a temporary
+      hiker, with no email and no password, who cannot log in (PO issue #5).
+      Full details create a regular hiker profile with a **randomly generated
+      password**: it is shown once to the staff member, who gives it to the
+      hiker (e.g. verbally); the hiker must change it at the next login and
+      can recover it by email (PO issue #36, MH-07 clarification).
+    * **Health** - `GET /api/health` answers when the server is up, for the
+      Docker health check and monitoring (no login, no database work).
+
+    Version 0.2.0 (Sprint 2, U1) adds the endpoints of MH-05 → MH-09, updated
+    with the PO answers of 9-12 Nov (issues #35-#45 and the story
+    clarifications). Still **pending PO**: question 2 of the planning (can a
+    change move a booking into, or out of, a slot that starts within 2 hours?)
+    and question 6 (limits on the requirements); issue #46 (generated password
+    sent by email instead of verbally).
 
 servers:
   - url: http://localhost:3001
@@ -65,6 +93,8 @@ tags:
     description: Table bookings
   - name: slots
     description: Slot and table management, staff only
+  - name: staff
+    description: Bookings entered by staff for hikers (MH-07), staff only
   - name: test-utils
     description: Only available when NODE_ENV is test/e2e
 
@@ -192,6 +222,83 @@ paths:
               example:
                 error: 'Not logged in'
 
+  /api/auth/password:
+    put:
+      tags: [auth]
+      summary: Change your own password (MH-07, forced change after a generated one)
+      description: >
+        Any logged-in user with a password. A hiker created by staff gets a
+        random password and **must change it at the next login** (PO issue
+        #36, MH-07 clarification): until then `User.mustChangePassword` is
+        true and the client opens the change-password page right after login.
+        The current password is checked; the new one follows the registration
+        rule (at least 8 characters) and must differ from the current one.
+        On success `mustChangePassword` becomes false and the session stays
+        logged in. (Recovery of a forgotten password by email, also mentioned
+        in the clarification, is not part of this contract.)
+      operationId: changePassword
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+            example:
+              currentPassword: k7Qp2xWm9aTz
+              newPassword: my-own-secret-pw
+      responses:
+        '200':
+          description: Password changed; the updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: >
+            Missing fields, new password shorter than 8 characters, or equal to
+            the current one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Password must be at least 8 characters long'
+        '401':
+          description: Not logged in, or the current password is wrong
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'The current password is wrong'
+
+  /api/health:
+    get:
+      tags: [public]
+      summary: Health check (Docker, monitoring)
+      description: >
+        Answers 200 as soon as the server accepts requests. No login, no
+        database work and no other side effect, so it is cheap to call every
+        few seconds. Used by the Docker HEALTHCHECK instead of an application
+        route, which could change (review of #41/#42).
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: The server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                    example: ok
+
   /api/public/slots:
     get:
       tags: [public]
@@ -309,6 +416,42 @@ paths:
                 error: 'Slot not found'
 
   /api/bookings:
+    get:
+      tags: [bookings]
+      summary: The logged-in hiker's own bookings (MH-06)
+      description: >
+        Hikers only. Every booking of the logged-in hiker, confirmed and
+        cancelled: upcoming ones first (soonest first), then past ones (most
+        recent first). Each booking has `changeable`, so the "My bookings" page
+        can enable or disable its Change button without repeating the rules.
+        Staff receive 403 (they have no bookings of their own).
+      operationId: listMyBookings
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The hiker's bookings (possibly empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyBooking'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not a hiker (employee or warden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Only hikers have bookings'
+
     post:
       tags: [bookings]
       summary: Book a table for a party
@@ -317,6 +460,8 @@ paths:
         assigns tables with the allocation rule. A slot holds its tables for
         its entire duration. A hiker may have at most one booking for a given
         slot. A booking for a slot starting within 2 hours is refused with 400. 
+        Party requirements (MH-05) are optional and are saved in the same
+        transaction as the booking.
         On success, the confirmation email hook is called after the commit: 
         if the email fails, the booking stays valid.
       operationId: createBooking
@@ -330,7 +475,11 @@ paths:
               $ref: '#/components/schemas/NewBooking'
             example:
               slotId: 3
-              partySize: 3
+              partySize: 7
+              requirements:
+                - { hasAllergies: true, description: '1 vegan, peanut allergy' }
+                - { hasAllergies: true, description: '1 shellfish allergy' }
+                - { hasAllergies: false, description: '2 vegetarians' }
       responses:
         '201':
           description: Booking created and confirmed
@@ -347,7 +496,8 @@ paths:
         '400':
           description: >
             Invalid body, slot not open, or the slot starts in less than
-            2 hours.
+            2 hours. Invalid requirements (not a list, a missing allergies
+            flag, an empty description) are an invalid body.
           content:
             application/json:
               schema:
@@ -357,6 +507,8 @@ paths:
                   value: { error: 'This slot is closed' }
                 deadline:
                   value: { error: 'Bookings are accepted up to 2 hours before the slot starts' }
+                requirement:
+                  value: { error: 'Each requirement needs hasAllergies (true or false) and a description' }
         '401':
           description: Not logged in
           content:
@@ -436,6 +588,151 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: 'Booking not found'
+
+    patch:
+      tags: [bookings]
+      summary: Change a booking (MH-06, owner only)
+      description: >
+        Only the hiker who made the booking; anyone else receives 404 (as for
+        GET). Any of `slotId`, `partySize` and `requirements` can be sent;
+        what is not sent stays as it is. A cancelled booking cannot be
+        changed. Rules: the change window (at least 48 hours before the
+        booked slot starts, PO issue #43); the new slot, if any, must be
+        bookable like a new booking (open, not within 2 hours: whether it must
+        also be 48 hours away is **pending PO**, planning question 2); one
+        booking per hiker per slot. When the slot or the party size changes,
+        the change is treated as a new booking in that slot (PO issue #38,
+        MH-06 clarification): this booking's own seats are released, the
+        tables are assigned again with the allocation rule, and if the party
+        does not fit the answer is 409 and the booking stays exactly as it was
+        (one transaction). `requirements`, when sent, replaces the whole list
+        (an empty list removes them). `createdAt` does not change. After the
+        commit the hiker gets an email with the new details (PO issue #41).
+      operationId: changeBooking
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingChange'
+            example:
+              partySize: 6
+      responses:
+        '200':
+          description: The changed booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: >
+            Invalid body (nothing to change, invalid values or requirements),
+            booking cancelled, less than 48 hours before the booked slot, or
+            the new slot is closed or starts within 2 hours.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                nothing:
+                  value: { error: 'Nothing to change' }
+                cancelled:
+                  value: { error: 'A cancelled booking cannot be changed' }
+                window:
+                  value: { error: 'Bookings can be changed up to 48 hours before the slot starts' }
+                deadline:
+                  value: { error: 'Bookings are accepted up to 2 hours before the slot starts' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown booking, booking of another user, or unknown new slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                booking:
+                  value: { error: 'Booking not found' }
+                slot:
+                  value: { error: 'Slot not found' }
+        '409':
+          description: >
+            The party does not fit in the free seats of the (new) slot, without
+            counting this booking's own seats, or the hiker already has another
+            booking for the new slot. The booking is unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notAvailable:
+                  value: { error: 'Not enough seats available for this party' }
+                alreadyBooked:
+                  value: { error: 'You already have a booking for this slot' }
+
+  /api/bookings/{id}/cancel:
+    post:
+      tags: [bookings]
+      summary: Cancel a booking (MH-08, owner only)
+      description: >
+        Only the hiker who made the booking; anyone else receives 404. Allowed
+        at any time, also after the slot started (PO, issue #8 and MH-08
+        clarification). The status becomes `cancelled` and its seats are free
+        again for availability and new bookings. A POST on a sub-resource and
+        not DELETE: the booking is kept (status `cancelled`), it is not
+        removed. Cancelling an already cancelled booking is refused with 409,
+        so a double click is visible and harmless. After the commit the hiker
+        gets an email saying the booking is cancelled (PO issue #41).
+      operationId: cancelBooking
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The booking, now with status cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: The booking id is not a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'id must be a positive integer'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown booking, or booking of another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Booking not found'
+        '409':
+          description: The booking is already cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'This booking is already cancelled'
 
   /api/slots:
     get:
@@ -579,6 +876,267 @@ paths:
               example:
                 error: 'Overlaps an existing slot'
 
+  /api/slots/copy-week:
+    post:
+      tags: [slots]
+      summary: Copy every slot of a week, with its tables, into another week (MH-09)
+      description: >
+        Employee and warden only; hikers receive 403. Weeks are Monday to
+        Sunday: `sourceWeek` and `targetWeek` are any date of the two weeks
+        (the server uses their Mondays). Each slot of the source week is
+        created on the same weekday of the target week, with the same times,
+        label and tables; bookings are never copied.
+        **Existing schedule (PO, issue #45, MH-09 clarification):** "it is not
+        possible to copy a weekly schedule onto an existing schedule unless
+        there are no reservations; in this case it completely replaces the
+        existing one". So: if any slot of the target week that has not started
+        yet has a confirmed booking, the copy is refused with 409 and nothing
+        changes; otherwise those slots are deleted and replaced by the copy.
+        Slots of the target week that already started are never touched. A
+        source slot is skipped when, in the target week, it would not start in
+        the future (`reason: past`) or it would overlap a slot that has already
+        started (`reason: overlap`: started slots are never replaced, so the
+        copy is skipped to avoid overlapping slots). Everything happens in one
+        transaction.
+        Adjusting a copied slot afterwards is MH-19, a later story.
+      operationId: copyWeek
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyWeek'
+            example:
+              sourceWeek: '2026-11-09'
+              targetWeek: '2026-11-16'
+      responses:
+        '201':
+          description: >
+            Copy done: the slots created (possibly none), the existing slots of
+            the target week that were replaced, and the source slots skipped
+            (in the past, or overlapping a slot already under way).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyWeekResult'
+        '400':
+          description: >
+            Missing or invalid dates, or the same week as source and target.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sameWeek:
+                  value: { error: 'Choose a different week to copy into' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+        '409':
+          description: >
+            The target week already has a schedule with at least one booking
+            in a slot that has not started: it cannot be replaced (PO, issue
+            #45). Nothing is created or deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'The target week has bookings: its schedule cannot be replaced'
+
+  /api/staff/hikers:
+    get:
+      tags: [staff]
+      summary: Search hikers by name, phone or email (MH-07)
+      description: >
+        Employee and warden only; hikers receive 403. Case-insensitive search
+        of `q` in first name, last name, "first last", email and phone (spaces
+        in the phone ignored). Only hikers are returned (also temporary ones),
+        at most 20, ordered by last name then first name. Used by the hiker
+        panel of the staff reservation page.
+      operationId: searchHikers
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Text to look for, at least 2 characters after trimming
+          schema:
+            type: string
+            minLength: 2
+          example: rossi
+      responses:
+        '200':
+          description: Matching hikers (possibly empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 20
+                items:
+                  $ref: '#/components/schemas/HikerSummary'
+        '400':
+          description: Missing or too short `q`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Type at least 2 characters to search'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+
+  /api/staff/bookings:
+    post:
+      tags: [staff]
+      summary: Book for a hiker - existing, new or temporary (MH-07)
+      description: >
+        Employee and warden only; hikers receive 403. Exactly one of three
+        ways to say who the booking is for:
+        `hikerId` (an existing hiker, from the search), `newHiker` (full
+        details: a regular hiker profile is created, who can later log in), or
+        `temporaryHiker` (first name and optional phone: a temporary hiker
+        without email or password, who cannot log in, PO issue #5). Then the
+        same allocation and rules as `POST /api/bookings` (one booking per
+        hiker per slot, seats checked in the transaction, requirements),
+        **except the 2-hour rule**: staff can book up to the start of the slot,
+        not after (PO issue #35, MH-07 clarification: "they cannot be made
+        after the beginning of the time slot"). The new hiker, if any, and the
+        booking are created in one transaction: when the booking is refused,
+        no hiker is created.
+        **New full hiker:** the server generates a random password (staff do
+        not choose it) and returns it **once** in `generatedPassword`, for the
+        staff member to give to the hiker (e.g. verbally, PO issue #36). The
+        hiker must change it at the first login (`mustChangePassword`, see
+        `PUT /api/auth/password`). Whether the system may email it instead is
+        **pending PO** (issue #46).
+        **Email:** a hiker with an email (existing or new full) gets the
+        booking confirmation (MH-03; any reservation change is notified, PO
+        issue #41); a temporary hiker has no email, so none is sent.
+      operationId: createStaffBooking
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewStaffBooking'
+            examples:
+              existing:
+                value: { hikerId: 4, slotId: 3, partySize: 2 }
+              temporary:
+                value:
+                  temporaryHiker: { firstName: Giulia, phone: '+39 333 7654321' }
+                  slotId: 3
+                  partySize: 4
+                  requirements: [{ hasAllergies: false, description: '2 vegetarians' }]
+              newFullHiker:
+                value:
+                  newHiker:
+                    firstName: Paolo
+                    lastName: Neri
+                    email: paolo.neri@example.com
+                    phone: '+39 333 5551234'
+                  slotId: 3
+                  partySize: 2
+      responses:
+        '201':
+          description: >
+            Booking created; the answer also says for whom, and carries the
+            generated password when a new full hiker was created (shown once,
+            never stored in clear or returned again).
+          headers:
+            Location:
+              description: Path of the new booking
+              schema:
+                type: string
+                example: /api/bookings/101
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBooking'
+        '400':
+          description: >
+            Invalid body: not exactly one of hikerId / newHiker / temporaryHiker,
+            invalid hiker details, invalid slot, party size or requirements,
+            slot closed or already started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                who:
+                  value: { error: 'Give exactly one of hikerId, newHiker or temporaryHiker' }
+                started:
+                  value: { error: 'This slot has already started' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+        '404':
+          description: Unknown slot, or `hikerId` that is not a hiker
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                slot:
+                  value: { error: 'Slot not found' }
+                hiker:
+                  value: { error: 'Hiker not found' }
+        '409':
+          description: >
+            Not enough seats, the hiker already has a booking for this slot, or
+            the email of `newHiker` is already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notAvailable:
+                  value: { error: 'Not enough seats available for this party' }
+                alreadyBooked:
+                  value: { error: 'This hiker already has a booking for this slot' }
+                email:
+                  value: { error: 'Email already in use' }
+
   /api/test/emails:
     get:
       tags: [test-utils]
@@ -654,7 +1212,8 @@ components:
       required: true
       description: >
         Numeric resource id: a slot under /api/public/slots, a booking under
-        /api/bookings. The path segment before it names the resource type.
+        /api/bookings (also /api/bookings/{id}/cancel). The path segment before
+        it names the resource type.
       schema:
         type: integer
         minimum: 1
@@ -719,6 +1278,28 @@ components:
           type: string
           enum: [hiker, employee, warden]
           example: hiker
+        mustChangePassword:
+          type: boolean
+          description: >
+            True for a hiker whose password was generated by staff (MH-07)
+            until they change it with `PUT /api/auth/password`; the client
+            sends them to the change-password page after login. Absent or
+            false for everyone else.
+          example: false
+
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          example: k7Qp2xWm9aTz
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          example: my-own-secret-pw
 
     NewUser:
       type: object
@@ -831,6 +1412,30 @@ components:
           minimum: 1
           description: The whole party, the hiker included.
           example: 3
+        requirements:
+          type: array
+          description: >
+            Optional party requirements (MH-05); absent or empty = none.
+            Maximum number and text length are pending PO (planning question 6).
+          items:
+            $ref: '#/components/schemas/Requirement'
+
+    Requirement:
+      type: object
+      description: >
+        One requirement for a subset of the party (MH-05). `hasAllergies` is the
+        checkbox the hiker ticks when special care is needed in the kitchen;
+        `description` says what and for how many (PO issue #29).
+      required: [hasAllergies, description]
+      properties:
+        hasAllergies:
+          type: boolean
+          example: true
+        description:
+          type: string
+          minLength: 1
+          description: Trimmed by the server; empty after trimming is refused.
+          example: '1 vegan, peanut allergy'
 
     SlotSummary:
       type: object
@@ -878,7 +1483,7 @@ components:
 
     Booking:
       type: object
-      required: [id, slot, partySize, tables, status, createdAt]
+      required: [id, slot, partySize, tables, requirements, status, createdAt]
       properties:
         id:
           type: integer
@@ -893,19 +1498,28 @@ components:
           type: array
           description: >
             Tables assigned to the party (allocation rule) - same shape as
-            the `split` of the availability check.
+            the `split` of the availability check. Empty for a cancelled booking
+            (its seats are free again).
           items:
             $ref: '#/components/schemas/Allocation'
+        requirements:
+          type: array
+          description: The party requirements (MH-05), in the order they were entered; possibly empty.
+          items:
+            $ref: '#/components/schemas/Requirement'
         status:
           type: string
           description: >
-            Will be implemented in a future story; for now always `confirmed`.
+            `confirmed`, or `cancelled` after MH-08 (the booking is kept, its
+            seats are free again).
           enum: [confirmed, cancelled]
           example: confirmed
         createdAt:
           type: string
           format: date-time
-          description: ISO 8601 UTC; the reference time for time-based rules.
+          description: >
+            ISO 8601 UTC, when the booking was made. (The 48-hour change window
+            counts from the slot start, not from here: PO issue #43.)
           example: '2026-10-30T09:12:00Z'
 
     SlotTable:
@@ -1006,6 +1620,241 @@ components:
           items:
             $ref: '#/components/schemas/NewSlotTable'
 
+    MyBooking:
+      description: >
+        A booking in the hiker's list (MH-06): the Booking plus `changeable`,
+        computed by the server with the change rules (not cancelled, at least
+        48 hours before the slot starts), so the page never repeats them.
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          required: [changeable]
+          properties:
+            changeable:
+              type: boolean
+              example: true
+
+    BookingChange:
+      type: object
+      description: >
+        The fields to change (MH-06). At least one; what is not sent stays as
+        it is. `requirements` replaces the whole list.
+      minProperties: 1
+      properties:
+        slotId:
+          type: integer
+          minimum: 1
+          example: 4
+        partySize:
+          type: integer
+          minimum: 1
+          example: 6
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+
+    CopyWeek:
+      type: object
+      description: >
+        Source and target week of a copy (MH-09): any date of each week, the
+        server uses their Mondays. Named `sourceWeek`/`targetWeek`, not
+        `from`/`to`: in `GET /api/slots`, `from`/`to` are a date range.
+      required: [sourceWeek, targetWeek]
+      properties:
+        sourceWeek:
+          type: string
+          description: A date of the week to copy (valid calendar date).
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-09'
+        targetWeek:
+          type: string
+          description: A date of the week to copy into (valid calendar date).
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-16'
+
+    CopyWeekResult:
+      type: object
+      required: [created, replaced, skipped]
+      properties:
+        created:
+          type: array
+          description: The new slots, with their tables, ordered by date then start time.
+          items:
+            $ref: '#/components/schemas/Slot'
+        replaced:
+          type: array
+          description: >
+            The slots of the target week (not started, without bookings) that
+            were deleted because the copy replaces the existing schedule
+            (PO issue #45). Empty when the target week was empty.
+          items:
+            $ref: '#/components/schemas/Slot'
+        skipped:
+          type: array
+          description: The source slots that were not copied, and why.
+          items:
+            type: object
+            required: [date, startTime, endTime, label, reason]
+            properties:
+              date:
+                type: string
+                description: The date it would have had in the target week.
+                pattern: '^\d{4}-\d{2}-\d{2}$'
+                example: '2026-11-16'
+              startTime:
+                type: string
+                pattern: '^\d{2}:\d{2}$'
+                example: '12:00'
+              endTime:
+                type: string
+                pattern: '^\d{2}:\d{2}$'
+                example: '14:00'
+              label:
+                type: string
+                example: Lunch
+              reason:
+                type: string
+                enum: [past, overlap]
+                description: >
+                  `past`: in the target week the copied slot would not start in
+                  the future (a past day, or today at a time already passed).
+                  The source week itself can be in the past.
+                  `overlap`: in the target week the copied slot would overlap a
+                  slot that has already started; started slots are never
+                  replaced, so the copy is skipped to avoid overlapping slots.
+                example: past
+
+    HikerSummary:
+      type: object
+      description: >
+        A hiker as shown in the staff search (MH-07). `temporary` is true for a
+        hiker created with only a name and an optional phone, who cannot log in.
+      required: [id, firstName, lastName, email, phone, temporary]
+      properties:
+        id:
+          type: integer
+          example: 4
+        firstName:
+          type: string
+          example: Marco
+        lastName:
+          type: string
+          nullable: true
+          example: Rossi
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: marco.rossi@example.com
+        phone:
+          type: string
+          nullable: true
+          example: '+39 333 1234567'
+        temporary:
+          type: boolean
+          example: false
+
+    NewStaffBooking:
+      type: object
+      description: >
+        A booking entered by staff (MH-07). Exactly one of `hikerId`,
+        `newHiker` and `temporaryHiker`; the rest as `NewBooking`.
+      required: [slotId, partySize]
+      properties:
+        hikerId:
+          type: integer
+          minimum: 1
+          description: An existing hiker (from GET /api/staff/hikers).
+          example: 4
+        newHiker:
+          $ref: '#/components/schemas/StaffNewHiker'
+        temporaryHiker:
+          $ref: '#/components/schemas/TemporaryHiker'
+        slotId:
+          type: integer
+          minimum: 1
+          example: 3
+        partySize:
+          type: integer
+          minimum: 1
+          example: 4
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+
+    StaffNewHiker:
+      type: object
+      description: >
+        Full hiker details entered by staff: a regular hiker profile, who can
+        later log in. The same fields and checks as `NewUser` **except the
+        password**, which staff never choose: the server generates it (PO
+        issue #36) and returns it once in `StaffBooking.generatedPassword`.
+      required: [firstName, lastName, email, phone]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          example: Paolo
+        lastName:
+          type: string
+          minLength: 1
+          example: Neri
+        email:
+          type: string
+          format: email
+          example: paolo.neri@example.com
+        phone:
+          type: string
+          format: phone number
+          example: '+39 333 5551234'
+        notes:
+          type: string
+          nullable: true
+        emergencyContact:
+          type: string
+          nullable: true
+
+    TemporaryHiker:
+      type: object
+      description: >
+        Quick entry (MH-07, PO issue #5): a name and an optional phone. Creates
+        a temporary hiker with no email and no password, who cannot log in.
+      required: [firstName]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          example: Giulia
+        lastName:
+          type: string
+          nullable: true
+          example: Bianchi
+        phone:
+          type: string
+          nullable: true
+          example: '+39 333 7654321'
+
+    StaffBooking:
+      description: >
+        The booking created by staff, with the hiker it is for; plus the
+        generated password when a new full hiker was created.
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          required: [hiker]
+          properties:
+            hiker:
+              $ref: '#/components/schemas/HikerSummary'
+            generatedPassword:
+              type: string
+              description: >
+                Only when `newHiker` was sent: the random password of the new
+                account, returned this once for the staff member to give to the
+                hiker (PO issue #36). Stored only hashed, never returned again.
+              example: k7Qp2xWm9aTz
+
     CapturedEmail:
       type: object
       description: Email stored by the test/E2E mailer instead of being sent.
@@ -1021,9 +1870,11 @@ components:
         text:
           type: string
           description: >
-            Confirmation body includes the booking reference, hiker name,
-            slot date and time, party size and party requirements when present.
-            It does not include table numbers.
+            One email per booking event (PO issue #41): booking confirmed,
+            changed (with the new details) or cancelled. The body includes the
+            booking reference, hiker name, slot date and time, party size and
+            party requirements when present (MH-05; a requirement with
+            allergies is marked as such). It does not include table numbers.
         sentAt:
           type: string
           format: date-time
