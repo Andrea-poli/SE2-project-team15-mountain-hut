@@ -892,9 +892,12 @@ paths:
         existing one". So: if any slot of the target week that has not started
         yet has a confirmed booking, the copy is refused with 409 and nothing
         changes; otherwise those slots are deleted and replaced by the copy.
-        Slots of the target week that already started are never touched, and a
-        source slot whose day/time in the target week is not in the future is
-        skipped (`reason: past`). Everything happens in one transaction.
+        Slots of the target week that already started are never touched. A
+        source slot is skipped when, in the target week, it would not start in
+        the future (`reason: past`) or it would overlap a slot that has already
+        started (`reason: overlap`: started slots are never replaced, so the
+        copy is skipped to avoid overlapping slots). Everything happens in one
+        transaction.
         Adjusting a copied slot afterwards is MH-19, a later story.
       operationId: copyWeek
       security:
@@ -913,7 +916,7 @@ paths:
           description: >
             Copy done: the slots created (possibly none), the existing slots of
             the target week that were replaced, and the source slots skipped
-            because they would be in the past.
+            (in the past, or overlapping a slot already under way).
           content:
             application/json:
               schema:
@@ -1689,9 +1692,7 @@ components:
             $ref: '#/components/schemas/Slot'
         skipped:
           type: array
-          description: >
-            The source slots that were not copied because their day/time in the
-            target week is not in the future.
+          description: The source slots that were not copied, and why.
           items:
             type: object
             required: [date, startTime, endTime, label, reason]
@@ -1714,11 +1715,14 @@ components:
                 example: Lunch
               reason:
                 type: string
-                enum: [past]
+                enum: [past, overlap]
                 description: >
-                  `past`: the day (or the start) is not in the future. (There is
-                  no `overlap` reason: the target schedule is replaced, or the
-                  copy is refused with 409 if it has bookings.)
+                  `past`: in the target week the copied slot would not start in
+                  the future (a past day, or today at a time already passed).
+                  The source week itself can be in the past.
+                  `overlap`: in the target week the copied slot would overlap a
+                  slot that has already started; started slots are never
+                  replaced, so the copy is skipped to avoid overlapping slots.
                 example: past
 
     HikerSummary:
