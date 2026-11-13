@@ -23,6 +23,10 @@ export function createApp({ sessionStore, clientDist = config.clientDist } = {})
   app.disable('x-powered-by');
   app.use(express.json());
 
+  // Health check (Docker HEALTHCHECK, monitoring): before the session middleware, so a probe every few
+  // seconds creates no session and touches no database. GET only; other methods fall through to the 404.
+  app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
   // U5: session cookie (httpOnly, sameSite=lax, store in sessions.db), then req.user for every request.
   app.use('/api', createSessionMiddleware(sessionStore));
   app.use('/api', loadUser);

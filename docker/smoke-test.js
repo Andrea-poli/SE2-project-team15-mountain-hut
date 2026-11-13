@@ -64,6 +64,8 @@ async function main() {
 
   // ---------- guest and public endpoints
   check('guest: GET /api/auth/me → 401', r.status === 401);
+  r = await guest('GET', '/api/health');
+  check('GET /api/health → 200 { status: "ok" } (Docker health check)', r.status === 200 && r.body?.status === 'ok');
   r = await guest('GET', `/api/public/slots?date=${day(1)}`);
   const lunch = r.body?.find?.((s) => s.label === 'Lunch');
   const dinner = r.body?.find?.((s) => s.label.startsWith('Dinner – 1st'));

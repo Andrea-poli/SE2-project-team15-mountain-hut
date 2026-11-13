@@ -116,7 +116,7 @@ The image builds the whole application from this repository (client build + serv
 
 Without compose: `docker build -t mountain-hut .` then `docker run -p 3001:3001 -e SESSION_SECRET=… -e SMTP_HOST=… (the other SMTP_* the same way) -v mountain-hut-data:/data mountain-hut`. Don't pass a development `.env` with `--env-file`: its `DATA_DIR`/`PORT` would move the data out of the volume.
 
-The variables are read when the container starts: no secret is ever written into the image (it is public once published). The container runs as the non-root `node` user and has a health check on the API.
+The variables are read when the container starts: no secret is ever written into the image (it is public once published). The container runs as the non-root `node` user and has a health check on `GET /api/health` (public, no session, no database), also handy for monitoring.
 
 **Check that a started container works** (e.g. after building it, or on another PC for the deployment test): on a fresh start (`docker compose down -v && docker compose up -d`) run `node docker/smoke-test.js` (or `node docker/smoke-test.js http://host:port`). It calls every API endpoint as a guest, a hiker, an employee and the warden, with the main error answers and the demo data, checks that the pages are served, and prints PASS/FAIL per check (exit code 0 = all passed). It writes a new hiker, a booking and a slot, so run it once per fresh start. The confirmation email is checked in the mailbox (e.g. Ethereal → Messages). Needs Node 22 on the machine running it; without Node, run it inside the container: `docker compose exec mountain-hut node docker/smoke-test.js`.
 
