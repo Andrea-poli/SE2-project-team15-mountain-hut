@@ -387,3 +387,9 @@ svg {
   color: var(--mh-danger);
   font-weight: 600;
 }
+
+/* Party requirements involving allergies use the theme accent without relying on color alone. */
+.mh-requirement-allergy {
+  border-color: var(--mh-highlight) !important;
+  background-color: var(--mh-surface);
+}

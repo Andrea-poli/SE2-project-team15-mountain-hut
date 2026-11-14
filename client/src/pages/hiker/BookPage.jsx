@@ -14,10 +14,12 @@ import Row from 'react-bootstrap/Row';
 import { generatePath, useNavigate, useSearchParams } from 'react-router';
 import { createBooking } from '../../api/bookings.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
+import PartyRequirements from '../../components/PartyRequirements.jsx';
 import SlotPicker from '../../components/SlotPicker.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
 import { slotPickerFieldIds, slotPickerValueFromParams, validateSlotPicker } from '../../utils/slotPicker.js';
+import { areRequirementsValid } from '../../utils/validation.js';
 
 const ID_PREFIX = 'book';
 const FIELD_IDS = slotPickerFieldIds(ID_PREFIX);
@@ -26,17 +28,22 @@ export default function BookPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [value, setValue] = useState(() => slotPickerValueFromParams(params));
+  const [requirements, setRequirements] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const { errors, setErrors, generalError, generalRef, checkOnSubmit, recheck, focusField, showGeneralError } =
     useFormErrors(validateSlotPicker, FIELD_IDS);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (submitting || !checkOnSubmit(value)) return;
+    if (submitting || !checkOnSubmit(value) || !areRequirementsValid(requirements)) return;
 
     setSubmitting(true);
     try {
-      const booking = await createBooking({ slotId: value.slotId, partySize: Number(value.partySize) });
+      const booking = await createBooking({
+        slotId: value.slotId,
+        partySize: Number(value.partySize),
+        ...(requirements.length > 0 && { requirements }),
+      });
       // replace: Back from the confirmation does not reopen the filled form (no double booking).
       navigate(generatePath(routes.bookingConfirmed, { id: booking.id }), { replace: true });
     } catch (err) {
@@ -68,7 +75,12 @@ export default function BookPage() {
                 errors={errors}
                 onBlurField={(name) => recheck(name, value)}
               />
-              <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+              <PartyRequirements value={requirements} onChange={setRequirements} />
+              <Button
+                type="submit"
+                className="w-100 mt-2"
+                disabled={submitting || !areRequirementsValid(requirements)}
+              >
                 {submitting ? 'Booking…' : 'Confirm booking'}
               </Button>
             </Form>
