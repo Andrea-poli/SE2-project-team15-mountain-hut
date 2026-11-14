@@ -41,16 +41,22 @@ export async function hasConfirmedBooking(db, slotId, hikerId) {
 }
 
 /**
- * Inserts a booking and the seats it takes at each table, and returns it like findById.
+ * Inserts a booking, the seats it takes at each table and its party requirements (MH-05),
+ * and returns it like findById.
  * Call it inside withTransaction (transaction.js), after re-reading the seats with allocationsForSlot:
- * the booking and its tables are saved together or not at all.
+ * the booking, its tables and its requirements are saved together or not at all.
  * A second confirmed booking of the same hiker in the same slot makes SQLite throw
  * 'UNIQUE constraint failed: bookings.slot_id, bookings.hiker_id' (index bookings_one_per_hiker_slot).
  * @param {{ slotId: number, hikerId: number, partySize: number, status?: string, createdAt: string,
- *           tables: { slotTableId: number, seats: number }[] }} booking
+ *           tables: { slotTableId: number, seats: number }[],
+ *           requirements?: { hasAllergies: boolean, description: string }[] }} booking
  *        createdAt: ISO UTC, from now() of clock.js (never the real clock, so tests can fix it)
+ *        requirements: already checked by the service (see saveRequirements); none when absent
  */
-export async function create(db, { slotId, hikerId, partySize, status = BOOKING_STATUS.CONFIRMED, createdAt, tables }) {
+export async function create(
+  db,
+  { slotId, hikerId, partySize, status = BOOKING_STATUS.CONFIRMED, createdAt, tables, requirements = [] },
+) {
   const { lastID: bookingId } = await db.run(
     'INSERT INTO bookings (slot_id, hiker_id, party_size, status, created_at) VALUES (?, ?, ?, ?, ?)',
     [slotId, hikerId, partySize, status, createdAt],
@@ -62,13 +68,15 @@ export async function create(db, { slotId, hikerId, partySize, status = BOOKING_
       seats,
     ]);
   }
+  await saveRequirements(db, bookingId, requirements);
   return findById(db, bookingId);
 }
 
 /**
- * One booking with its slot and tables, or null:
+ * One booking with its slot, tables and party requirements, or null:
  *   { id, hikerId, slot: { id, date, startTime, endTime, label }, partySize,
- *     tables: [{ slotTableId, tableName, seats }], status, createdAt }
+ *     tables: [{ slotTableId, tableName, seats }], requirements: [{ hasAllergies, description }],
+ *     status, createdAt }
  * hikerId lets the route check the owner (404 for someone else's booking): it is not part of the API answer.
  */
 export async function findById(db, id) {
@@ -94,6 +102,7 @@ export async function findById(db, id) {
     slot: { id: row.slot_id, date: row.date, startTime: row.start_time, endTime: row.end_time, label: row.label },
     partySize: row.party_size,
     tables,
+    requirements: await findRequirements(db, id),
     status: row.status,
     createdAt: row.created_at,
   };

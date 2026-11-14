@@ -184,6 +184,7 @@ describe('POST /api/bookings', () => {
       slot: { id: slot.id, date: TOMORROW, startTime: '19:00', endTime: '20:30', label: 'Dinner' },
       partySize: 3,
       tables: [expect.objectContaining({ slotTableId: expect.any(Number), tableName: expect.any(String), seats: 3 })],
+      requirements: [],
       status: 'confirmed',
       createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/),
     });

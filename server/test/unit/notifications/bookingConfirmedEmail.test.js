@@ -85,8 +85,8 @@ describe('bookingConfirmedEmail', () => {
       {
         ...booking,
         requirements: [
-          { allergies: false, description: '2 vegetarian' },
-          { allergies: true, description: '1 peanut allergy' },
+          { hasAllergies: false, description: '2 vegetarian' },
+          { hasAllergies: true, description: '1 peanut allergy' },
         ],
       },
       hiker,

@@ -13,21 +13,20 @@ function formatDate(isoDate) {
   return date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// Party requirements belong to MH-05 (a later sprint): GET /api/bookings/:id has no `requirements`
-// field yet. When MH-05 adds it as a list of { allergies, description }, this section appears by itself;
-// until then the list is missing and nothing is printed.
+// Party requirements (MH-05): one line each, in the order the hiker entered them; the ones with the
+// allergies flag are marked so the kitchen notices them. No section when the booking has none.
 function requirementLines(requirements) {
   if (!Array.isArray(requirements) || requirements.length === 0) return [];
   return [
     'Party requirements:',
-    ...requirements.map((r) => `  - ${r.allergies ? '[ALLERGY] ' : ''}${r.description}`),
+    ...requirements.map((r) => `  - ${r.hasAllergies ? '[ALLERGY] ' : ''}${r.description}`),
     '',
   ];
 }
 
 /**
  * @param {object} booking as returned by GET /api/bookings/:id
- *   { id, slot: { date, startTime, endTime, label }, partySize, ... } – `requirements` only after MH-05
+ *   { id, slot: { date, startTime, endTime, label }, partySize, requirements: [{ hasAllergies, description }], ... }
  * @param {object} hiker { firstName, lastName, email }
  * @returns {{ subject: string, text: string }}
  */

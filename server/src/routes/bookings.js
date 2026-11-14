@@ -1,4 +1,5 @@
-// /api/bookings – create a booking, get a booking (MH-01 BE2, openapi.yaml tag bookings)
+// /api/bookings – create a booking, get a booking (MH-01 BE2, openapi.yaml tag bookings); both answers include
+// the party requirements (MH-05)
 import { Router } from 'express';
 import * as bookingDao from '../dao/bookingDao.js';
 import { getDb } from '../dao/db.js';
@@ -8,7 +9,7 @@ import * as bookingService from '../services/bookingService.js';
 
 const router = Router();
 
-// POST /api/bookings {slotId, partySize} → 201 Booking + Location | 400 | 401 | 403 | 404 slot | 409
+// POST /api/bookings {slotId, partySize, requirements?} → 201 Booking + Location | 400 | 401 | 403 | 404 slot | 409
 router.post('/', requireRole(['hiker'], 'Only hikers can book'), async (req, res) => {
   const booking = await bookingService.createBooking(req.user, req.body);
   res.status(201).location(`/api/bookings/${booking.id}`).json(booking);
