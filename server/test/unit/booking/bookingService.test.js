@@ -194,6 +194,7 @@ describe('createBooking', () => {
       },
       partySize: 5,
       tables: [{ slotTableId: slot.tables[0].id, tableName: 'Table 1', seats: 5 }],
+      requirements: [],
       status: bookingDao.BOOKING_STATUS.CONFIRMED,
       createdAt: '2026-11-02T09:00:00.000Z',
     });
