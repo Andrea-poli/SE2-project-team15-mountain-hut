@@ -54,7 +54,7 @@ describe('validateRequirements', () => {
     ['an allergies flag 1 instead of true', [{ hasAllergies: 1, description: '2 vegetarians' }]],
     ['an item that is null', [null]],
     ['an item that is a text', ['2 vegetarians']],
-    ['a list that is not a list', { hasAllergies: false, description: '2 vegetarians' }],
+    ['requirements that are not a list', { hasAllergies: false, description: '2 vegetarians' }],
     ['null instead of a list', null],
     ['one invalid item among valid ones', [...PO_EXAMPLE, { hasAllergies: false, description: ' ' }]],
   ])('refuses %s (400)', (_what, requirements) => {

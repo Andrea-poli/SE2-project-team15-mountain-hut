@@ -6,7 +6,7 @@
 //   GET  /api/bookings/:id                                  → the booking with its requirements
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { getDb } from '../../src/dao/db.js';
 import * as slotDao from '../../src/dao/slotDao.js';
@@ -129,7 +129,7 @@ describe('POST /api/bookings with party requirements', () => {
     expect(capturedEmails(email)).toEqual([]);
   });
 
-  it('saves no requirements when the booking itself is refused (not enough seats, 409)', async () => {
+  it('saves no requirements when the booking itself is refused before saving (not enough seats, 409)', async () => {
     const slot = await createSlot([2]);
     const { agent } = await loggedInHiker();
 
@@ -138,6 +138,37 @@ describe('POST /api/bookings with party requirements', () => {
     expect(res.status).toBe(409);
     expect(await count('bookings')).toBe(0);
     expect(await count('booking_requirements')).toBe(0);
+  });
+});
+
+describe('requirements saved in the same transaction as the booking (contract)', () => {
+  // The requirements are written last, after the booking and its tables. A temporary trigger makes that
+  // last insert fail: if the three writes were not in one transaction, the booking and its tables would stay.
+  it('leaves no booking and no tables when saving the requirements fails', async () => {
+    const slot = await createSlot();
+    const { agent, email } = await loggedInHiker();
+    const db = await getDb();
+    await db.exec(`CREATE TEMP TRIGGER fail_requirements BEFORE INSERT ON booking_requirements
+                   BEGIN SELECT RAISE(ABORT, 'requirements insert failed'); END;`);
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {}); // the 500 is logged by the server
+    try {
+      const res = await agent.post('/api/bookings').send({ slotId: slot.id, partySize: 7, requirements: PO_EXAMPLE });
+
+      expect(res.status).toBe(500);
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+      await db.exec('DROP TRIGGER IF EXISTS temp.fail_requirements');
+    }
+    expect(await count('bookings')).toBe(0);
+    expect(await count('booking_tables')).toBe(0);
+    expect(await count('booking_requirements')).toBe(0);
+    expect(capturedEmails(email)).toEqual([]);
+
+    // The seats were not taken: the same party can still book, and the requirements are saved this time.
+    const again = await agent.post('/api/bookings').send({ slotId: slot.id, partySize: 7, requirements: PO_EXAMPLE });
+    expect(again.status).toBe(201);
+    expect(again.body.requirements).toEqual(PO_EXAMPLE);
   });
 });
 
