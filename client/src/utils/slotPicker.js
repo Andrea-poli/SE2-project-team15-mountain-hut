@@ -8,7 +8,21 @@ const POSITIVE_INT = /^[1-9]\d*$/;
 const STATE_SUFFIX = {
   full: ' – full',
   tooLate: ' – booking closed',
+  started: ' – started',
 };
+
+/**
+ * The state of a slot in the picker. For hikers it is the server's bookingState. With untilStart (staff: no
+ * 2-hour rule, PO #35) a slot closed only by the 2-hour rule can be chosen until it starts, then it is
+ * 'started'. Such a slot is tooLate for the server even when it is full (openapi PublicSlot): staff then get
+ * "Not enough seats" when confirming.
+ */
+export function pickerSlotState(slot, date, { untilStart = false, now = new Date() } = {}) {
+  if (!untilStart || slot.bookingState !== 'tooLate') return slot.bookingState;
+  const [year, month, day] = date.split('-').map(Number);
+  const [hours, minutes] = slot.startTime.split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes) <= now ? 'started' : 'bookable';
+}
 
 /** Text of one time option, e.g. "Dinner - 1st turn, 19:00 – 20:30 – full". */
 export function slotOptionLabel(slot) {
