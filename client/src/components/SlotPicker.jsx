@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import { listPublicSlots } from '../api/publicSlots.js';
 import { isIsoDate, toIsoDate } from '../utils/dates.js';
-import { slotOptionLabel, slotPickerFieldIds } from '../utils/slotPicker.js';
+import { pickerSlotState, slotOptionLabel, slotPickerFieldIds } from '../utils/slotPicker.js';
 import ErrorMessage from './ErrorMessage.jsx';
 import FormField from './FormField.jsx';
 import Loading from './Loading.jsx';
@@ -54,8 +54,9 @@ function useDaySlots(date) {
  * @param {{date?: string, slotId?: string, partySize?: string}} [props.errors]
  * @param {(name: string) => void} [props.onBlurField] e.g. recheck of useFormErrors
  * @param {Date} [props.today] first selectable day (tests pass a fixed one)
+ * @param {boolean} [props.untilStart] staff (MH-07): a slot can be chosen until it starts, no 2-hour rule
  */
-export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onBlurField, today }) {
+export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onBlurField, today, untilStart }) {
   const ids = slotPickerFieldIds(idPrefix);
   const minDate = toIsoDate(today ?? new Date());
 
@@ -64,8 +65,9 @@ export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onB
   const loading = isIsoDate(value.date) && !day;
 
   // A prefilled or previous slotId that is not a bookable slot of this day is dropped.
+  const stateOf = (slot) => pickerSlotState(slot, value.date, { untilStart });
   const chosen = slots?.find((s) => s.id === value.slotId);
-  const staleSlot = slots && value.slotId != null && chosen?.bookingState !== 'bookable';
+  const staleSlot = slots && value.slotId != null && (!chosen || stateOf(chosen) !== 'bookable');
   useEffect(() => {
     if (staleSlot) onChange({ ...value, slotId: null });
   }, [staleSlot, value, onChange]);
@@ -117,8 +119,8 @@ export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onB
             >
               <option value="">{slots ? 'Choose a time' : 'Choose a date first'}</option>
               {slots?.map((slot) => (
-                <option key={slot.id} value={slot.id} disabled={slot.bookingState !== 'bookable'}>
-                  {slotOptionLabel(slot)}
+                <option key={slot.id} value={slot.id} disabled={stateOf(slot) !== 'bookable'}>
+                  {slotOptionLabel({ ...slot, bookingState: stateOf(slot) })}
                 </option>
               ))}
             </Form.Select>
@@ -128,7 +130,9 @@ export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onB
               </Form.Control.Feedback>
             )}
             <Form.Text id={timeHelpId} className="d-block">
-              Full slots and slots starting in less than 2 hours cannot be chosen.
+              {untilStart
+                ? 'Full slots and slots that have already started cannot be chosen.'
+                : 'Full slots and slots starting in less than 2 hours cannot be chosen.'}
             </Form.Text>
           </>
         )}

@@ -64,6 +64,11 @@ export default function AppNavbar() {
                 Slots
               </NavItem>
             )}
+            {!loading && isStaff && (
+              <NavItem to={routes.staffNewBooking} icon={CalendarPlus}>
+                New reservation
+              </NavItem>
+            )}
             {/* Everyone, staff included: the page answers phone questions too (MH-04, contract C6c). */}
             {!loading && (
               <NavItem to={routes.checkAvailability} icon={CalendarSearch}>
