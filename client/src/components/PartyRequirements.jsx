@@ -1,29 +1,25 @@
-import { forwardRef, useId, useImperativeHandle, useState } from 'react';
+import { forwardRef, useId, useImperativeHandle, useRef, useState } from 'react';
 import { Plus, Trash2, TriangleAlert, Utensils } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
 
 const EMPTY_REQUIREMENTS = [];
 
-const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value, onChange, showErrors = false }, ref) {
+const PartyRequirementsForm = forwardRef(function PartyRequirementsForm(
+  { value, onChange, submitAttempt = 0 },
+  ref,
+) {
   const id = useId();
   const requirements = Array.isArray(value) ? value : EMPTY_REQUIREMENTS;
-  // Track row IDs separately from requirements array to avoid issues with React keying when items are added/removed
-  const [rowIds, setRowIds] = useState(() => requirements.map((_, index) => index));
-  const [nextRowId, setNextRowId] = useState(requirements.length);
-  const [previousCount, setPreviousCount] = useState(requirements.length);
-  const [touchedRowIds, setTouchedRowIds] = useState(() => new Set());
+  const nextId = useRef(0);
 
-  // Keep rowIds in sync with requirements length
-  if (previousCount !== requirements.length) {
-    setPreviousCount(requirements.length);
-    if (rowIds.length > requirements.length) {
-      setRowIds(rowIds.slice(0, requirements.length));
-    } else if (rowIds.length < requirements.length) {
-      const added = Array.from({ length: requirements.length - rowIds.length }, (_, index) => nextRowId + index);
-      setRowIds([...rowIds, ...added]);
-      setNextRowId(nextRowId + added.length);
-    }
+  const [touchedRowIds, setTouchedRowIds] = useState(() => new Set());
+  const [previousSubmitAttempt, setPreviousSubmitAttempt] = useState(submitAttempt);
+  const [submittedRowIds, setSubmittedRowIds] = useState(() => new Set());
+
+  if (previousSubmitAttempt !== submitAttempt) {
+    setPreviousSubmitAttempt(submitAttempt);
+    setSubmittedRowIds((current) => new Set([...current, ...requirements.map((requirement) => requirement.id)]));
   }
 
   useImperativeHandle(
@@ -33,36 +29,40 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
         const index = requirements.findIndex(
           (requirement) => typeof requirement.description !== 'string' || !requirement.description.trim(),
         );
-        if (index !== -1) document.getElementById(`${id}-description-${rowIds[index]}`)?.focus();
+        if (index !== -1) document.getElementById(`${id}-description-${requirements[index].id}`)?.focus();
       },
     }),
-    [id, requirements, rowIds],
+    [id, requirements],
   );
 
-  function updateRequirement(index, field, fieldValue) {
+  function updateRequirement(requirementId, field, fieldValue) {
     onChange(
-      requirements.map((requirement, itemIndex) => ({
-        hasAllergies: itemIndex === index && field === 'hasAllergies' ? fieldValue : requirement.hasAllergies,
-        description: itemIndex === index && field === 'description' ? fieldValue : requirement.description,
-      })),
+      requirements.map((requirement) =>
+        requirement.id === requirementId ? { ...requirement, [field]: fieldValue } : requirement,
+      ),
     );
   }
 
   function addRequirement() {
-    setRowIds((current) => [...current, nextRowId]);
-    setNextRowId((current) => current + 1);
-    onChange([...requirements, { hasAllergies: false, description: '' }]);
+    let requirementId;
+    do {
+      requirementId = `${id}-requirement-${nextId.current++}`;
+    } while (requirements.some((requirement) => requirement.id === requirementId));
+    onChange([...requirements, { id: requirementId, hasAllergies: false, description: '' }]);
   }
 
-  function removeRequirement(index) {
-    const rowId = rowIds[index];
-    setRowIds((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  function removeRequirement(requirementId) {
     setTouchedRowIds((current) => {
       const next = new Set(current);
-      next.delete(rowId);
+      next.delete(requirementId);
       return next;
     });
-    onChange(requirements.filter((_, itemIndex) => itemIndex !== index));
+    setSubmittedRowIds((current) => {
+      const next = new Set(current);
+      next.delete(requirementId);
+      return next;
+    });
+    onChange(requirements.filter((requirement) => requirement.id !== requirementId));
   }
 
   return (
@@ -79,21 +79,22 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
         <div className="d-grid gap-3 mb-3">
           {requirements.map((requirement, index) => {
             const description = typeof requirement.description === 'string' ? requirement.description : '';
-            const rowId = rowIds[index];
-            const descriptionId = `${id}-description-${rowId}`;
+            const requirementId = requirement.id;
+            const descriptionId = `${id}-description-${requirementId}`;
             const errorId = `${descriptionId}-error`;
             const hasDescription = description.trim().length > 0;
-            const showRowError = !hasDescription && (showErrors || touchedRowIds.has(rowId));
+            const showRowError =
+              !hasDescription && (submittedRowIds.has(requirementId) || touchedRowIds.has(requirementId));
 
             return (
               <div
-                key={rowId}
+                key={requirementId}
                 className={`p-2 rounded-3 border ${requirement.hasAllergies ? 'mh-requirement-allergy' : 'bg-body'}`}
               >
                 <div className="row g-2 align-items-center">
                   <div className="col-auto order-1">
                     <Form.Check
-                      id={`${id}-allergy-${rowId}`}
+                      id={`${id}-allergy-${requirementId}`}
                       label={
                         <span className="d-flex align-items-center gap-1">
                           <TriangleAlert aria-hidden="true" size={16} />
@@ -101,7 +102,9 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
                         </span>
                       }
                       checked={requirement.hasAllergies === true}
-                      onChange={(event) => updateRequirement(index, 'hasAllergies', event.target.checked)}
+                      onChange={(event) =>
+                        updateRequirement(requirementId, 'hasAllergies', event.target.checked)
+                      }
                       className="d-flex align-items-center gap-2 mb-0"
                     />
                   </div>
@@ -111,9 +114,9 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
                       type="text"
                       placeholder={requirement.hasAllergies ? 'e.g. 1 peanut allergy' : 'e.g. 2 vegetarians'}
                       value={description}
-                      onChange={(event) => updateRequirement(index, 'description', event.target.value)}
+                      onChange={(event) => updateRequirement(requirementId, 'description', event.target.value)}
                       onBlur={() => {
-                        setTouchedRowIds((current) => new Set(current).add(rowId));
+                        setTouchedRowIds((current) => new Set(current).add(requirementId));
                       }}
                       isInvalid={showRowError}
                       aria-invalid={showRowError ? true : undefined}
@@ -131,7 +134,7 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
                       type="button"
                       variant="outline-danger"
                       aria-label={`Remove requirement ${index + 1}`}
-                      onClick={() => removeRequirement(index)}
+                      onClick={() => removeRequirement(requirementId)}
                       className="d-flex align-items-center justify-content-center"
                     >
                       <Trash2 aria-hidden="true" size={18} />
@@ -157,14 +160,6 @@ export function PartyRequirementsTextDisplay({ requirements = [] }) {
   const items = Array.isArray(requirements) ? requirements : [];
   if (items.length === 0) return null;
 
-  const occurrences = new Map();
-  const keyedItems = items.map((requirement) => {
-    const contentKey = JSON.stringify([requirement.hasAllergies, requirement.description]);
-    const occurrence = occurrences.get(contentKey) ?? 0;
-    occurrences.set(contentKey, occurrence + 1);
-    return { requirement, key: `${contentKey}-${occurrence}` };
-  });
-
   return (
     <section className="mt-4" aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`} className="d-flex align-items-center gap-2 h5">
@@ -172,8 +167,8 @@ export function PartyRequirementsTextDisplay({ requirements = [] }) {
         Dietary needs and allergies
       </h2>
       <ul className="list-unstyled d-grid gap-2 mb-0">
-        {keyedItems.map(({ requirement, key }) => (
-          <li key={key} className="d-flex align-items-start gap-2">
+        {items.map((requirement, index) => (
+          <li key={index} className="d-flex align-items-start gap-2">
             <span
               className={`badge rounded-pill d-inline-flex align-items-center justify-content-center gap-1 ${
                 requirement.hasAllergies ? 'mh-requirement-allergy-badge' : 'bg-secondary-subtle text-body'

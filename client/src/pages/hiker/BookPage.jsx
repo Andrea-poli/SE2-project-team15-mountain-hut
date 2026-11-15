@@ -34,7 +34,7 @@ export default function BookPage() {
   const navigate = useNavigate();
   const [value, setValue] = useState(() => slotPickerValueFromParams(params));
   const [requirements, setRequirements] = useState([]);
-  const [requirementsSubmitted, setRequirementsSubmitted] = useState(false);
+  const [requirementSubmitAttempt, setRequirementSubmitAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const requirementsRef = useRef(null);
   const { errors, setErrors, generalError, generalRef, checkOnSubmit, recheck, focusField, showGeneralError } =
@@ -45,7 +45,7 @@ export default function BookPage() {
     if (submitting) return;
     const slotPickerValid = checkOnSubmit(value);
     const requirementsValid = areRequirementsValid(requirements);
-    setRequirementsSubmitted(true);
+    setRequirementSubmitAttempt((attempt) => attempt + 1);
     if (!slotPickerValid || !requirementsValid) {
       if (slotPickerValid && !requirementsValid) requirementsRef.current?.focusFirstEmptyDescription();
       return;
@@ -56,7 +56,9 @@ export default function BookPage() {
       const booking = await createBooking({
         slotId: value.slotId,
         partySize: Number(value.partySize),
-        ...(requirements.length > 0 && { requirements }),
+        ...(requirements.length > 0 && {
+          requirements: requirements.map(({ hasAllergies, description }) => ({ hasAllergies, description })),
+        }),
       });
       // replace: Back from the confirmation does not reopen the filled form (no double booking).
       navigate(generatePath(routes.bookingConfirmed, { id: booking.id }), { replace: true });
@@ -96,7 +98,7 @@ export default function BookPage() {
                 ref={requirementsRef}
                 value={requirements}
                 onChange={setRequirements}
-                showErrors={requirementsSubmitted}
+                submitAttempt={requirementSubmitAttempt}
               />
               <Button type="submit" className="w-100 mt-2" disabled={submitting}>
                 {submitting ? 'Booking…' : 'Confirm booking'}
