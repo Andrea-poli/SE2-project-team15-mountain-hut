@@ -1,4 +1,5 @@
 import { forwardRef, useId, useImperativeHandle, useState } from 'react';
+import { Plus, Trash2, TriangleAlert, Utensils } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
 
@@ -66,8 +67,14 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
 
   return (
     <fieldset className="mb-3">
-      <legend className="h5">Party requirements</legend>
-      <p className="mb-3">Add dietary requirements or allergies for people in your party. This is optional.</p>
+      <legend className="d-flex align-items-center gap-2 h5">
+        <Utensils aria-hidden="true" size={18} />
+        Dietary needs and allergies
+        <span className="ms-auto small fw-normal text-body-secondary">(optional)</span>
+      </legend>
+      <p className="small mb-3 align-items-center d-flex gap-1">
+        Tick <TriangleAlert aria-hidden="true" size={16} /> Allergies when the kitchen must take special care.
+      </p>
       {requirements.length > 0 && (
         <div className="d-grid gap-3 mb-3">
           {requirements.map((requirement, index) => {
@@ -81,56 +88,63 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm({ value,
             return (
               <div
                 key={rowId}
-                className={`p-3 rounded-3 border ${requirement.hasAllergies ? 'mh-requirement-allergy' : 'bg-body'}`}
+                className={`p-2 rounded-3 border ${requirement.hasAllergies ? 'mh-requirement-allergy' : 'bg-body'}`}
               >
-                <div className="d-flex align-items-center justify-content-between gap-3">
-                  <Form.Check
-                    id={`${id}-allergy-${rowId}`}
-                    label={`Requirement ${index + 1} involves an allergy`}
-                    checked={requirement.hasAllergies === true}
-                    onChange={(event) => updateRequirement(index, 'hasAllergies', event.target.checked)}
-                    className="d-flex align-items-center gap-2 mb-0"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline-danger"
-                    aria-label={`Remove requirement ${index + 1}`}
-                    onClick={() => removeRequirement(index)}
-                  >
-                    Remove
-                  </Button>
+                <div className="row g-2 align-items-center">
+                  <div className="col-auto order-1">
+                    <Form.Check
+                      id={`${id}-allergy-${rowId}`}
+                      label={
+                        <span className="d-flex align-items-center gap-1">
+                          <TriangleAlert aria-hidden="true" size={16} />
+                          Allergies
+                        </span>
+                      }
+                      checked={requirement.hasAllergies === true}
+                      onChange={(event) => updateRequirement(index, 'hasAllergies', event.target.checked)}
+                      className="d-flex align-items-center gap-2 mb-0"
+                    />
+                  </div>
+                  <Form.Group controlId={descriptionId} className="col-12 col-sm order-3 order-sm-2 mb-0">
+                    <Form.Label className="visually-hidden">Description for requirement {index + 1}</Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder={requirement.hasAllergies ? 'e.g. 1 peanut allergy' : 'e.g. 2 vegetarians'}
+                      value={description}
+                      onChange={(event) => updateRequirement(index, 'description', event.target.value)}
+                      onBlur={() => {
+                        setTouchedRowIds((current) => new Set(current).add(rowId));
+                      }}
+                      isInvalid={showRowError}
+                      aria-invalid={showRowError ? true : undefined}
+                      aria-describedby={showRowError ? errorId : undefined}
+                      required
+                    />
+                    {showRowError && (
+                      <Form.Control.Feedback type="invalid" id={errorId}>
+                        Enter a description for requirement {index + 1}.
+                      </Form.Control.Feedback>
+                    )}
+                  </Form.Group>
+                  <div className="col-auto order-2 order-sm-3 ms-auto ms-sm-0">
+                    <Button
+                      type="button"
+                      variant="outline-danger"
+                      aria-label={`Remove requirement ${index + 1}`}
+                      onClick={() => removeRequirement(index)}
+                      className="d-flex align-items-center justify-content-center"
+                    >
+                      <Trash2 aria-hidden="true" size={18} />
+                    </Button>
+                  </div>
                 </div>
-                <Form.Group controlId={descriptionId} className="mt-3 mb-0">
-                  <Form.Label>Description for requirement {index + 1}</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={description}
-                    onChange={(event) => updateRequirement(index, 'description', event.target.value)}
-                    onBlur={() => {
-                      setTouchedRowIds((current) => new Set(current).add(rowId));
-                    }}
-                    isInvalid={showRowError}
-                    aria-invalid={showRowError ? true : undefined}
-                    aria-describedby={showRowError ? errorId : undefined}
-                    required
-                  />
-                  {showRowError && (
-                    <Form.Control.Feedback type="invalid" id={errorId}>
-                      Enter a description for this requirement.
-                    </Form.Control.Feedback>
-                  )}
-                </Form.Group>
               </div>
             );
           })}
         </div>
       )}
-      <Button
-        type="button"
-        variant="outline-primary"
-        onClick={addRequirement}
-      >
-        Add requirement
+      <Button type="button" variant="outline-primary" onClick={addRequirement}>
+        <Plus aria-hidden="true" size={18} /> Add
       </Button>
     </fieldset>
   );
@@ -141,6 +155,8 @@ export default PartyRequirementsForm;
 export function PartyRequirementsTextDisplay({ requirements = [] }) {
   const id = useId();
   const items = Array.isArray(requirements) ? requirements : [];
+  if (items.length === 0) return null;
+
   const occurrences = new Map();
   const keyedItems = items.map((requirement) => {
     const contentKey = JSON.stringify([requirement.hasAllergies, requirement.description]);
@@ -151,24 +167,25 @@ export function PartyRequirementsTextDisplay({ requirements = [] }) {
 
   return (
     <section className="mt-4" aria-labelledby={`${id}-heading`}>
-      <h2 id={`${id}-heading`} className="h5">
-        Party requirements
+      <h2 id={`${id}-heading`} className="d-flex align-items-center gap-2 h5">
+        <Utensils aria-hidden="true" size={18} />
+        Dietary needs and allergies
       </h2>
-      {items.length === 0 ? (
-        <p className="mb-0">No party requirements were provided.</p>
-      ) : (
-        <ul className="list-unstyled d-grid gap-2 mb-0">
-          {keyedItems.map(({ requirement, key }) => (
-            <li
-              key={key}
-              className={`p-3 rounded-3 border ${requirement.hasAllergies ? 'mh-requirement-allergy' : 'bg-body'}`}
+      <ul className="list-unstyled d-grid gap-2 mb-0">
+        {keyedItems.map(({ requirement, key }) => (
+          <li key={key} className="d-flex align-items-start gap-2">
+            <span
+              className={`badge rounded-pill d-inline-flex align-items-center justify-content-center gap-1 ${
+                requirement.hasAllergies ? 'mh-requirement-allergy-badge' : 'bg-secondary-subtle text-body'
+              }`}
             >
-              {requirement.hasAllergies && <strong className="d-block mb-1">Allergy-related requirement</strong>}
-              {requirement.description}
-            </li>
-          ))}
-        </ul>
-      )}
+              {requirement.hasAllergies && <TriangleAlert aria-hidden="true" size={14} />}
+              {requirement.hasAllergies ? 'Allergies' : 'Diet'}
+            </span>
+            <span>{requirement.description}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
