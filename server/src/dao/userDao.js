@@ -27,6 +27,38 @@ export async function findByEmail(db, email) {
 }
 
 /**
+ * Search hiker profiles for the staff panel. Phone matching ignores spaces;
+ * temporary accounts are identifiable by their missing email and password.
+ */
+export async function searchHikers(db, query) {
+  const rows = await db.all(
+    `SELECT id, first_name, last_name, email, phone,
+            email IS NULL AND password_hash IS NULL AS temporary
+     FROM users
+     WHERE role = 'hiker'
+       AND (
+         instr(lower(first_name), lower(?)) > 0
+         OR instr(lower(coalesce(last_name, '')), lower(?)) > 0
+         OR instr(lower(first_name || ' ' || coalesce(last_name, '')), lower(?)) > 0
+         OR instr(lower(coalesce(last_name, '') || ' ' || first_name), lower(?)) > 0
+         OR instr(lower(coalesce(email, '')), lower(?)) > 0
+         OR instr(replace(coalesce(phone, ''), ' ', ''), replace(?, ' ', '')) > 0
+       )
+     ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
+     LIMIT 20`,
+    [query, query, query, query, query, query],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    phone: row.phone,
+    temporary: Boolean(row.temporary),
+  }));
+}
+
+/**
  * For the login only: the user plus passwordHash (null for users who cannot log in).
  * Never send this object to the client.
  */
