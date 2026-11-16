@@ -20,8 +20,9 @@ export async function createSlot(slot) {
   return apiFetch('/api/slots', { method: 'POST', body: slot });
 }
 
-// POST /api/slots/copy-week → 201 CopyWeekResult | 400 Error | 401 NotLoggedIn | 403 Forbidden
-export async function copyWeek(from, to) {
-  if (useMocks) return (await mocks()).copyWeek(from, to);
-  return apiFetch('/api/slots/copy-week', { method: 'POST', body: { from, to } });
+// POST /api/slots/copy-week { sourceWeek, targetWeek } (any date of each week)
+// → 201 CopyWeekResult | 400 Error | 401 NotLoggedIn | 403 Forbidden | 409 Error (the target week has bookings)
+export async function copyWeek(sourceWeek, targetWeek) {
+  if (useMocks) return (await mocks()).copyWeek(sourceWeek, targetWeek);
+  return apiFetch('/api/slots/copy-week', { method: 'POST', body: { sourceWeek, targetWeek } });
 }

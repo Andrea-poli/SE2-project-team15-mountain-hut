@@ -1,15 +1,17 @@
 // MH-09 FE1 – "Copy week" dialog of the staff slots view. The staff member picks the target week with ‹ / ›
 // (like the page header); POST /api/slots/copy-week copies every slot of the shown week (weekStart, a Monday),
 // with its tables, into it. Past weeks cannot be chosen and the shown week is skipped in both directions.
+// The copy replaces the slots of the target week that have not started (PO, issue #45): when the chosen week has
+// some, a warning says so. If one of them is booked the server answers 409, shown here; the dialog stays open.
 // The page mounts the dialog only while it is open, so it starts fresh each time; the picker reuses the
 // mh-week-navigation / mh-week-range classes of SlotsWeekPage.css (loaded by that page).
-// onCopied(result, targetWeekIso) receives { created, skipped } and the Monday ('YYYY-MM-DD') of the target week.
-import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+// onCopied(result, targetWeekIso) receives { created, replaced, skipped } and the Monday ('YYYY-MM-DD') of the target week.
+import { ChevronLeft, ChevronRight, Copy, TriangleAlert } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
 import Modal from 'react-bootstrap/Modal';
-import { copyWeek } from '../api/slots.js';
+import { copyWeek, listSlots } from '../api/slots.js';
 import ErrorMessage from './ErrorMessage.jsx';
 import { addDays, formatWeekRange, startOfWeek, toLocalIsoDate } from '../utils/format.js';
 
@@ -33,6 +35,26 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const errorRef = useRef(null);
+  // Slots of the target week that the copy would replace, with the week they belong to.
+  const [targetSlots, setTargetSlots] = useState({ week: null, count: 0 });
+  const targetIso = toLocalIsoDate(target);
+
+  // Read the target week whenever it changes; answers for a week the user already left are ignored.
+  // If the read fails, no warning is shown: the copy itself still reports any error.
+  useEffect(() => {
+    let cancelled = false;
+    listSlots(targetIso, toLocalIsoDate(addDays(target, 6)))
+      .then((slots) => {
+        // Slots already under way are never replaced, so they are not counted.
+        if (!cancelled) setTargetSlots({ week: targetIso, count: slots.filter((slot) => !slot.past).length });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [target, targetIso]);
+
+  const replacedCount = targetSlots.week === targetIso ? targetSlots.count : 0;
 
   // No past weeks: ‹ is disabled on the current week, or when the only earlier choice would be a past week.
   const previousTarget = stepWeek(target, -7, sourceIso);
@@ -41,7 +63,6 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
   async function submit(event) {
     event.preventDefault();
     if (saving) return;
-    const targetIso = toLocalIsoDate(target);
     setSaving(true);
     setSubmitError(null);
     try {
@@ -69,13 +90,16 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
           <p id={pickerLabelId} className="form-label mb-2">
             Copy the slots of {formatWeekRange(weekStart, addDays(weekStart, 6))}, with their tables, into:
           </p>
-          <div className="mh-week-navigation mb-3" role="group" aria-labelledby={pickerLabelId}>
+          <div className="mh-week-navigation mb-2" role="group" aria-labelledby={pickerLabelId}>
             <Button
               variant="outline-primary"
               className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
               aria-label="Previous week"
               disabled={!canGoBack || saving}
-              onClick={() => setTarget(previousTarget)}
+              onClick={() => {
+                setTarget(previousTarget);
+                setSubmitError(null);
+              }}
             >
               <ChevronLeft aria-hidden="true" size={20} />
             </Button>
@@ -87,13 +111,26 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
               className="d-flex flex-shrink-0 align-items-center justify-content-center p-2"
               aria-label="Next week"
               disabled={saving}
-              onClick={() => setTarget(stepWeek(target, 7, sourceIso))}
+              onClick={() => {
+                setTarget(stepWeek(target, 7, sourceIso));
+                setSubmitError(null);
+              }}
             >
               <ChevronRight aria-hidden="true" size={20} />
             </Button>
           </div>
+          <div className="mb-3" aria-live="polite">
+            {replacedCount > 0 && (
+              <p className="d-flex align-items-start gap-2 mb-0 text-warning-emphasis">
+                <TriangleAlert aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+                {replacedCount === 1
+                  ? 'This week has 1 slot: it will be replaced.'
+                  : `This week has ${replacedCount} slots: they will be replaced.`}
+              </p>
+            )}
+          </div>
           <p className="small text-body-secondary mb-0">
-            Bookings are not copied. Slots in the past or overlapping existing ones are skipped.
+            Bookings are not copied. Slots in the past or overlapping a slot already under way are skipped.
           </p>
         </Modal.Body>
         <Modal.Footer>

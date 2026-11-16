@@ -3,7 +3,8 @@
 // The week can be navigated with previous/next buttons, past and current day are distinguished. Using a link to 
 // the "New slot" page prefilled the date in it. This page then displays a success message when a new slot is created.
 // MH-09 FE1 – "Copy week" copies the slots of the shown week into another week (CopyWeekDialog), then shows the
-// target week with a summary of the slots copied and of the ones skipped (already past or overlapping).
+// target week with a summary of the slots copied, of the ones they replaced and of the ones skipped (already past
+// or overlapping a slot already under way).
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from 'react-bootstrap/Alert';
@@ -37,19 +38,24 @@ function parseWeekStart(value) {
 
 const countOf = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`;
 
-// One line about a copy, zero counts left out. Examples: "No slots copied: 2 slots overlap existing slots."
-// "3 slots copied, 2 not copied (1 overlap, 1 already past)."
-function copySummary({ created, skipped }) {
+// One line about a copy, zero counts left out. Examples: "3 slots copied, 2 replaced."
+// "1 slot copied, 2 not copied (1 overlap, 1 already past)." "No slots copied: 2 slots are already past."
+// `replaced` are the existing slots of the target week deleted by the copy (PO, issue #45).
+function copySummary({ created, replaced, skipped }) {
   const overlap = skipped.filter((slot) => slot.reason === 'overlap').length;
   const past = skipped.length - overlap;
+  const replacedPart = replaced.length > 0 ? `, ${replaced.length} replaced` : '';
   if (created.length === 0) {
     const reasons = [
-      overlap > 0 && `${countOf(overlap, 'slot overlaps an existing slot', 'slots overlap existing slots')}`,
+      overlap > 0 &&
+        `${countOf(overlap, 'slot overlaps a slot already under way', 'slots overlap slots already under way')}`,
       past > 0 && `${countOf(past, 'slot is already past', 'slots are already past')}`,
     ].filter(Boolean);
-    return reasons.length > 0 ? `No slots copied: ${reasons.join(', ')}.` : 'No slots copied.';
+    return reasons.length > 0
+      ? `No slots copied${replacedPart}: ${reasons.join(', ')}.`
+      : `No slots copied${replacedPart}.`;
   }
-  const copied = `${countOf(created.length, 'slot', 'slots')} copied`;
+  const copied = `${countOf(created.length, 'slot', 'slots')} copied${replacedPart}`;
   if (skipped.length === 0) return `${copied}.`;
   const reasons = [overlap > 0 && `${overlap} overlap`, past > 0 && `${past} already past`].filter(Boolean);
   return `${copied}, ${skipped.length} not copied (${reasons.join(', ')}).`;
@@ -247,7 +253,7 @@ export default function SlotsWeekPage() {
                     {shownCopyResult.skipped.map((slot) => (
                       <li key={`${slot.date}-${slot.startTime}-${slot.endTime}`}>
                         {formatDate(slot.date)}, {formatTimeRange(slot.startTime, slot.endTime)} {slot.label} –{' '}
-                        {slot.reason === 'past' ? 'already past' : 'overlaps an existing slot'}
+                        {slot.reason === 'past' ? 'already past' : 'overlaps a slot already under way'}
                       </li>
                     ))}
                   </ul>

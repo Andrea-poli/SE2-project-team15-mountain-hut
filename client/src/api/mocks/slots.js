@@ -183,17 +183,24 @@ export async function createSlot(slot) {
   return created;
 }
 
-// Mock of POST /api/slots/copy-week: same rules as the server. `from` and `to` are any day of the two weeks.
-export async function copyWeek(from, to) {
+// Slots with a confirmed booking (the mock has no bookings): the Friday "special event" of the current week, so
+// copying a week into the current one answers 409 until that slot starts.
+const bookedSlotIds = new Set([9]);
+
+// Mock of POST /api/slots/copy-week: same rules as the server. `sourceWeek` and `targetWeek` are any day of the
+// two weeks. The not-started slots of the target week are replaced (409 if one is booked); started ones are kept.
+export async function copyWeek(sourceWeek, targetWeek) {
   const toLocalDate = (isoDate) => {
     const [year, month, day] = isoDate.split('-').map(Number);
     return new Date(year, month - 1, day);
   };
-  const sourceStart = startOfWeek(toLocalDate(from));
-  const targetStart = startOfWeek(toLocalDate(to));
+  const sourceStart = startOfWeek(toLocalDate(sourceWeek));
+  const targetStart = startOfWeek(toLocalDate(targetWeek));
   const sourceFrom = toLocalIsoDate(sourceStart);
   const sourceTo = toLocalIsoDate(addDays(sourceStart, 6));
-  if (sourceFrom === toLocalIsoDate(targetStart)) {
+  const targetFrom = toLocalIsoDate(targetStart);
+  const targetTo = toLocalIsoDate(addDays(targetStart, 6));
+  if (sourceFrom === targetFrom) {
     const error = new Error('Choose a different week to copy into');
     error.status = 400;
     throw error;
@@ -204,18 +211,29 @@ export async function copyWeek(from, to) {
   const now = new Date();
   const nowDate = toLocalIsoDate(now);
   const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const created = [];
-  const skipped = [];
+  const hasStarted = ({ date, startTime }) => date < nowDate || (date === nowDate && startTime <= nowTime);
 
+  const targetSlots = mockSlots.filter((slot) => slot.date >= targetFrom && slot.date <= targetTo);
+  const replaced = targetSlots.filter((slot) => !hasStarted(slot));
+  if (replaced.some((slot) => bookedSlotIds.has(slot.id))) {
+    const error = new Error('The target week has bookings: its schedule cannot be replaced');
+    error.status = 409;
+    throw error;
+  }
   const sourceSlots = mockSlots
     .filter((slot) => slot.date >= sourceFrom && slot.date <= sourceTo)
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  for (const slot of replaced) mockSlots.splice(mockSlots.indexOf(slot), 1);
+  const kept = targetSlots.filter(hasStarted);
+
+  const created = [];
+  const skipped = [];
   for (const slot of sourceSlots) {
     const date = toLocalIsoDate(addDays(toLocalDate(slot.date), shift));
     const { startTime, endTime, label } = slot;
-    if (date < nowDate || (date === nowDate && startTime <= nowTime)) {
+    if (hasStarted({ date, startTime })) {
       skipped.push({ date, startTime, endTime, label, reason: 'past' });
-    } else if (mockSlots.some((existing) =>
+    } else if (kept.some((existing) =>
       existing.date === date && startTime < existing.endTime && endTime > existing.startTime
     )) {
       skipped.push({ date, startTime, endTime, label, reason: 'overlap' });
@@ -235,5 +253,5 @@ export async function copyWeek(from, to) {
       created.push(copy);
     }
   }
-  return { created, skipped };
+  return { created, replaced, skipped };
 }
