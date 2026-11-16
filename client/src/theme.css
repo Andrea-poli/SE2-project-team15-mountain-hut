@@ -23,6 +23,7 @@
   --mh-danger-hover: color-mix(in srgb, var(--mh-danger), black 15%); /* danger button on hover */
   --mh-danger-active: color-mix(in srgb, var(--mh-danger), black 25%); /* danger button pressed */
   --mh-focus-on-dark: var(--mh-on-primary); /* focus outline on a dark background (e.g. navbar) */
+  --mh-highlight-bg: color-mix(in srgb, var(--mh-highlight), white 88%); /* background of highlighted cards */
 
   /* Focus outline colour in use, switched to --mh-focus-on-dark inside dark areas (see 5) */
   --mh-focus-color: var(--mh-primary);
@@ -386,4 +387,15 @@ svg {
 .mh-char-count-over {
   color: var(--mh-danger);
   font-weight: 600;
+}
+
+/* Party requirements involving allergies use the theme accent without relying on color alone. */
+.mh-requirement-allergy {
+  border-color: var(--mh-highlight) !important;
+  background-color: var(--mh-highlight-bg);
+}
+
+.mh-requirement-allergy-badge {
+  background-color: var(--mh-highlight);
+  color: var(--mh-text);
 }

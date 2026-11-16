@@ -29,3 +29,17 @@ export function isBlank(value) {
 export function isEmail(value) {
   return EMAIL_RE.test(value.trim());
 }
+
+// The requirements are an array of objects with hasAllergies (boolean) and description (non-empty string).
+export function areRequirementsValid(requirements) {
+  return (
+    Array.isArray(requirements) &&
+    requirements.every(
+      (requirement) =>
+        requirement &&
+        typeof requirement.hasAllergies === 'boolean' &&
+        typeof requirement.description === 'string' &&
+        requirement.description.trim().length > 0,
+    )
+  );
+}
