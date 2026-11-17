@@ -46,35 +46,27 @@ async function clearDb() {
   }
 }
 
-async function createUser(role) {
+/** A new user of `role`, logged in: the agent keeps the session cookie. */
+async function loggedIn(role = 'hiker') {
   const db = await getDb();
   const email = `${role}-${randomUUID()}@example.com`;
   const user = await userDao.create(db, {
-    email,
-    passwordHash: await hashPassword(PASSWORD),
-    firstName: role === 'hiker' ? 'Hannah' : 'Eric',
-    lastName: 'Tester',
+    email, passwordHash: await hashPassword(PASSWORD), firstName: 'Hannah', lastName: 'Tester', role,
     phone: '+393334445566',
-    role,
   });
-  return { ...user, email };
-}
-
-/** A logged-in agent (keeps the session cookie) for a new user of `role`. */
-async function loggedIn(role = 'hiker') {
-  const user = await createUser(role);
   const agent = request.agent(app);
-  const res = await agent.post('/api/auth/login').send({ email: user.email, password: PASSWORD });
+  const res = await agent.post('/api/auth/login').send({ email, password: PASSWORD });
   expect(res.status, 'login of the test user').toBe(200);
-  return { agent, user };
+  return { agent, user: { ...user, email } };
 }
 
 /** Creates a slot with its tables; seats = list of table sizes, e.g. [4, 4, 6]. */
-async function createSlot({ date = TOMORROW, startTime = '19:00', endTime = '20:30',
-  label = 'Dinner', status = 'open', seats = [4, 4, 6] } = {}) {
+async function createSlot({ date = TOMORROW, startTime = '19:00', endTime = '20:30', label = 'Dinner', status = 'open',
+  seats = [4, 4, 6] } = {}) {
   const db = await getDb();
-  const tables = seats.map((n, i) => ({ name: `T${i + 1}`, seats: n }));
-  return slotDao.create(db, { date, startTime, endTime, label, status, tables });
+  return slotDao.create(db, {
+    date, startTime, endTime, label, status, tables: seats.map((n, i) => ({ name: `T${i + 1}`, seats: n })),
+  });
 }
 
 const book = (agent, slotId, partySize) => agent.post('/api/bookings')
