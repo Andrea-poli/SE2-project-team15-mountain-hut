@@ -84,6 +84,26 @@
   --bs-btn-disabled-border-color: var(--mh-primary);
 }
 
+/* Button roles: main action = green filled (primary); secondary actions that leave without saving
+   (Cancel, Back) = grey outline (outline-secondary); destructive = red (danger).
+   Grey outline: dark text on transparent or light grey (≥ 4.5:1 in every state), border --mh-muted (≥ 3:1 on white).
+   Hover and keyboard focus (Bootstrap uses the hover colours for both) only tint the background, unlike
+   Bootstrap's solid dark grey; the focus outline is the app's one (section 5). Disabled: Bootstrap's opacity. */
+.btn-outline-secondary {
+  --bs-btn-color: var(--mh-text);
+  --bs-btn-border-color: var(--mh-muted);
+  --bs-btn-hover-color: var(--mh-text);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--mh-muted), white 90%);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--mh-muted), var(--mh-text) 50%);
+  --bs-btn-focus-shadow-rgb: var(--mh-primary-rgb);
+  --bs-btn-active-color: var(--mh-text);
+  --bs-btn-active-bg: color-mix(in srgb, var(--mh-muted), white 80%);
+  --bs-btn-active-border-color: color-mix(in srgb, var(--mh-muted), var(--mh-text) 50%);
+  --bs-btn-disabled-color: var(--mh-text);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--mh-muted);
+}
+
 .btn-danger {
   --bs-btn-color: var(--mh-on-primary);
   --bs-btn-bg: var(--mh-danger);

@@ -7,7 +7,7 @@
 // The page mounts the dialog only while it is open, so it starts fresh each time; the picker reuses the
 // mh-week-navigation / mh-week-range classes of SlotsWeekPage.css (loaded by that page).
 // onCopied(result, targetWeekIso) receives { created, replaced, skipped } and the Monday ('YYYY-MM-DD') of the target week.
-import { Ban, CalendarDays, ChevronLeft, ChevronRight, Copy, Info, TriangleAlert } from 'lucide-react';
+import { Ban, ChevronLeft, ChevronRight, Copy, Info, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
@@ -121,11 +121,7 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
             >
               <ChevronLeft aria-hidden="true" size={20} />
             </Button>
-            <p
-              className="mh-week-range d-flex align-items-center justify-content-center gap-2 mb-0 text-center fw-semibold"
-              aria-live="polite"
-            >
-              <CalendarDays aria-hidden="true" size={18} className="flex-shrink-0" />
+            <p className="mh-week-range mb-0 text-center fw-semibold" aria-live="polite">
               {formatWeekRange(target, addDays(target, 6))}
             </p>
             <Button
@@ -165,7 +161,7 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
             )}
           </div>
           <p className="d-flex align-items-start gap-2 small text-body-secondary mb-0">
-            <Info aria-hidden="true" size={18} className="flex-shrink-0" />
+            <Info aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
             Bookings are not copied. Slots that would fall in the past, or at the same time as a slot that has already
             started, are skipped.
           </p>

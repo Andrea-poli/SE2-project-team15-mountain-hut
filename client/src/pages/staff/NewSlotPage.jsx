@@ -331,7 +331,7 @@ export default function NewSlotPage() {
             <div className="d-flex justify-content-end gap-3">
               <Button
                 type="button"
-                variant="outline-primary"
+                variant="outline-secondary"
                 disabled={submitting}
                 onClick={() => navigate(weekViewUrl(searchParams.get('date')))}
               >
