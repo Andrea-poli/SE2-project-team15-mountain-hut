@@ -4,7 +4,8 @@
 // the 48-hour window of PO issue #43), so the page never repeats that rule.
 // Two sections, "Upcoming" (not started yet, confirmed or cancelled) and "Past bookings" (already started).
 // The whole list is shown PAGE_SIZE bookings at a time, in the server's order.
-// After a change, ChangeBookingPage (FE2) comes back here with router state { bookingChanged: true }.
+// After a change, ChangeBookingPage (FE2) comes back here with router state { bookingChanged: true, bookingId }:
+// a message (focused) and the changed card highlighted; the state is cleared, so a refresh shows neither.
 import {
   Armchair,
   Ban,
@@ -64,7 +65,8 @@ function Requirements({ requirements }) {
   );
 }
 
-function BookingCard({ booking, past, itemRef }) {
+// `changed`: the booking just changed (MH-06 FE2): a highlight that fades, and a "Changed" label.
+function BookingCard({ booking, past, changed, itemRef }) {
   const { id, slot } = booking;
   const cancelled = booking.status === 'cancelled';
   const headingId = `booking-${id}-date`;
@@ -76,7 +78,7 @@ function BookingCard({ booking, past, itemRef }) {
     <li
       ref={itemRef}
       tabIndex={-1}
-      className={`card mh-booking${cancelled || past ? ' mh-booking-inactive' : ''}`}
+      className={`card mh-booking${cancelled || past ? ' mh-booking-inactive' : ''}${changed ? ' mh-booking-changed' : ''}`}
     >
       <div className="card-body d-flex flex-wrap align-items-end justify-content-between gap-3">
         <div className="flex-grow-1">
@@ -85,6 +87,12 @@ function BookingCard({ booking, past, itemRef }) {
               <CalendarDays aria-hidden="true" size={20} className="flex-shrink-0" />
               {formatDate(slot.date)}
             </h3>
+            {changed && (
+              <span className="mh-booking-label mh-booking-label-changed">
+                <Pencil aria-hidden="true" size={14} />
+                Changed
+              </span>
+            )}
             {cancelled ? (
               <span className="mh-booking-label mh-booking-label-cancelled">
                 <Ban aria-hidden="true" size={14} />
@@ -151,10 +159,25 @@ export default function MyBookingsPage() {
   const location = useLocation();
   const navigate = useNavigate();
   // Kept in the page: the router state is cleared below, so a reload does not show it again.
-  const [bookingChanged] = useState(() => location.state?.bookingChanged === true);
+  const [bookingChanged, setBookingChanged] = useState(() => location.state?.bookingChanged === true);
+  const [changedId] = useState(() => (location.state?.bookingChanged ? location.state.bookingId : null));
   const [result, setResult] = useState(null); // { bookings, loadedAt } or { error }
   const [shown, setShown] = useState(PAGE_SIZE);
   const itemRefs = useRef(new Map());
+  const changedRef = useRef(null);
+  const headingRef = useRef(null);
+
+  // Arriving after a change: the focus goes to the message, so screen readers read it.
+  // Only on arrival: closing the message must not run this again.
+  useEffect(() => {
+    if (changedRef.current) changedRef.current.focus();
+  }, []);
+
+  /** Closes "Booking changed"; the focus, which was on its close button, goes to the page heading. */
+  function closeMessage() {
+    setBookingChanged(false);
+    setTimeout(() => headingRef.current?.focus());
+  }
 
   useEffect(() => {
     if (location.state?.bookingChanged) {
@@ -214,6 +237,7 @@ export default function MyBookingsPage() {
                 key={booking.id}
                 booking={booking}
                 past={isPast}
+                changed={booking.id === changedId}
                 itemRef={(node) => {
                   if (node) itemRefs.current.set(booking.id, node);
                   else itemRefs.current.delete(booking.id);
@@ -268,11 +292,23 @@ export default function MyBookingsPage() {
   return (
     <>
       <title>My bookings – Mountain Hut</title>
-      <h1>My bookings</h1>
+      {/* tabIndex -1: the focus comes here when "Booking changed" is closed. */}
+      <h1 ref={headingRef} tabIndex={-1}>
+        My bookings
+      </h1>
       {bookingChanged && (
-        <Alert variant="success" role="status" className="d-flex align-items-center gap-2">
+        <Alert
+          ref={changedRef}
+          tabIndex={-1}
+          variant="success"
+          role="status"
+          dismissible
+          closeLabel="Close"
+          onClose={closeMessage}
+          className="d-flex align-items-center gap-2"
+        >
           <CircleCheck aria-hidden="true" size={20} className="flex-shrink-0" />
-          Booking changed
+          Booking changed. We sent you an email with the new details.
         </Alert>
       )}
       {content}

@@ -23,6 +23,33 @@
   color: var(--mh-danger);
 }
 
+/* "Changed" label of the booking just changed (MH-06 FE2): stays while the page is open. */
+.mh-booking-label-changed {
+  color: var(--mh-primary);
+}
+
+/* The booking just changed: a thicker green border (inset ring, so nothing moves) that fades out in about
+   4 seconds. Without motion it stays, then goes at once. */
+.mh-booking-changed {
+  animation: mh-booking-changed 4s ease-in forwards;
+}
+
+@keyframes mh-booking-changed {
+  0%,
+  60% {
+    box-shadow: inset 0 0 0 3px var(--mh-primary);
+  }
+  100% {
+    box-shadow: inset 0 0 0 3px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-booking-changed {
+    animation-timing-function: step-end;
+  }
+}
+
 /* A focused card (after "Show more") shows the focus outline of the app. */
 .mh-booking:focus-visible {
   outline: 3px solid var(--mh-focus-color);
