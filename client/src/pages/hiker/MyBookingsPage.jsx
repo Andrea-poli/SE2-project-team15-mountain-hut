@@ -167,11 +167,16 @@ export default function MyBookingsPage() {
   const changedRef = useRef(null);
   const headingRef = useRef(null);
 
-  // Arriving after a change: the focus goes to the message, so screen readers read it.
-  // Only on arrival: closing the message must not run this again.
+  // "Booking changed" appears only once the list has loaded (bookings or error), together with the highlighted
+  // card: while loading, Loading is already a status region, and two at once would both be announced.
+  const loaded = result !== null;
+  const showChanged = bookingChanged && loaded;
+
+  // Arriving after a change: when the message appears, the focus goes to it, so screen readers read it.
+  // Only then: closing the message must not run this again.
   useEffect(() => {
-    if (changedRef.current) changedRef.current.focus();
-  }, []);
+    if (loaded) changedRef.current?.focus();
+  }, [loaded]);
 
   /** Closes "Booking changed"; the focus, which was on its close button, goes to the page heading. */
   function closeMessage() {
@@ -296,7 +301,7 @@ export default function MyBookingsPage() {
       <h1 ref={headingRef} tabIndex={-1}>
         My bookings
       </h1>
-      {bookingChanged && (
+      {showChanged && (
         <Alert
           ref={changedRef}
           tabIndex={-1}
