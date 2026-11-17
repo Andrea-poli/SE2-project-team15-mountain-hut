@@ -202,7 +202,7 @@ function ChangeForm({ booking }) {
             )}
           </p>
           <div className="d-flex gap-3 ms-auto">
-            <Link to={routes.myBookings} className="btn btn-outline-primary d-inline-flex align-items-center gap-2">
+            <Link to={routes.myBookings} className="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
               <ArrowLeft aria-hidden="true" size={18} />
               Back
             </Link>
