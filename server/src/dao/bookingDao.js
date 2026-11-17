@@ -109,6 +109,50 @@ export async function findById(db, id) {
 }
 
 /**
+ * Changes a booking (MH-06) and returns it like findById. Call it inside withTransaction (transaction.js), after
+ * the checks of the service: everything is saved together or not at all. `createdAt` and `status` never change.
+ * @param {{ slotId: number, partySize: number,
+ *           tables?: { slotTableId: number, seats: number }[],
+ *           requirements?: { hasAllergies: boolean, description: string }[] }} change
+ *        tables: the new seats, replacing the old ones (absent: the seats stay as they are);
+ *        requirements: the new list, replacing the old one (absent: they stay as they are)
+ */
+export async function update(db, id, { slotId, partySize, tables, requirements }) {
+  await db.run('UPDATE bookings SET slot_id = ?, party_size = ? WHERE id = ?', [slotId, partySize, id]);
+  if (tables) {
+    await db.run('DELETE FROM booking_tables WHERE booking_id = ?', [id]);
+    for (const { slotTableId, seats } of tables) {
+      await db.run('INSERT INTO booking_tables (booking_id, slot_table_id, seats) VALUES (?, ?, ?)', [
+        id,
+        slotTableId,
+        seats,
+      ]);
+    }
+  }
+  if (requirements) {
+    await db.run('DELETE FROM booking_requirements WHERE booking_id = ?', [id]);
+    await saveRequirements(db, id, requirements);
+  }
+  return findById(db, id);
+}
+
+/**
+ * Every booking of a hiker (MH-06 "My bookings"), confirmed and cancelled, each like findById,
+ * ordered by slot date and start time (the service puts the upcoming ones first).
+ */
+export async function findByHiker(db, hikerId) {
+  const rows = await db.all(
+    `SELECT b.id FROM bookings b JOIN slots s ON s.id = b.slot_id
+     WHERE b.hiker_id = ?
+     ORDER BY s.date, s.start_time, b.id`,
+    [hikerId],
+  );
+  const bookings = [];
+  for (const { id } of rows) bookings.push(await findById(db, id));
+  return bookings;
+}
+
+/**
  * Saves the party requirements of a booking (MH-05), in the order of the list.
  * Call it inside the transaction that saves the booking (withTransaction, transaction.js):
  * the booking and its requirements are saved together or not at all.
