@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import PhoneInput from 'react-phone-number-input';
 import flags from 'react-phone-number-input/flags';
+import 'react-phone-number-input/style.css'; // as in RegisterPage: without it the flag fills the whole width
 import { searchHikers } from '../api/staff.js';
 import { hikerPanelFieldIds, hikerSummaryText } from '../utils/hikerPanel.js';
 import { countryLabels, examplePhone } from '../utils/phone.js';

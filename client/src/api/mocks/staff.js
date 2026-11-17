@@ -253,7 +253,9 @@ export async function createStaffBooking(body = {}) {
     tables: split.map(({ table, seats }) => ({ slotTableId: table.id, tableName: table.name, seats })),
     status: 'confirmed',
     createdAt: new Date().toISOString(),
-    requirements: requirements || [],
+    requirements: (requirements || []).map(({ hasAllergies, description }) => ({
+      hasAllergies, description: description.trim(),
+    })),
   };
   staffBookings.push(booking);
 

@@ -4,9 +4,8 @@
 // a new hiker, shown once, for the employee to give to the hiker (PO #36).
 // Server refusals where they belong: "Email already in use" on Email, "Hiker not found" on Search, seats,
 // already booked and started on Time; anything else above the form.
-// MH-05 FE1: the party requirements editor goes under the party size once merged; until then the booking is
-// sent with no requirements.
-import { useState } from 'react';
+// Party requirements (MH-05): the same editor and checks as the Book page.
+import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
@@ -17,6 +16,7 @@ import { Link } from 'react-router';
 import { createStaffBooking } from '../../api/staff.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import HikerPanel from '../../components/HikerPanel.jsx';
+import PartyRequirements, { PartyRequirementsTextDisplay } from '../../components/PartyRequirements.jsx';
 import SlotPicker from '../../components/SlotPicker.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
@@ -25,6 +25,7 @@ import { formatDate, formatTimeRange } from '../../utils/format.js';
 import { EMPTY_HIKER, hikerPanelFieldIds, hikerSummaryText, staffBookingHiker, validateHiker } from
   '../../utils/hikerPanel.js';
 import { slotPickerFieldIds, validateSlotPicker } from '../../utils/slotPicker.js';
+import { areRequirementsValid } from '../../utils/validation.js';
 
 const ID_PREFIX = 'staff-book';
 const EMPTY_SLOT = { date: '', slotId: null, partySize: '' };
@@ -43,6 +44,9 @@ function errorField(err, mode) {
 export default function StaffReservationPage() {
   const [hiker, setHiker] = useState(EMPTY_HIKER);
   const [slot, setSlot] = useState(EMPTY_SLOT);
+  const [requirements, setRequirements] = useState([]);
+  const [requirementSubmitAttempt, setRequirementSubmitAttempt] = useState(0);
+  const requirementsRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
   const fieldIds = { ...hikerPanelFieldIds(ID_PREFIX, hiker.mode), ...slotPickerFieldIds(ID_PREFIX) };
@@ -59,7 +63,14 @@ export default function StaffReservationPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (submitting || !checkOnSubmit({ hiker, slot })) return;
+    if (submitting) return;
+    const fieldsValid = checkOnSubmit({ hiker, slot });
+    const requirementsValid = areRequirementsValid(requirements);
+    setRequirementSubmitAttempt((attempt) => attempt + 1);
+    if (!fieldsValid || !requirementsValid) {
+      if (fieldsValid) requirementsRef.current?.focusFirstEmptyDescription();
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -68,7 +79,9 @@ export default function StaffReservationPage() {
           ...staffBookingHiker(hiker),
           slotId: slot.slotId,
           partySize: Number(slot.partySize),
-          requirements: [],
+          ...(requirements.length > 0 && {
+            requirements: requirements.map(({ hasAllergies, description }) => ({ hasAllergies, description })),
+          }),
         }),
       );
     } catch (err) {
@@ -87,6 +100,7 @@ export default function StaffReservationPage() {
     setBooking(null);
     setHiker(EMPTY_HIKER);
     setSlot(EMPTY_SLOT);
+    setRequirements([]);
     setErrors({});
   }
 
@@ -121,6 +135,12 @@ export default function StaffReservationPage() {
                     untilStart
                   />
                 </fieldset>
+                <PartyRequirements
+                  ref={requirementsRef}
+                  value={requirements}
+                  onChange={setRequirements}
+                  submitAttempt={requirementSubmitAttempt}
+                />
                 <Button type="submit" className="w-100 mt-2" disabled={submitting}>
                   {submitting ? 'Booking…' : 'Confirm reservation'}
                 </Button>
@@ -160,6 +180,7 @@ function Confirmation({ booking, onStartOver }) {
           <dt className="col-sm-4">Seating</dt>
           <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
         </dl>
+        <PartyRequirementsTextDisplay requirements={booking.requirements} />
         {generatedPassword && <PasswordBox password={generatedPassword} />}
         <div className="d-flex flex-wrap gap-2">
           <Button type="button" onClick={onStartOver}>
