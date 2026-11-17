@@ -1,4 +1,4 @@
-// /api/auth – register, login, logout, me (U5, openapi.yaml tag auth).
+// /api/auth – register, login, password change, logout, me (openapi.yaml tag auth).
 // The session keeps only the user id; req.user is loaded by loadUser (middleware/auth.js).
 import { Router } from 'express';
 import { requireLogin } from '../middleware/auth.js';
@@ -19,6 +19,11 @@ router.post('/login', async (req, res) => {
   const user = await authService.login(req.body);
   await logIn(req, user);
   res.json(user);
+});
+
+// PUT /api/auth/password → 200 updated User | 400 invalid new password | 401 wrong current password
+router.put('/password', requireLogin, async (req, res) => {
+  res.json(await authService.changePassword(req.user, req.body));
 });
 
 // POST /api/auth/logout → 204, also with no active session (idempotent)

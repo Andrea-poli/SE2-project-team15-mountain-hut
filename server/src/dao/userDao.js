@@ -2,11 +2,11 @@
 // The password hash is returned only by findCredentialsByEmail, for the login of U5:
 // every other function returns the user as the API shows it, without the hash.
 
-const USER_COLUMNS = 'id, email, first_name, last_name, phone, role';
+const USER_COLUMNS = 'id, email, first_name, last_name, phone, role, must_change_password';
 
 function userFromRow(row) {
   if (!row) return null;
-  return {
+  const user = {
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
@@ -14,6 +14,8 @@ function userFromRow(row) {
     phone: row.phone,
     role: row.role,
   };
+  if (row.must_change_password === 1) user.mustChangePassword = true;
+  return user;
 }
 
 /** @returns {Promise<object | null>} { id, firstName, lastName, email, phone, role } or null */
@@ -76,16 +78,37 @@ export async function findCredentialsByEmail(db, email) {
  * checks findByEmail first for its 409, and treats that message only as a safety net for two requests at once.
  * @param {{ email?: string | null, passwordHash?: string | null, firstName: string, lastName?: string | null,
  *           phone?: string | null, notes?: string | null, emergencyContact?: string | null,
- *           role: 'hiker' | 'employee' | 'warden' }} user
+ *           mustChangePassword?: boolean, role: 'hiker' | 'employee' | 'warden' }} user
  */
 export async function create(
   db,
-  { email = null, passwordHash = null, firstName, lastName = null, phone = null, notes = null, emergencyContact = null, role },
+  {
+    email = null,
+    passwordHash = null,
+    firstName,
+    lastName = null,
+    phone = null,
+    notes = null,
+    emergencyContact = null,
+    mustChangePassword = false,
+    role,
+  },
 ) {
   const { lastID } = await db.run(
-    `INSERT INTO users (email, password_hash, first_name, last_name, phone, notes, emergency_contact, role)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [email, passwordHash, firstName, lastName, phone, notes, emergencyContact, role],
+    `INSERT INTO users (
+       email, password_hash, first_name, last_name, phone, notes, emergency_contact, role, must_change_password
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [email, passwordHash, firstName, lastName, phone, notes, emergencyContact, role, mustChangePassword ? 1 : 0],
   );
   return findById(db, lastID);
+}
+
+/** Replaces the password only if it has not changed since it was checked; also clears the forced-change flag. */
+export async function updatePassword(db, id, expectedPasswordHash, passwordHash) {
+  const { changes } = await db.run(
+    `UPDATE users SET password_hash = ?, must_change_password = 0
+     WHERE id = ? AND password_hash = ?`,
+    [passwordHash, id, expectedPasswordHash],
+  );
+  return changes > 0;
 }

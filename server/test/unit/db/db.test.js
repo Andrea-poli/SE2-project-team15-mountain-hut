@@ -205,9 +205,14 @@ describe('schema migrations', () => {
 
     upgraded = await openDatabase(versionOnePath);
 
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
     await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
-    await expect(rowsOfVersionOne((sql) => upgraded.all(sql))).resolves.toEqual(before);
+    const after = await rowsOfVersionOne((sql) => upgraded.all(sql));
+    after.users = after.users.map(({ must_change_password: _mustChangePassword, ...user }) => user);
+    expect(after).toEqual(before);
+    await expect(upgraded.all('SELECT must_change_password FROM users')).resolves.toEqual([
+      { must_change_password: 0 },
+    ]);
     expect(before.bookings).toHaveLength(2);
     await expect(upgraded.all('SELECT * FROM booking_requirements')).resolves.toEqual([]);
   });

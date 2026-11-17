@@ -25,6 +25,9 @@ const MIGRATIONS = [
      description   TEXT NOT NULL CHECK (trim(description) <> '')
    );
    CREATE INDEX booking_requirements_by_booking ON booking_requirements (booking_id, id);`,
+  // Version 3 (MH-07): staff-created hikers must change their generated password after login.
+  `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0
+     CHECK (must_change_password IN (0, 1));`,
 ];
 
 export const SCHEMA_VERSION = 1 + MIGRATIONS.length;
