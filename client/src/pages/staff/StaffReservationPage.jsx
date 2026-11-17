@@ -14,14 +14,13 @@ import Row from 'react-bootstrap/Row';
 import { CalendarCheck, KeyRound } from 'lucide-react';
 import { Link } from 'react-router';
 import { createStaffBooking } from '../../api/staff.js';
+import BookingDetails from '../../components/BookingDetails.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import HikerPanel from '../../components/HikerPanel.jsx';
 import PartyRequirements, { PartyRequirementsTextDisplay } from '../../components/PartyRequirements.jsx';
 import SlotPicker from '../../components/SlotPicker.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
-import { peopleText, seatSplitText } from '../../utils/booking.js';
-import { formatDate, formatTimeRange } from '../../utils/format.js';
 import { EMPTY_HIKER, hikerPanelFieldIds, hikerSummaryText, staffBookingHiker, validateHiker } from
   '../../utils/hikerPanel.js';
 import { slotPickerFieldIds, validateSlotPicker } from '../../utils/slotPicker.js';
@@ -154,7 +153,7 @@ export default function StaffReservationPage() {
 }
 
 function Confirmation({ booking, onStartOver }) {
-  const { hiker, slot, generatedPassword } = booking;
+  const { hiker, generatedPassword } = booking;
   const name = [hiker.firstName, hiker.lastName].filter(Boolean).join(' ');
   return (
     <Card>
@@ -165,21 +164,10 @@ function Confirmation({ booking, onStartOver }) {
           <h1 className="mb-0">Reservation confirmed</h1>
         </div>
         <p role="status">The table is booked for {name}.</p>
-        <dl className="row mb-3">
+        <BookingDetails booking={booking} className="row mb-3">
           <dt className="col-sm-4">Hiker</dt>
           <dd className="col-sm-8">{hikerSummaryText(hiker)}</dd>
-          <dt className="col-sm-4">Date</dt>
-          <dd className="col-sm-8">{formatDate(slot.date)}</dd>
-          <dt className="col-sm-4">Time</dt>
-          <dd className="col-sm-8">
-            {slot.label ? `${slot.label}, ` : ''}
-            {formatTimeRange(slot.startTime, slot.endTime)}
-          </dd>
-          <dt className="col-sm-4">Party</dt>
-          <dd className="col-sm-8">{peopleText(booking.partySize)}</dd>
-          <dt className="col-sm-4">Seating</dt>
-          <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
-        </dl>
+        </BookingDetails>
         <PartyRequirementsTextDisplay requirements={booking.requirements} />
         {generatedPassword && <PasswordBox password={generatedPassword} />}
         <div className="d-flex flex-wrap gap-2">

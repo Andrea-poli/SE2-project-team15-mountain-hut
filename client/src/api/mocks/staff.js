@@ -3,6 +3,7 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { pickerSlotState } from '../../utils/slotPicker.js';
 import { ApiError } from '../client.js';
+import { TABLES, allocate, currentUser, dateOfSlot } from './bookings.js';
 import { listPublicSlots } from './publicSlots.js';
 
 const DELAY_MS = 300;
@@ -44,37 +45,10 @@ let nextHikerId = hikers.length + 1;
 const staffBookings = [];
 let nextBookingId = 1;
 
-// Every mock slot has these tables (like the seed): 4 + 4 + 6 = 14 seats.
-const TABLES = [
-  { id: 1, name: 'T1', seats: 4 },
-  { id: 2, name: 'T2', seats: 4 },
-  { id: 3, name: 'T3', seats: 6 },
-];
-
-/** Logged-in user (from auth.js mock) */
-function currentUser() {
-  try {
-    return JSON.parse(sessionStorage.getItem('mh-mock-user'));
-  } catch {
-    return null;
-  }
-}
-
-/** Date of a slot (slotId is YYYYMMDD * 10 + turn) */
-function dateOfSlot(slotId) {
-  const day = Math.floor(slotId / 10);
-  const text = String(day);
-  return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
-}
-
-/** Generate a random password (same format as real server) */
+/** A random 12-character password, like the server's (crypto, not Math.random: it is a password). */
 function generatePassword() {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let pwd = '';
-  for (let i = 0; i < 12; i++) {
-    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pwd;
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint32Array(12)), (n) => chars[n % chars.length]).join('');
 }
 
 /**
@@ -112,24 +86,6 @@ export async function searchHikers(q) {
       return a.firstName.localeCompare(b.firstName);
     })
     .slice(0, 20);
-}
-
-/**
- * Allocate party to tables (same logic as bookings mock).
- */
-function allocate(free, partySize) {
-  const single = free.filter((t) => t.free >= partySize).sort((a, b) => a.free - b.free)[0];
-  if (single) return [{ table: single, seats: partySize }];
-  const result = [];
-  let left = partySize;
-  for (const table of [...free].sort((a, b) => b.free - a.free)) {
-    if (left === 0) break;
-    if (table.free === 0) continue;
-    const seats = Math.min(table.free, left);
-    result.push({ table, seats });
-    left -= seats;
-  }
-  return left === 0 ? result : null;
 }
 
 /**
