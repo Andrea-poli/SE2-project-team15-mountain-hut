@@ -2,11 +2,12 @@
 // (like the page header); POST /api/slots/copy-week copies every slot of the shown week (weekStart, a Monday),
 // with its tables, into it. Past weeks cannot be chosen and the shown week is skipped in both directions.
 // The copy replaces the slots of the target week that have not started (PO, issue #45): when the chosen week has
-// some, a warning says so. If one of them is booked the server answers 409, shown here; the dialog stays open.
+// some, a warning says so. If one of them is booked the server answers 409, shown in place of that warning;
+// the dialog stays open and remembers that week, so coming back to it shows the message again without a request.
 // The page mounts the dialog only while it is open, so it starts fresh each time; the picker reuses the
 // mh-week-navigation / mh-week-range classes of SlotsWeekPage.css (loaded by that page).
 // onCopied(result, targetWeekIso) receives { created, replaced, skipped } and the Monday ('YYYY-MM-DD') of the target week.
-import { ChevronLeft, ChevronRight, Copy, TriangleAlert } from 'lucide-react';
+import { Ban, CalendarDays, ChevronLeft, ChevronRight, Copy, Info, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
@@ -35,6 +36,12 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const errorRef = useRef(null);
+  // Mondays ('YYYY-MM-DD') of the weeks that answered 409 while the dialog is open: they are not asked again.
+  const [bookedWeeks, setBookedWeeks] = useState(() => new Set());
+  const bookedRef = useRef(null);
+  // False from a submit until the focus leaves the 409 message, so that message is not announced twice
+  // (once by the live area, once by the focus). It is live again before the user can change week.
+  const [messageLive, setMessageLive] = useState(true);
   // Slots of the target week that the copy would replace, with the week they belong to.
   const [targetSlots, setTargetSlots] = useState({ week: null, count: 0 });
   const targetIso = toLocalIsoDate(target);
@@ -55,6 +62,7 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
   }, [target, targetIso]);
 
   const replacedCount = targetSlots.week === targetIso ? targetSlots.count : 0;
+  const targetBooked = bookedWeeks.has(targetIso);
 
   // No past weeks: ‹ is disabled on the current week, or when the only earlier choice would be a past week.
   const previousTarget = stepWeek(target, -7, sourceIso);
@@ -62,14 +70,24 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
 
   async function submit(event) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || targetBooked) return;
     setSaving(true);
     setSubmitError(null);
+    // Silence the message area before a possible 409 fills it: the focus will read that message.
+    setMessageLive(false);
     try {
       const result = await copyWeek(sourceIso, targetIso);
       onCopied(result, targetIso);
     } catch (error) {
       setSaving(false);
+      // A 409 (the target week has bookings) is shown under the week picker; "Copy slots" becomes disabled,
+      // so the focus moves to the message.
+      if (error.status === 409) {
+        setBookedWeeks((weeks) => new Set(weeks).add(targetIso));
+        setTimeout(() => bookedRef.current?.focus());
+        return;
+      }
+      setMessageLive(true);
       setSubmitError(error.message);
       // After the render that shows the error, move the focus to it so screen readers read it.
       setTimeout(() => errorRef.current?.focus());
@@ -103,7 +121,11 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
             >
               <ChevronLeft aria-hidden="true" size={20} />
             </Button>
-            <p className="mh-week-range mb-0 text-center fw-semibold" aria-live="polite">
+            <p
+              className="mh-week-range d-flex align-items-center justify-content-center gap-2 mb-0 text-center fw-semibold"
+              aria-live="polite"
+            >
+              <CalendarDays aria-hidden="true" size={18} className="flex-shrink-0" />
               {formatWeekRange(target, addDays(target, 6))}
             </p>
             <Button
@@ -119,18 +141,33 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
               <ChevronRight aria-hidden="true" size={20} />
             </Button>
           </div>
-          <div className="mb-3" aria-live="polite">
-            {replacedCount > 0 && (
-              <p className="d-flex align-items-start gap-2 mb-0 text-warning-emphasis">
-                <TriangleAlert aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
-                {replacedCount === 1
-                  ? 'This week has 1 slot: it will be replaced.'
-                  : `This week has ${replacedCount} slots: they will be replaced.`}
+          {/* One message at a time: the 409 takes the place of the warning. */}
+          <div className="mb-3" aria-live={messageLive ? 'polite' : 'off'}>
+            {targetBooked ? (
+              <p
+                className="d-flex align-items-start gap-2 mb-0 text-danger"
+                tabIndex={-1}
+                ref={bookedRef}
+                onBlur={() => setMessageLive(true)}
+              >
+                <Ban aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+                This week has bookings: choose another week.
               </p>
+            ) : (
+              replacedCount > 0 && (
+                <p className="d-flex align-items-start gap-2 mb-0 text-warning-emphasis">
+                  <TriangleAlert aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+                  {replacedCount === 1
+                    ? 'This week has 1 slot: it will be replaced.'
+                    : `This week has ${replacedCount} slots: they will be replaced.`}
+                </p>
+              )
             )}
           </div>
-          <p className="small text-body-secondary mb-0">
-            Bookings are not copied. Slots in the past or overlapping a slot already under way are skipped.
+          <p className="d-flex align-items-start gap-2 small text-body-secondary mb-0">
+            <Info aria-hidden="true" size={18} className="flex-shrink-0" />
+            Bookings are not copied. Slots that would fall in the past, or at the same time as a slot that has already
+            started, are skipped.
           </p>
         </Modal.Body>
         <Modal.Footer>
@@ -141,7 +178,7 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
             type="submit"
             variant="primary"
             className="d-inline-flex align-items-center gap-1"
-            disabled={saving}
+            disabled={saving || targetBooked}
           >
             <Copy aria-hidden="true" size={18} />
             {saving ? 'Copying…' : 'Copy slots'}

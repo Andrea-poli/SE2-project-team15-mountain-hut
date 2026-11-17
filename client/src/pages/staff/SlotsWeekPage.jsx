@@ -48,7 +48,11 @@ function copySummary({ created, replaced, skipped }) {
   if (created.length === 0) {
     const reasons = [
       overlap > 0 &&
-        `${countOf(overlap, 'slot overlaps a slot already under way', 'slots overlap slots already under way')}`,
+        countOf(
+          overlap,
+          'slot is at the same time as a slot that has already started',
+          'slots are at the same time as slots that have already started',
+        ),
       past > 0 && `${countOf(past, 'slot is already past', 'slots are already past')}`,
     ].filter(Boolean);
     return reasons.length > 0
@@ -253,7 +257,7 @@ export default function SlotsWeekPage() {
                     {shownCopyResult.skipped.map((slot) => (
                       <li key={`${slot.date}-${slot.startTime}-${slot.endTime}`}>
                         {formatDate(slot.date)}, {formatTimeRange(slot.startTime, slot.endTime)} {slot.label} –{' '}
-                        {slot.reason === 'past' ? 'already past' : 'overlaps a slot already under way'}
+                        {slot.reason === 'past' ? 'already past' : 'a slot has already started at that time'}
                       </li>
                     ))}
                   </ul>
