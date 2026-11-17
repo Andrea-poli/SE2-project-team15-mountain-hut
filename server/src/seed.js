@@ -15,7 +15,9 @@
 //   requirements with allergies (MH-05, the PO example): luca · without allergies: anna (she rebooked
 //   after cancelling, MH-08) · a temporary hiker booked by staff, no email, cannot log in (MH-07): giorgio.
 // MH-06 48 h (hiker@example.com): the dinner in 3 days can be changed, tomorrow's dinner cannot.
-// MH-09: every week has its slots, so any week can be copied (e.g. this week onto next week).
+// MH-09: copy this week onto the week after next, which has slots and never bookings, so its schedule is
+// replaced. A week with bookings still to come is refused (PO #45): next week too, when the data is loaded
+// Fri–Sun (the bookings of days 1–3 reach into it).
 // The E2E specs rely on some days: keep tomorrow's dinner at 12 free seats (MH-04), today's and day 2's
 // slots as they are (MH-02), and days 4–14 without bookings (MH-01). Run npm run test:e2e after any change.
 import * as bookingDao from './dao/bookingDao.js';
@@ -37,7 +39,7 @@ export const USERS = [
   { key: 'anna', firstName: 'Anna', lastName: 'Bianchi', email: 'anna.bianchi@example.com', password: 'hikerpass', phone: '+393471234567', role: 'hiker' },
   { key: 'luca', firstName: 'Luca', lastName: 'Verdi', email: 'luca.verdi@example.com', password: 'hikerpass', phone: '+41791234567', role: 'hiker' },
   // MH-07: temporary hiker (phone booking only, cannot log in: no email, no password).
-  { key: 'giorgio', firstName: 'Giorgio', lastName: 'Montano', phone: '+393****5678', role: 'hiker' },
+  { key: 'giorgio', firstName: 'Giorgio', lastName: 'Montano', phone: '+393405556789', role: 'hiker' },
 ];
 
 // Lunch and dinner have different tables on purpose: there is no fixed table set (MH-02).

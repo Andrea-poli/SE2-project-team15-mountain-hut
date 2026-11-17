@@ -51,7 +51,7 @@ Demo cases, ready to show:
 | A temporary hiker booked by staff (no email, cannot log in) | the lunch in 3 days: Giorgio Montano |
 | A cancelled booking, then booked again | the lunch in 3 days: Anna Bianchi |
 | Change allowed / not allowed (48 h before the meal) | `hiker@example.com`: the dinner in 3 days / tomorrow's dinner |
-| A week to copy | any week: every day has its slots |
+| Copy a week (MH-09) | this week onto the week after next (it has slots and no bookings: its schedule is replaced); onto a week with bookings still to come it is refused, e.g. next week when the data is loaded Fri–Sun |
 
 | Role | Email | Password |
 |---|---|---|
