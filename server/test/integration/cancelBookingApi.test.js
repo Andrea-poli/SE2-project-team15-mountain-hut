@@ -54,7 +54,7 @@ async function createUser(role) {
     passwordHash: await hashPassword(PASSWORD),
     firstName: role === 'hiker' ? 'Hannah' : 'Eric',
     lastName: 'Tester',
-    phone: '+393****4567',
+    phone: '+393334445566',
     role,
   });
   return { ...user, email };
