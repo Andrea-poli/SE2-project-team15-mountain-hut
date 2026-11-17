@@ -1,0 +1,30 @@
+/* MH-06 FE1 – My bookings. Colours from theme.css. */
+
+/* Cancelled and past bookings: dimmed, with muted text (--mh-muted on this background ≥ 4.5:1). */
+.mh-booking-inactive {
+  --bs-card-bg: color-mix(in srgb, var(--mh-bg), var(--mh-surface) 55%);
+  border-style: dashed;
+  color: var(--mh-muted);
+}
+
+/* "Cancelled" / "Past" next to the date, like the "Past" label of the staff slots. */
+.mh-booking-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border: var(--bs-border-width) solid currentColor;
+  border-radius: var(--bs-border-radius-pill);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.mh-booking-label-cancelled {
+  color: var(--mh-danger);
+}
+
+/* A focused card (after "Show more") shows the focus outline of the app. */
+.mh-booking:focus-visible {
+  outline: 3px solid var(--mh-focus-color);
+  outline-offset: 2px;
+}
