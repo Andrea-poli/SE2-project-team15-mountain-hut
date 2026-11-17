@@ -15,6 +15,7 @@ import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
 import { peopleText, seatSplitText } from '../../utils/booking.js';
 import { formatDate, formatTimeRange } from '../../utils/format.js';
+import { PartyRequirementsTextDisplay } from '../../components/PartyRequirements.jsx';
 
 /** The booking of `id`: { booking } or { error }, once the answer for that id has arrived; else null. */
 function useBooking(id) {
@@ -80,6 +81,7 @@ export default function BookingConfirmedPage() {
               <dt className="col-sm-4">Seating</dt>
               <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
             </dl>
+            <PartyRequirementsTextDisplay requirements={booking.requirements ?? []} />
             {user?.email && (
               <p className="d-flex align-items-start gap-2 mt-3 mb-0 p-3 rounded-3 border border-success-subtle bg-success-subtle">
                 <Mail aria-hidden="true" size={20} className="text-success flex-shrink-0 mt-1" />
