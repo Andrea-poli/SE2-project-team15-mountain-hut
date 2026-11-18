@@ -2,18 +2,16 @@
 // On success the server logs the user out everywhere; the page then asks to log in with the new password.
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
-import Card from 'react-bootstrap/Card';
-import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
-import Row from 'react-bootstrap/Row';
 import { Link, useSearchParams } from 'react-router';
 import { confirmPasswordReset } from '../../api/auth.js';
 import { useAuth } from '../../auth/useAuth.js';
+import AuthCard from '../../components/AuthCard.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
-import PasswordField from '../../components/PasswordField.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
-import { NEW_PASSWORD_HELP, newPasswordErrors } from '../../utils/password.js';
+import { newPasswordErrors } from '../../utils/password.js';
+import NewPasswordFields from './NewPasswordFields.jsx';
 
 const FIELD_IDS = { newPassword: 'reset-new-password', confirmPassword: 'reset-confirm-password' };
 
@@ -54,60 +52,36 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <Row className="justify-content-center">
-      <Col md={8} lg={6}>
-        <title>Choose a new password – Mountain Hut</title>
-        <Card>
-          <Card.Body className="p-4">
-            <h1 className="mb-2">Choose a new password</h1>
-            {state === 'done' && (
-              <>
-                <p role="status">Your password has been changed. Log in with the new password.</p>
-                <Link to={routes.login}>Log in</Link>
-              </>
-            )}
-            {state === 'badLink' && (
-              <>
-                <ErrorMessage message={badLinkMessage || 'This link is not valid: ask for a new one.'} />
-                <Link to={routes.forgotPassword}>Ask for a new link</Link>
-              </>
-            )}
-            {state === 'form' && (
-              <>
-                <ErrorMessage message={generalError} ref={generalRef} />
-                <Form noValidate onSubmit={handleSubmit}>
-                  <PasswordField
-                    id={FIELD_IDS.newPassword}
-                    label="New password"
-                    toggleLabel="Show new password"
-                    autoComplete="new-password"
-                    help={NEW_PASSWORD_HELP}
-                    value={values.newPassword}
-                    onChange={change('newPassword')}
-                    onBlur={recheckField('newPassword')}
-                    required
-                    error={errors.newPassword}
-                  />
-                  <PasswordField
-                    id={FIELD_IDS.confirmPassword}
-                    label="Confirm new password"
-                    toggleLabel="Show confirmed password"
-                    autoComplete="new-password"
-                    value={values.confirmPassword}
-                    onChange={change('confirmPassword')}
-                    onBlur={recheckField('confirmPassword')}
-                    required
-                    error={errors.confirmPassword}
-                  />
-                  <Button type="submit" className="w-100 mt-2" disabled={submitting}>
-                    {submitting ? 'Saving…' : 'Save the new password'}
-                  </Button>
-                </Form>
-              </>
-            )}
-          </Card.Body>
-        </Card>
-      </Col>
-    </Row>
+    <AuthCard title="Choose a new password – Mountain Hut" heading="Choose a new password">
+      {state === 'done' && (
+        <>
+          <p role="status">Your password has been changed. Log in with the new password.</p>
+          <Link to={routes.login}>Log in</Link>
+        </>
+      )}
+      {state === 'badLink' && (
+        <>
+          <ErrorMessage message={badLinkMessage || 'This link is not valid: ask for a new one.'} />
+          <Link to={routes.forgotPassword}>Ask for a new link</Link>
+        </>
+      )}
+      {state === 'form' && (
+        <>
+          <ErrorMessage message={generalError} ref={generalRef} />
+          <Form noValidate onSubmit={handleSubmit}>
+            <NewPasswordFields
+              fieldIds={FIELD_IDS}
+              values={values}
+              errors={errors}
+              onFieldChange={change}
+              onFieldBlur={recheckField}
+            />
+            <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save the new password'}
+            </Button>
+          </Form>
+        </>
+      )}
+    </AuthCard>
   );
 }

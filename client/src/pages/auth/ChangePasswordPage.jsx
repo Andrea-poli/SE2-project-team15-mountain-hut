@@ -3,18 +3,17 @@
 // (PO #36: "they will be forced to change the password on their next login"). PUT /api/auth/password.
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
-import Card from 'react-bootstrap/Card';
-import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
-import Row from 'react-bootstrap/Row';
 import { Navigate } from 'react-router';
 import { homeFor } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
+import AuthCard from '../../components/AuthCard.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import PasswordField from '../../components/PasswordField.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
-import { NEW_PASSWORD_HELP, newPasswordErrors } from '../../utils/password.js';
+import { newPasswordErrors } from '../../utils/password.js';
 import { isBlank } from '../../utils/validation.js';
+import NewPasswordFields from './NewPasswordFields.jsx';
 
 const FIELD_IDS = {
   currentPassword: 'change-current-password',
@@ -65,62 +64,38 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <Row className="justify-content-center">
-      <Col md={8} lg={6}>
-        <title>Change password – Mountain Hut</title>
-        <Card>
-          <Card.Body className="p-4">
-            <h1 className="mb-2">Change password</h1>
-            {forced ? (
-              <p className="mb-4" role="status">
-                Your password was created by the hut staff. Choose your own password to continue.
-              </p>
-            ) : (
-              <p className="mb-4">Choose a new password for your account.</p>
-            )}
-            <ErrorMessage message={generalError} ref={generalRef} />
-            <Form noValidate onSubmit={handleSubmit}>
-              <PasswordField
-                id={FIELD_IDS.currentPassword}
-                label={forced ? 'Password you were given' : 'Current password'}
-                toggleLabel="Show current password"
-                autoComplete="current-password"
-                value={values.currentPassword}
-                onChange={change('currentPassword')}
-                onBlur={recheckField('currentPassword')}
-                required
-                error={errors.currentPassword}
-              />
-              <PasswordField
-                id={FIELD_IDS.newPassword}
-                label="New password"
-                toggleLabel="Show new password"
-                autoComplete="new-password"
-                help={NEW_PASSWORD_HELP}
-                value={values.newPassword}
-                onChange={change('newPassword')}
-                onBlur={recheckField('newPassword')}
-                required
-                error={errors.newPassword}
-              />
-              <PasswordField
-                id={FIELD_IDS.confirmPassword}
-                label="Confirm new password"
-                toggleLabel="Show confirmed password"
-                autoComplete="new-password"
-                value={values.confirmPassword}
-                onChange={change('confirmPassword')}
-                onBlur={recheckField('confirmPassword')}
-                required
-                error={errors.confirmPassword}
-              />
-              <Button type="submit" className="w-100 mt-2" disabled={submitting}>
-                {submitting ? 'Saving…' : 'Change password'}
-              </Button>
-            </Form>
-          </Card.Body>
-        </Card>
-      </Col>
-    </Row>
+    <AuthCard title="Change password – Mountain Hut" heading="Change password">
+      {forced ? (
+        <p className="mb-4" role="status">
+          Your password was created by the hut staff. Choose your own password to continue.
+        </p>
+      ) : (
+        <p className="mb-4">Choose a new password for your account.</p>
+      )}
+      <ErrorMessage message={generalError} ref={generalRef} />
+      <Form noValidate onSubmit={handleSubmit}>
+        <PasswordField
+          id={FIELD_IDS.currentPassword}
+          label={forced ? 'Password you were given' : 'Current password'}
+          toggleLabel="Show current password"
+          autoComplete="current-password"
+          value={values.currentPassword}
+          onChange={change('currentPassword')}
+          onBlur={recheckField('currentPassword')}
+          required
+          error={errors.currentPassword}
+        />
+        <NewPasswordFields
+          fieldIds={FIELD_IDS}
+          values={values}
+          errors={errors}
+          onFieldChange={change}
+          onFieldBlur={recheckField}
+        />
+        <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+          {submitting ? 'Saving…' : 'Change password'}
+        </Button>
+      </Form>
+    </AuthCard>
   );
 }
