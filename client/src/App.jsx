@@ -7,6 +7,9 @@ import RequireRole from './auth/RequireRole.jsx';
 import Loading from './components/Loading.jsx';
 import PageLayout from './components/PageLayout.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import ChangePasswordPage from './pages/auth/ChangePasswordPage.jsx';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
 import BookingConfirmedPage from './pages/hiker/BookingConfirmedPage.jsx';
 import BookPage from './pages/hiker/BookPage.jsx';
 import CheckAvailabilityPage from './pages/public/CheckAvailabilityPage.jsx';
@@ -38,6 +41,13 @@ export default function App() {
               </Suspense>
             }
           />
+
+          {/* MH-07: forgotten password (public) and password change (any logged-in user) */}
+          <Route path={routes.forgotPassword} element={<ForgotPasswordPage />} />
+          <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
+          <Route element={<RequireRole roles={['hiker', 'employee']} />}>
+            <Route path={routes.changePassword} element={<ChangePasswordPage />} />
+          </Route>
 
           {/* Hiker */}
           <Route element={<RequireRole roles={pageRoles[routes.book]} />}>

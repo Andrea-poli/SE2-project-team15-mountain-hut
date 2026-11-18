@@ -1,11 +1,16 @@
 // Frame of every page: skip link, navbar and main area. Used as the root layout route,
 // so the navbar stays mounted while the pages change in <Outlet />.
 import Container from 'react-bootstrap/Container';
-import { Outlet, useLocation } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/useAuth.js';
 import AppNavbar from './AppNavbar.jsx';
 import ErrorBoundary from './ErrorBoundary.jsx';
 import ErrorMessage from './ErrorMessage.jsx';
+import { routes } from '../routes.js';
+
+// MH-07: a hiker with a generated password (mustChangePassword) is sent to Change password from every page,
+// until they choose their own (PO #36). The reset pages stay open, so a forgotten password can still be reset.
+const OPEN_WHILE_CHANGE_NEEDED = [routes.changePassword, routes.forgotPassword, routes.resetPassword];
 
 // Moves the focus itself instead of following #main: the URL hash stays free for the router.
 function skipToMain(event) {
@@ -14,8 +19,11 @@ function skipToMain(event) {
 }
 
 export default function PageLayout() {
-  const { error } = useAuth();
+  const { user, error } = useAuth();
   const { pathname } = useLocation();
+  if (user?.mustChangePassword && !OPEN_WHILE_CHANGE_NEEDED.includes(pathname)) {
+    return <Navigate replace to={routes.changePassword} />;
+  }
 
   return (
     <>

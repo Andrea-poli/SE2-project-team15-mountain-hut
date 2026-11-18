@@ -58,9 +58,19 @@ export function AuthProvider({ children }) {
     setError(null);
   }, []);
 
+  // MH-07: after the change the server returns the user with mustChangePassword false (the guard lets go).
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    const updated = await authApi.changePassword(currentPassword, newPassword);
+    setUser(updated);
+    return updated;
+  }, []);
+
+  // MH-07: a password reset ends every session of that user on the server; forget it here too.
+  const forgetUser = useCallback(() => setUser(null), []);
+
   const value = useMemo(
-    () => ({ user, loading, error, login, register, logout }),
-    [user, loading, error, login, register, logout],
+    () => ({ user, loading, error, login, register, logout, changePassword, forgetUser }),
+    [user, loading, error, login, register, logout, changePassword, forgetUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,6 +10,9 @@ export const routes = {
   bookingConfirmed: '/bookings/:id',
   staffSlots: '/staff/slots',
   newSlot: '/staff/slots/new',
+  changePassword: '/change-password', // MH-07: forced after a generated password, open to every logged-in user
+  forgotPassword: '/forgot-password', // MH-07: ask for a reset link by email
+  resetPassword: '/reset-password', // MH-07: the page of the link (?token=…)
   staffNewBooking: '/staff/bookings/new', // MH-07 FE2
 };
 
