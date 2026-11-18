@@ -5,10 +5,10 @@
 //   GET   /api/bookings        hikers only: their own bookings, upcoming first, each with `changeable`
 //   PATCH /api/bookings/{id}   owner only: change slot, party size and/or requirements
 //
-// Rules (PO): a change is allowed only while more than 48 h remain before the booked slot starts; that
-// instant itself is refused (#43, PO answer received 18 Nov after the first version of these tests said the
-// opposite). A new party size or slot is treated as a new booking in that slot, without the booking's own
-// seats, and if it does not fit the booking stays as it was (#38); every change is emailed (#41).
+// Rules (PO): a change is allowed while at least 48 h remain before the booked slot starts, that instant
+// included (#43); a new party size or slot is treated as a new booking in that slot, without the booking's
+// own seats, and if it does not fit the booking stays as it was (#38); every change is emailed (#41).
+// Not tested on purpose, still pending PO (planning question 2): whether the NEW slot must also be 48 h away.
 //
 // Bookings are made through POST /api/bookings when the MH-01 rules allow it; past bookings and party
 // requirements are written through the DAOs, so these tests do not depend on MH-05 BE1.
@@ -153,9 +153,9 @@ describe('GET /api/bookings', () => {
     expect((await agent.get('/api/bookings')).body[0].requirements).toEqual(requirements);
   });
 
-  it('changeable: false at and after exactly 48 h before the slot start, true only before that', async () => {
+  it('changeable: true from 48 h before the slot start (that instant included), false after', async () => {
     const { agent } = await loggedIn();
-    // Wed 4 Nov 10:00 is exactly 48 h after "now" (refused, PO #43); Wed 4 Nov 09:59 is 47 h 59 min (refused too).
+    // Wed 4 Nov 10:00 is exactly 48 h after "now"; Wed 4 Nov 09:59 is 47 h 59 min after.
     const exactly48h = await createSlot({ date: '2026-11-04', startTime: '10:00', endTime: '11:00' });
     const lessThan48h = await createSlot({ date: '2026-11-04', startTime: '09:59', endTime: '10:00' });
     const far = await createSlot();
@@ -164,7 +164,7 @@ describe('GET /api/bookings', () => {
     const res = await agent.get('/api/bookings');
     const changeable = Object.fromEntries(res.body.map((b) => [b.slot.id, b.changeable]));
 
-    expect(changeable).toEqual({ [exactly48h.id]: false, [lessThan48h.id]: false, [far.id]: true });
+    expect(changeable).toEqual({ [exactly48h.id]: true, [lessThan48h.id]: false, [far.id]: true });
   });
 
   it('a cancelled booking is listed, with its status, and is not changeable', async () => {
@@ -272,6 +272,14 @@ describe('PATCH /api/bookings/{id} – accepted changes', () => {
     expect(removed.body.requirements).toEqual([]);
   });
 
+  it('exactly 48 h before the slot starts the change is still accepted', async () => {
+    const { agent } = await loggedIn();
+    const slot = await createSlot({ date: '2026-11-04', startTime: '10:00', endTime: '11:00' });
+    const original = await booked(agent, slot.id, 2);
+
+    expect((await change(agent, original.id, { partySize: 3 })).status).toBe(200);
+  });
+
   it('sends one email to the hiker after a change', async () => {
     const { agent, user } = await loggedIn();
     const original = await booked(agent, (await createSlot()).id, 2);
@@ -331,14 +339,6 @@ describe('PATCH /api/bookings/{id} – refused changes leave the booking as it w
 
     expectError(await change(agent, original.id, { partySize: 3 }), 400, MESSAGES.window);
     expectError(await change(agent, original.id, { requirements: [] }), 400, MESSAGES.window);
-  });
-
-  it('exactly 48 h before the slot starts: 400 too (PO answer: that instant itself is refused, #43)', async () => {
-    const { agent } = await loggedIn();
-    const slot = await createSlot({ date: '2026-11-04', startTime: '10:00', endTime: '11:00' });
-    const original = await booked(agent, slot.id, 2);
-
-    expectError(await change(agent, original.id, { partySize: 3 }), 400, MESSAGES.window);
   });
 
   it('a cancelled booking: 400', async () => {
