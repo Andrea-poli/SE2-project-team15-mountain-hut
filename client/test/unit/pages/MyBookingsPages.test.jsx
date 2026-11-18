@@ -324,7 +324,7 @@ describe('ChangeBookingPage', () => {
     expect(bookingsApi.changeBooking).not.toHaveBeenCalled();
   });
 
-  it('X2: the button is disabled while saving, so a second click sends nothing more', async () => {
+  it('X2: while saving the button is disabled; a second click or submit (e.g. Enter) sends nothing more', async () => {
     let finish;
     vi.mocked(bookingsApi.changeBooking).mockReturnValue(new Promise((resolve) => (finish = resolve)));
     renderChange(7);
@@ -335,6 +335,7 @@ describe('ChangeBookingPage', () => {
 
     await waitFor(() => expect(saveButton()).toBeDisabled());
     await userEvent.click(saveButton());
+    fireEvent.submit(saveButton().closest('form'));
     expect(bookingsApi.changeBooking).toHaveBeenCalledTimes(1);
     finish(booking({ partySize: 4 }));
   });
@@ -435,21 +436,6 @@ describe('ChangeBookingPage', () => {
     await userEvent.type(party(), '4');
     await userEvent.click(saveButton());
     await waitFor(() => expect(bookingsApi.changeBooking).toHaveBeenCalledWith(12, { partySize: 4 }));
-  });
-
-  it('X2: a second submit while saving (e.g. Enter in a field) sends nothing more', async () => {
-    let finish;
-    vi.mocked(bookingsApi.changeBooking).mockReturnValue(new Promise((resolve) => (finish = resolve)));
-    renderChange(7);
-    await waitFor(() => expect(party()).toHaveValue(3));
-    await userEvent.clear(party());
-    await userEvent.type(party(), '4');
-    await userEvent.click(saveButton());
-    await waitFor(() => expect(saveButton()).toBeDisabled());
-
-    fireEvent.submit(saveButton().closest('form'));
-    expect(bookingsApi.changeBooking).toHaveBeenCalledTimes(1);
-    finish(booking({ partySize: 4 }));
   });
 
   it('X6: requirements – an empty description is shown and focused, a change is sent as requirements', async () => {
