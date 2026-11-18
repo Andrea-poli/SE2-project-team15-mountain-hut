@@ -48,6 +48,13 @@ export async function requestPasswordReset(email) {
   return apiFetch('/api/auth/password-reset', { method: 'POST', body: { email } });
 }
 
+// GET /api/auth/password-reset/validity?token=… → 200 valid | 400 missing/bad/used/expired link (MH-07).
+// Never consumes the token: safe to call just to decide whether to show the form.
+export async function checkPasswordResetToken(token) {
+  if (useMocks) return (await mocks()).checkPasswordResetToken(token);
+  return apiFetch(`/api/auth/password-reset/validity?token=${encodeURIComponent(token)}`);
+}
+
 // POST /api/auth/password-reset/confirm {token, newPassword} → 204 | 400 bad, used or expired link (MH-07)
 export async function confirmPasswordReset(token, newPassword) {
   if (useMocks) return (await mocks()).confirmPasswordReset(token, newPassword);
