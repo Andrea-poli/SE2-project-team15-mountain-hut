@@ -141,7 +141,11 @@ describe('MyBookingsPage', () => {
   it('M2: an item shows date, slot, time, party, seating and requirements, never table names', async () => {
     renderList();
     await screen.findByRole('heading', { level: 1, name: 'My bookings' });
-    const upcoming = await waitFor(() => item('Tue 10 Nov'));
+    const upcoming = await waitFor(() => {
+      const found = item('Tue 10 Nov');
+      expect(found).toBeTruthy(); // keeps retrying instead of "succeeding" with undefined
+      return found;
+    });
     const expected = ['Lunch', '12:00 – 14:00', '3 people', '2 + 1 seats', '1 shellfish allergy', '2 vegetarians'];
     for (const text of expected) {
       expect(upcoming).toHaveTextContent(text);
@@ -208,11 +212,18 @@ describe('ChangeBookingPage', () => {
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', MY_BOOKINGS);
   });
 
-  it('X1: a booking that cannot be changed (or is not the hiker\'s) shows no form', async () => {
+  it('X1: a booking that cannot be changed shows no form, with the 48-hour message', async () => {
     renderChange(8);
     expect(await screen.findByText(/Changes close 48 hours before the meal/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /My bookings|Back/ })).toHaveAttribute('href', MY_BOOKINGS);
+  });
+
+  it('X1: an id not among the hiker\'s own bookings shows no form, not the 48-hour message', async () => {
+    renderChange(999); // not in the listMyBookings mock: someone else's booking or an unknown id
+    expect(await screen.findByText('This booking cannot be changed.')).toBeInTheDocument();
+    expect(screen.queryByText(/Changes close 48 hours before the meal/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
   });
 
   it('X2: sends only the changed fields, as numbers, then goes back with "Booking changed"', async () => {
