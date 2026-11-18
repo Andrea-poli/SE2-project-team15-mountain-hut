@@ -65,12 +65,21 @@ export function AuthProvider({ children }) {
     return updated;
   }, []);
 
-  // MH-07: a password reset ends every session of that user on the server; forget it here too.
-  const forgetUser = useCallback(() => setUser(null), []);
+  // MH-07: a password reset ends every session of the link's user on the server. This browser may hold that
+  // user, someone else (e.g. staff on the hut PC opening a hiker's link) or nobody: ask the server who is
+  // logged in now, so the screen matches it. Never throws: the password is already changed at this point.
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await authApi.me());
+    } catch (err) {
+      if (err.status === 401) setUser(null);
+      else setError(err.message); // server unreachable: keep what we had, show why
+    }
+  }, []);
 
   const value = useMemo(
-    () => ({ user, loading, error, login, register, logout, changePassword, forgetUser }),
-    [user, loading, error, login, register, logout, changePassword, forgetUser],
+    () => ({ user, loading, error, login, register, logout, changePassword, refreshUser }),
+    [user, loading, error, login, register, logout, changePassword, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

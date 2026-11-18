@@ -22,7 +22,7 @@ const BAD_LINK_MESSAGE = 'This link is not valid: ask for a new one.';
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
-  const { forgetUser } = useAuth();
+  const { refreshUser } = useAuth();
   const [values, setValues] = useState({ newPassword: '', confirmPassword: '' });
   const [submitting, setSubmitting] = useState(false);
   // checking (GET .../validity, only while a token is present) | form | done | badLink
@@ -62,7 +62,9 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     try {
       await confirmPasswordReset(token, values.newPassword);
-      forgetUser(); // the server ended every session of this user
+      // The server ended the sessions of the link's user; this browser may be one of them or be logged in
+      // as someone else (staff on the hut PC). Ask the server, so the screen shows what it really holds.
+      await refreshUser();
       setState('done');
     } catch (err) {
       // The token is non-empty (else we would not be in 'form') and the password length was already
@@ -104,7 +106,12 @@ export default function ResetPasswordPage() {
               onFieldChange={change}
               onFieldBlur={recheckField}
             />
-            <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+            <Button
+              type="submit"
+              className="w-100 mt-2"
+              disabled={submitting}
+              onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
+            >
               {submitting ? 'Saving…' : 'Save the new password'}
             </Button>
           </Form>

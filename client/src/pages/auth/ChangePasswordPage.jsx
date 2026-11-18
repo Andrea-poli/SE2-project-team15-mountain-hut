@@ -92,7 +92,12 @@ export default function ChangePasswordPage() {
           onFieldChange={change}
           onFieldBlur={recheckField}
         />
-        <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+        <Button
+          type="submit"
+          className="w-100 mt-2"
+          disabled={submitting}
+          onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
+        >
           {submitting ? 'Saving…' : 'Change password'}
         </Button>
       </Form>
