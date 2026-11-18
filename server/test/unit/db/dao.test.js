@@ -271,6 +271,7 @@ describe('booking DAO', () => {
       },
       partySize: 2,
       tables: [{ slotTableId, tableName: 'A', seats: 2 }],
+      requirements: [],
       status: bookingDao.BOOKING_STATUS.CONFIRMED,
       createdAt: '2026-11-01T10:00:00.000Z',
     });
@@ -303,6 +304,7 @@ describe('booking DAO', () => {
       },
       partySize: 2,
       tables: [{ slotTableId, tableName: 'A', seats: 2 }],
+      requirements: [],
       status: 'confirmed',
       createdAt: '2026-11-01T10:00:00.000Z',
     });

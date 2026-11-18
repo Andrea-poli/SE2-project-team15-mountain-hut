@@ -57,6 +57,17 @@ describe('api/bookings and api/publicSlots', () => {
       expect(JSON.parse(init.body)).toEqual({ slotId: 4, partySize: 3 });
     });
 
+    it('createBooking sends the party requirements only when they are given (MH-05)', async () => {
+      const fetch = vi.fn().mockResolvedValue(reply(201, booking));
+      vi.stubGlobal('fetch', fetch);
+      const api = await load(false);
+      const requirements = [{ hasAllergies: true, description: '1 peanut allergy' }];
+      await api.createBooking({ slotId: 4, partySize: 3, requirements });
+      expect(JSON.parse(fetch.mock.lastCall[1].body)).toEqual({ slotId: 4, partySize: 3, requirements });
+      await api.createBooking({ slotId: 4, partySize: 3, requirements: undefined });
+      expect(JSON.parse(fetch.mock.lastCall[1].body)).toEqual({ slotId: 4, partySize: 3 });
+    });
+
     it('getBooking gets one booking, with the id encoded in the path', async () => {
       const fetch = vi.fn().mockImplementation(async () => reply(200, booking));
       vi.stubGlobal('fetch', fetch);

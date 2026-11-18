@@ -3,6 +3,7 @@
 // Slots come from the publicSlots mock, so the two always agree.
 // TODO: remove when MH-01 BE2 (POST/GET /api/bookings) is on dev, together with all mocks if the team drops mock mode.
 import { ApiError } from '../client.js';
+import { areRequirementsValid } from '../../utils/validation.js';
 import { listPublicSlots } from './publicSlots.js';
 
 const DELAY_MS = 300;
@@ -67,7 +68,7 @@ function allocate(free, partySize) {
   return left === 0 ? result : null;
 }
 
-export async function createBooking({ slotId, partySize }) {
+export async function createBooking({ slotId, partySize, requirements = [] }) {
   await wait();
   const user = currentUser();
   if (!user) throw new ApiError(401, 'You need to log in');
@@ -75,6 +76,13 @@ export async function createBooking({ slotId, partySize }) {
   if (!Number.isInteger(slotId) || slotId < 1 || !Number.isInteger(partySize) || partySize < 1) {
     throw new ApiError(400, 'slotId and partySize must be positive integers');
   }
+  if (!areRequirementsValid(requirements)) {
+    throw new ApiError(400, 'Each requirement needs hasAllergies (true or false) and a description');
+  }
+  const savedRequirements = requirements.map(({ hasAllergies, description }) => ({
+    hasAllergies,
+    description: description.trim(),
+  }));
 
   const date = dateOfSlot(slotId);
   let slots;
@@ -110,6 +118,7 @@ export async function createBooking({ slotId, partySize }) {
     slot: { id: slot.id, date, startTime: slot.startTime, endTime: slot.endTime, label: slot.label },
     partySize,
     tables: split.map(({ table, seats }) => ({ slotTableId: table.id, tableName: table.name, seats })),
+    requirements: savedRequirements,
     status: 'confirmed',
     createdAt: new Date().toISOString(),
   };

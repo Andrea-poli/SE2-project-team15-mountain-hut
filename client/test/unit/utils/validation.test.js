@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_PASSWORD_LENGTH, isBlank, isEmail } from '../../../src/utils/validation.js';
+import { MIN_PASSWORD_LENGTH, areRequirementsValid, isBlank, isEmail } from '../../../src/utils/validation.js';
 
 describe('isBlank', () => {
   it('is true for empty, spaces only and non-strings', () => {
@@ -31,5 +31,31 @@ describe('isEmail', () => {
 describe('MIN_PASSWORD_LENGTH', () => {
   it('is 8, as in the API contract', () => {
     expect(MIN_PASSWORD_LENGTH).toBe(8);
+  });
+});
+
+// MH-05: party requirements, as the contract wants them (openapi Requirement).
+describe('areRequirementsValid', () => {
+  it('accepts no requirements and the PO example (each with its allergies flag)', () => {
+    expect(areRequirementsValid([])).toBe(true);
+    expect(
+      areRequirementsValid([
+        { hasAllergies: true, description: '1 vegan, peanut allergy' },
+        { hasAllergies: true, description: '1 shellfish allergy' },
+        { hasAllergies: false, description: '2 vegetarians' },
+      ]),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['an empty description', [{ hasAllergies: false, description: '' }]],
+    ['a description of spaces only', [{ hasAllergies: true, description: '   ' }]],
+    ['a missing description', [{ hasAllergies: false }]],
+    ['a missing allergies flag', [{ description: '2 vegetarians' }]],
+    ['a flag that is not true or false', [{ hasAllergies: 'yes', description: '2 vegetarians' }]],
+    ['an item that is null', [null]],
+    ['a value that is not a list', { hasAllergies: false, description: '2 vegetarians' }],
+  ])('refuses %s', (_what, requirements) => {
+    expect(areRequirementsValid(requirements)).toBe(false);
   });
 });
