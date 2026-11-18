@@ -6,6 +6,7 @@ import { getDb } from '../dao/db.js';
 import { BadRequest, NotFound } from '../errors.js';
 import { requireLogin, requireRole } from '../middleware/auth.js';
 import * as bookingService from '../services/bookingService.js';
+import { cancelBooking } from '../services/cancelBookingService.js';
 
 const router = Router();
 
@@ -23,6 +24,13 @@ router.get('/:id', requireLogin, async (req, res) => {
   if (!found || found.hikerId !== req.user.id) throw new NotFound('Booking not found');
   const { hikerId: _hikerId, ...booking } = found;
   res.json(booking);
+});
+
+// POST /api/bookings/:id/cancel → 200 Booking (status cancelled) | 400 | 401 | 404 | 409 already cancelled (MH-08)
+// Owner only, at any time: anyone else (staff included) gets 404, as for GET. A POST, not DELETE: the booking stays.
+router.post('/:id/cancel', requireLogin, async (req, res) => {
+  if (!/^[1-9]\d*$/.test(req.params.id)) throw new BadRequest('id must be a positive integer');
+  res.json(await cancelBooking(req.user, Number(req.params.id)));
 });
 
 export default router;

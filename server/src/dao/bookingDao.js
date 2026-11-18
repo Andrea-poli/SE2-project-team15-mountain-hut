@@ -41,6 +41,21 @@ export async function hasConfirmedBooking(db, slotId, hikerId) {
 }
 
 /**
+ * Cancels a confirmed booking (MH-08): only the status changes, the booking is kept.
+ * Its seats are free again at once, because allocationsForSlot() and hasConfirmedBooking() count only confirmed
+ * bookings; the rows of booking_tables stay as a record, but findById() no longer shows them.
+ * @returns {Promise<boolean>} true if it was cancelled now; false if it was not confirmed (e.g. already cancelled)
+ */
+export async function cancel(db, id) {
+  const { changes } = await db.run('UPDATE bookings SET status = ? WHERE id = ? AND status = ?', [
+    BOOKING_STATUS.CANCELLED,
+    id,
+    BOOKING_STATUS.CONFIRMED,
+  ]);
+  return changes > 0;
+}
+
+/**
  * Inserts a booking, the seats it takes at each table and its party requirements (MH-05),
  * and returns it like findById.
  * Call it inside withTransaction (transaction.js), after re-reading the seats with allocationsForSlot:
@@ -78,6 +93,7 @@ export async function create(
  *     tables: [{ slotTableId, tableName, seats }], requirements: [{ hasAllergies, description }],
  *     status, createdAt }
  * hikerId lets the route check the owner (404 for someone else's booking): it is not part of the API answer.
+ * A cancelled booking has `tables: []`: its seats are free again (openapi Booking, MH-08).
  */
 export async function findById(db, id) {
   const row = await db.get(
@@ -101,7 +117,7 @@ export async function findById(db, id) {
     hikerId: row.hiker_id,
     slot: { id: row.slot_id, date: row.date, startTime: row.start_time, endTime: row.end_time, label: row.label },
     partySize: row.party_size,
-    tables,
+    tables: row.status === BOOKING_STATUS.CANCELLED ? [] : tables,
     requirements: await findRequirements(db, id),
     status: row.status,
     createdAt: row.created_at,
