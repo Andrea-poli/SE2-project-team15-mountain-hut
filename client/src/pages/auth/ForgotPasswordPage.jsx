@@ -2,12 +2,10 @@
 // email has an account or not (the server answers 202 in both cases), so it never reveals who is registered.
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
-import Card from 'react-bootstrap/Card';
-import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
-import Row from 'react-bootstrap/Row';
 import { Link } from 'react-router';
 import { requestPasswordReset } from '../../api/auth.js';
+import AuthCard from '../../components/AuthCard.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import FormField from '../../components/FormField.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
@@ -45,50 +43,42 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <Row className="justify-content-center">
-      <Col md={8} lg={6}>
-        <title>Forgot password – Mountain Hut</title>
-        <Card>
-          <Card.Body className="p-4">
-            <h1 className="mb-2">Forgot password</h1>
-            {sentTo ? (
-              <>
-                <p role="status">
-                  If <strong>{sentTo}</strong> has an account, we sent it a link to choose a new password. The link
-                  works once, within 24 hours. Check the spam folder too.
-                </p>
-                <Link to={routes.login}>Back to log in</Link>
-              </>
-            ) : (
-              <>
-                <p className="mb-4">
-                  Enter the email of your account: we will send you a link to choose a new password.
-                </p>
-                <ErrorMessage message={generalError} ref={generalRef} />
-                <Form noValidate onSubmit={handleSubmit}>
-                  <FormField
-                    id={FIELD_IDS.email}
-                    label="Email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onBlur={() => recheck('email', { email })}
-                    required
-                    error={errors.email}
-                  />
-                  <Button type="submit" className="w-100 mt-2" disabled={submitting}>
-                    {submitting ? 'Sending…' : 'Send the link'}
-                  </Button>
-                </Form>
-                <p className="mt-4 mb-0">
-                  <Link to={routes.login}>Back to log in</Link>
-                </p>
-              </>
-            )}
-          </Card.Body>
-        </Card>
-      </Col>
-    </Row>
+    <AuthCard title="Forgot password – Mountain Hut" heading="Forgot password">
+      {sentTo ? (
+        <>
+          <p role="status">
+            If <strong>{sentTo}</strong> has an account, we sent it a link to choose a new password. The link
+            works once, within 24 hours. Check the spam folder too.
+          </p>
+          <Link to={routes.login}>Back to log in</Link>
+        </>
+      ) : (
+        <>
+          <p className="mb-4">
+            Enter the email of your account: we will send you a link to choose a new password.
+          </p>
+          <ErrorMessage message={generalError} ref={generalRef} />
+          <Form noValidate onSubmit={handleSubmit}>
+            <FormField
+              id={FIELD_IDS.email}
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => recheck('email', { email })}
+              required
+              error={errors.email}
+            />
+            <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+              {submitting ? 'Sending…' : 'Send the link'}
+            </Button>
+          </Form>
+          <p className="mt-4 mb-0">
+            <Link to={routes.login}>Back to log in</Link>
+          </p>
+        </>
+      )}
+    </AuthCard>
   );
 }

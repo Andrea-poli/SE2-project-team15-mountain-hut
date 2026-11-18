@@ -361,6 +361,38 @@ paths:
                 short:
                   value: { error: 'Password must be at least 8 characters long' }
 
+  /api/auth/password-reset/validity:
+    get:
+      tags: [auth]
+      summary: Check a reset link before showing the form (MH-07)
+      description: >
+        Public. Same token as the link, as a query parameter. Never consumes
+        it (does not count as a use, does not affect `/confirm`): the
+        Reset-password page calls this on load, so a dead link is caught
+        immediately instead of after the hiker has typed a new password
+        twice. 200 and 400 carry no information beyond "valid or not", same
+        as `/password-reset` never reveals whether an email is registered.
+      operationId: checkPasswordResetToken
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            example: 7f3c9a…
+      responses:
+        '200':
+          description: The link is still valid (not used, not expired)
+        '400':
+          description: Missing token, or a link that is unknown, used or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'This link is not valid or has expired: ask for a new one'
+
   /api/health:
     get:
       tags: [public]

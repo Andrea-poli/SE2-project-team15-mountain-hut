@@ -154,6 +154,13 @@ export async function requestPasswordReset(email) {
   return null;
 }
 
+export async function checkPasswordResetToken(token) {
+  await wait();
+  if (isBlank(token) || !resetTokens.has(token)) {
+    throw new ApiError(400, 'This link is not valid or has expired: ask for a new one');
+  }
+}
+
 export async function confirmPasswordReset(token, newPassword) {
   await wait();
   if (isBlank(token) || isBlank(newPassword)) throw new ApiError(400, 'The link and a new password are required');

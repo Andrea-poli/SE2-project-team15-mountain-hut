@@ -33,6 +33,13 @@ router.post('/password-reset', async (req, res) => {
   res.status(202).end();
 });
 
+// GET /api/auth/password-reset/validity?token=… → 200 valid | 400 missing/bad/used/expired link. Never
+// consumes the token: the Reset-password page checks it on load, before showing the form (MH-07).
+router.get('/password-reset/validity', async (req, res) => {
+  await passwordResetService.checkPasswordResetToken(req.query.token);
+  res.status(200).end();
+});
+
 // POST /api/auth/password-reset/confirm {token, newPassword} → 204 | 400 missing, short, or bad/used/expired link
 router.post('/password-reset/confirm', async (req, res) => {
   await passwordResetService.confirmPasswordReset(req.body);

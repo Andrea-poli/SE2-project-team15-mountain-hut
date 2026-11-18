@@ -56,6 +56,19 @@ export async function requestPasswordReset(body) {
 }
 
 /**
+ * Checks whether `token` is still valid (not used, not expired), without consuming it: the Reset-password
+ * page calls this on load, before showing the form, so a dead link is caught right away (PO #36, #44)
+ * instead of after the hiker has typed a new password twice.
+ * @throws {BadRequest} missing token, or a link that is unknown, used or expired
+ */
+export async function checkPasswordResetToken(token) {
+  if (typeof token !== 'string' || token === '') throw new BadRequest(MESSAGES.badLink);
+  const db = await getDb();
+  const id = await passwordResetDao.findValid(db, sha256(token), now().toISOString());
+  if (!id) throw new BadRequest(MESSAGES.badLink);
+}
+
+/**
  * Sets the new password of the link's user, once: the link is marked used in the same transaction, so two
  * requests with the same link cannot both succeed. Afterwards every session of that user is logged out.
  * @throws {BadRequest} missing fields, short password, or a link that is unknown, used or expired
