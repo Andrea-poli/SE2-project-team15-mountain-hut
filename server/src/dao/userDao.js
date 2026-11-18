@@ -27,8 +27,8 @@ export async function findByEmail(db, email) {
 }
 
 /**
- * Search hiker profiles for the staff panel. Phone matching ignores spaces;
- * temporary accounts are identifiable by their missing email and password.
+ * Search hiker profiles for the staff panel. Match text in JavaScript because SQLite's lower()
+ * only folds ASCII; phone matching ignores spaces. Temporary accounts have no email or password.
  */
 export async function searchHikers(db, query) {
   const rows = await db.all(
@@ -36,26 +36,33 @@ export async function searchHikers(db, query) {
             email IS NULL AND password_hash IS NULL AS temporary
      FROM users
      WHERE role = 'hiker'
-       AND (
-         instr(lower(first_name), lower(?)) > 0
-         OR instr(lower(coalesce(last_name, '')), lower(?)) > 0
-         OR instr(lower(first_name || ' ' || coalesce(last_name, '')), lower(?)) > 0
-         OR instr(lower(coalesce(last_name, '') || ' ' || first_name), lower(?)) > 0
-         OR instr(lower(coalesce(email, '')), lower(?)) > 0
-         OR instr(replace(coalesce(phone, ''), ' ', ''), replace(?, ' ', '')) > 0
-       )
-     ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
-     LIMIT 20`,
-    [query, query, query, query, query, query],
+     ORDER BY coalesce(last_name, first_name) COLLATE NOCASE, first_name COLLATE NOCASE`,
   );
-  return rows.map((row) => ({
-    id: row.id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    email: row.email,
-    phone: row.phone,
-    temporary: Boolean(row.temporary),
-  }));
+  const normalizedQuery = query.toLocaleLowerCase();
+  const normalizedPhoneQuery = query.replaceAll(' ', '');
+  return rows
+    .filter((row) => {
+      const firstName = row.first_name;
+      const lastName = row.last_name ?? '';
+      const textMatches = [
+        firstName,
+        lastName,
+        `${firstName} ${lastName}`,
+        `${lastName} ${firstName}`,
+        row.email ?? '',
+      ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+      const phoneMatches = (row.phone ?? '').replaceAll(' ', '').includes(normalizedPhoneQuery);
+      return textMatches || phoneMatches;
+    })
+    .slice(0, 20)
+    .map((row) => ({
+      id: row.id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      phone: row.phone,
+      temporary: Boolean(row.temporary),
+    }));
 }
 
 /**
