@@ -11,6 +11,15 @@ export const BOOKING_STATUS = Object.freeze({
 });
 
 /**
+ * True when `err` is the error SQLite throws for a second confirmed booking of the same hiker in the same slot
+ * (index bookings_one_per_hiker_slot, schema.sql), when create() or update() would break it.
+ * Used by the services to answer 409 instead of 500.
+ */
+export const isSecondBooking = (err) =>
+  err?.code === 'SQLITE_CONSTRAINT' &&
+  /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
+
+/**
  * Seats already taken at each table of a slot, by confirmed bookings only
  * (cancelled ones free their seats). Tables with no seats taken are not listed.
  * Input of freeSeats() and allocate() in services/availability.js.

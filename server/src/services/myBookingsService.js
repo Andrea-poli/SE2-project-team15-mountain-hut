@@ -110,11 +110,6 @@ export async function checkChange(db, hiker, bookingId, change) {
   return { booking, slot };
 }
 
-// Index bookings_one_per_hiker_slot (schema.sql): a second confirmed booking of the same hiker in a slot.
-const isSecondBooking = (err) =>
-  err?.code === 'SQLITE_CONSTRAINT' &&
-  /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
-
 /**
  * Seats taken at each table of `slotId` by the other bookings: this booking's own seats are left out, so a
  * change is seated as a new booking in that slot (PO issue #38).
@@ -160,11 +155,16 @@ export async function changeBooking(hiker, bookingId, body) {
       });
     });
   } catch (err) {
-    if (isSecondBooking(err)) throw new Conflict(BOOKING_MESSAGES.alreadyBooked);
+    if (bookingDao.isSecondBooking(err)) throw new Conflict(BOOKING_MESSAGES.alreadyBooked);
     throw err;
   }
 
   const { hikerId: _hikerId, ...booking } = saved; // hikerId is not part of the API answer
-  await bookingChanged(booking, hiker); // never throws: the change is already saved
+  try {
+    await bookingChanged(booking, hiker);
+  } catch (err) {
+    // The hook must not throw (notifier.js); if it does anyway, the change is already saved.
+    console.error('bookingChanged failed, the change stays valid:', err);
+  }
   return booking;
 }
