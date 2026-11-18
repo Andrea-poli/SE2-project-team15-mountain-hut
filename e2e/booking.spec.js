@@ -101,7 +101,7 @@ test.describe('Book a table', () => {
     await expect(time).toHaveAccessibleDescription(/^Not enough seats available for this party\. Choose another time\./);
     await expect(time).toHaveAttribute('aria-invalid', 'true');
     await expect(time).toBeFocused();
-    await expect(page).toHaveURL('/book');
+    await expect(page).toHaveURL(/\/book\?/); // still the Book page, the choices kept in the address (MH-05 FE1)
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
   });
@@ -120,7 +120,7 @@ test.describe('Book a table', () => {
     const time = page.getByLabel('Time', { exact: true });
     await expect(time).toHaveAccessibleDescription(/^You already have a booking for this slot\. Choose another time\./);
     await expect(time).toBeFocused();
-    await expect(page).toHaveURL('/book');
+    await expect(page).toHaveURL(/\/book\?/); // still the Book page, the choices kept in the address (MH-05 FE1)
   });
 
   test('an empty submit flags every field and focuses Date', async ({ page }) => {
