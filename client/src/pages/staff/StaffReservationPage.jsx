@@ -185,14 +185,14 @@ function Confirmation({ booking, onStartOver }) {
 
 /** The password of a new hiker: shown once, to be given to the hiker, who changes it at the first login. */
 function PasswordBox({ password }) {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
   const canCopy = Boolean(navigator.clipboard?.writeText); // not available outside https/localhost
   async function copy() {
     try {
       await navigator.clipboard.writeText(password);
-      setCopied(true);
+      setCopyStatus('Copied');
     } catch {
-      setCopied(false);
+      setCopyStatus('Could not copy: select the password and copy it by hand');
     }
   }
   return (
@@ -213,7 +213,7 @@ function PasswordBox({ password }) {
         </Button>
       )}
       <span role="status" className="small ms-2">
-        {copied ? 'Copied' : ''}
+        {copyStatus}
       </span>
     </section>
   );
