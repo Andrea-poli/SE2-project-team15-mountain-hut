@@ -35,13 +35,20 @@
 //
 //  Both pages are inside RequireRole(['hiker']) in App.jsx: a guest goes to /login?next=…, staff get
 //  "Page not available" (the guard of the other hiker pages).
-import { screen, waitFor, within } from '@testing-library/react';
+//
+//  Added after the pages were merged (review of PR #52, coverage 100%), same rules – behaviour only:
+//  M7  More than 10 bookings: a button "Show more" shows the next ones and moves the focus to the first new one.
+//  M8  Only past bookings: "No upcoming bookings" and the link "Book a table", the past ones listed below.
+//  X7  With unsaved changes, reloading or closing the tab asks first (the browser's own prompt).
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as authApi from '../../../src/api/auth.js';
 import * as bookingsApi from '../../../src/api/bookings.js';
 import { ApiError } from '../../../src/api/client.js';
 import * as publicSlotsApi from '../../../src/api/publicSlots.js';
+import { AuthProvider } from '../../../src/auth/AuthContext.jsx';
 import RequireRole from '../../../src/auth/RequireRole.jsx';
 import PageLayout from '../../../src/components/PageLayout.jsx';
 import ChangeBookingPage from '../../../src/pages/hiker/ChangeBookingPage.jsx';
@@ -102,6 +109,30 @@ function renderChange(id = 7) {
 const item = (text) => screen.getAllByRole('listitem').find((li) => li.textContent.includes(text));
 const saveButton = () => screen.getByRole('button', { name: /^(Save changes|Saving…?)$/ });
 const party = () => screen.getByLabelText('Number of people');
+const description = (n) => screen.getByLabelText(`Description for requirement ${n}`);
+// A booking whose slot has no label, and an older answer without `requirements`.
+const NO_LABEL = (() => {
+  const { requirements: _none, ...rest } = booking({
+    id: 12, slot: { id: 10, date: '2026-11-12', startTime: '12:00', endTime: '14:00', label: '' },
+  });
+  return rest;
+})();
+
+/** Change booking and My bookings in one router, as in App.jsx: a real change lands on the real list. */
+function renderChangeThenList(id = 7) {
+  render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={[changeUrl(id)]}>
+        <Routes>
+          <Route element={<RequireRole roles={['hiker']} />}>
+            <Route path={MY_BOOKINGS} element={<MyBookingsPage />} />
+            <Route path="/my-bookings/:id/change" element={<ChangeBookingPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
+  );
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -184,6 +215,42 @@ describe('MyBookingsPage', () => {
     vi.mocked(bookingsApi.listMyBookings).mockRejectedValueOnce(new ApiError(0, 'Cannot reach the server.'));
     renderList();
     expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server.');
+  });
+
+  it('M2: a slot without a label shows only its time; a booking without requirements is listed too', async () => {
+    vi.mocked(bookingsApi.listMyBookings).mockResolvedValueOnce([NO_LABEL]);
+    renderList();
+    const [only] = await screen.findAllByRole('listitem');
+    expect(only).toHaveTextContent('Thu 12 Nov');
+    expect(only).toHaveTextContent('12:00 – 14:00');
+    expect(only).not.toHaveTextContent('Lunch');
+  });
+
+  it('M7: more than 10 bookings → "Show more" shows the next ones, the focus goes to the first new one', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => booking({
+      id: 100 + i,
+      slot: { id: 200 + i, date: `2026-11-${10 + i}`, startTime: '12:00', endTime: '14:00', label: 'Lunch' },
+    }));
+    vi.mocked(bookingsApi.listMyBookings).mockResolvedValueOnce(many);
+    renderList();
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(10));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(12));
+    await waitFor(() => expect(screen.getAllByRole('listitem')[10]).toHaveFocus());
+    expect(screen.getAllByRole('listitem')[10]).toHaveTextContent('Fri 20 Nov');
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+  });
+
+  it('M8: only past bookings → "No upcoming bookings" with a link to book, the past ones below', async () => {
+    vi.mocked(bookingsApi.listMyBookings).mockResolvedValueOnce([PAST]);
+    renderList();
+    expect(await screen.findByText('No upcoming bookings')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Book a table' })).toHaveAttribute('href', routes.book);
+    const past = screen.getByRole('region', { name: 'Past bookings' });
+    expect(within(past).getByRole('listitem')).toHaveTextContent('Wed 28 Oct');
+    expect(screen.queryByText('You have no bookings yet')).not.toBeInTheDocument();
   });
 
   it('guard: a guest is sent to log in; staff cannot open the page', async () => {
@@ -317,6 +384,109 @@ describe('ChangeBookingPage', () => {
     renderList();
     await screen.findByRole('heading', { level: 1, name: 'My bookings' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
-    expect(screen.queryByText('Booking changed')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Booking changed/)).not.toBeInTheDocument();
+  });
+
+  it('X5 / M6: after a real change, My bookings says "Booking changed" and marks the booking', async () => {
+    vi.mocked(bookingsApi.changeBooking).mockResolvedValue(booking({ partySize: 5 }));
+    renderChangeThenList(7);
+    await waitFor(() => expect(party()).toHaveValue(3));
+    await userEvent.clear(party());
+    await userEvent.type(party(), '5');
+    await userEvent.click(saveButton());
+
+    const message = (await screen.findByText(/Booking changed/)).closest('[role="status"]');
+    expect(message).toBeInTheDocument();
+    await waitFor(() => expect(message).toHaveFocus()); // read by screen readers when it appears
+    expect(item('Tue 10 Nov')).toHaveTextContent('Changed');
+    expect(item('Wed 4 Nov')).not.toHaveTextContent('Changed');
+
+    // Closing it: the message goes, the focus goes to the page heading.
+    await userEvent.click(within(message).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByText(/Booking changed/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'My bookings' })).toHaveFocus());
+  });
+
+  it('X1: a cancelled booking shows no form and says so', async () => {
+    renderChange(9);
+    expect(await screen.findByText('A cancelled booking cannot be changed.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /My bookings|Back/ })).toHaveAttribute('href', MY_BOOKINGS);
+  });
+
+  it('X1: a load error is shown in an alert, with the link back to My bookings', async () => {
+    vi.mocked(bookingsApi.listMyBookings).mockRejectedValueOnce(new ApiError(0, 'Cannot reach the server.'));
+    renderChange(7);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server.');
+    expect(screen.getByRole('link', { name: /My bookings|Back/ })).toHaveAttribute('href', MY_BOOKINGS);
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+  });
+
+  it('X1 / X2: a slot without a label shows only its time; a booking without requirements sends none', async () => {
+    vi.mocked(bookingsApi.listMyBookings).mockResolvedValue([NO_LABEL]);
+    vi.mocked(bookingsApi.changeBooking).mockResolvedValue({ ...NO_LABEL, partySize: 4 });
+    renderChange(12);
+    const summary = await screen.findByRole('region', { name: 'Your booking' });
+    expect(summary).toHaveTextContent('12:00 – 14:00');
+    expect(summary).not.toHaveTextContent('Lunch');
+
+    await waitFor(() => expect(party()).toHaveValue(3));
+    await userEvent.clear(party());
+    await userEvent.type(party(), '4');
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(bookingsApi.changeBooking).toHaveBeenCalledWith(12, { partySize: 4 }));
+  });
+
+  it('X2: a second submit while saving (e.g. Enter in a field) sends nothing more', async () => {
+    let finish;
+    vi.mocked(bookingsApi.changeBooking).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderChange(7);
+    await waitFor(() => expect(party()).toHaveValue(3));
+    await userEvent.clear(party());
+    await userEvent.type(party(), '4');
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+
+    fireEvent.submit(saveButton().closest('form'));
+    expect(bookingsApi.changeBooking).toHaveBeenCalledTimes(1);
+    finish(booking({ partySize: 4 }));
+  });
+
+  it('X6: requirements – an empty description is shown and focused, a change is sent as requirements', async () => {
+    vi.mocked(bookingsApi.changeBooking).mockResolvedValue(UPCOMING);
+    renderChange(7); // UPCOMING: two requirements, prefilled
+    await waitFor(() => expect(description(2)).toHaveValue('2 vegetarians'));
+
+    // Nothing changed → the message; editing the requirements removes it.
+    await userEvent.click(saveButton());
+    expect(await screen.findByText('Nothing to change')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }));
+    expect(screen.queryByText('Nothing to change')).not.toBeInTheDocument();
+
+    // The new row is empty: nothing is sent, the focus goes to it.
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(description(3)).toHaveFocus());
+    expect(bookingsApi.changeBooking).not.toHaveBeenCalled();
+
+    await userEvent.type(description(3), '1 gluten-free');
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(bookingsApi.changeBooking).toHaveBeenCalledWith(7, {
+      requirements: [...UPCOMING.requirements, { hasAllergies: false, description: '1 gluten-free' }],
+    }));
+  });
+
+  it('X7: with unsaved changes, reloading or closing the tab asks first; not before a change', async () => {
+    const leaveAsks = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    renderChange(7);
+    await waitFor(() => expect(party()).toHaveValue(3));
+    expect(leaveAsks()).toBe(false);
+
+    await userEvent.clear(party());
+    await userEvent.type(party(), '4');
+    expect(leaveAsks()).toBe(true);
   });
 });
