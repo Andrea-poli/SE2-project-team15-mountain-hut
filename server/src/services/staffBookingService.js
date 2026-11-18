@@ -111,7 +111,9 @@ export async function createStaffBooking(body) {
         tables,
         requirements: input.requirements,
       });
-      return { booking, hiker, generatedPassword };
+      const hikerSummary = await userDao.findHikerSummaryById(transactionDb, hiker.id);
+      if (!hikerSummary) throw new NotFound(MESSAGES.hikerNotFound);
+      return { booking, hiker, hikerSummary, generatedPassword };
     });
   } catch (err) {
     if (isSecondBooking(err)) throw new Conflict(MESSAGES.alreadyBooked);
@@ -122,14 +124,7 @@ export async function createStaffBooking(body) {
   delete booking.hikerId;
   const response = {
     ...booking,
-    hiker: {
-      id: saved.hiker.id,
-      firstName: saved.hiker.firstName,
-      lastName: saved.hiker.lastName,
-      email: saved.hiker.email,
-      phone: saved.hiker.phone,
-      temporary: saved.hiker.email == null,
-    },
+    hiker: saved.hikerSummary,
   };
   if (saved.generatedPassword) response.generatedPassword = saved.generatedPassword;
 

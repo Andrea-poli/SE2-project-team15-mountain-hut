@@ -1,9 +1,11 @@
 // Staff hiker search and account preparation (MH-07).
-import { randomBytes } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { Conflict } from '../errors.js';
 import { getDb } from '../dao/db.js';
 import * as userDao from '../dao/userDao.js';
 import { hashPassword, validateStaffHiker, validateTemporaryHiker } from './authService.js';
+
+const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export async function searchHikers(query) {
   return userDao.searchHikers(await getDb(), query);
@@ -12,7 +14,10 @@ export async function searchHikers(query) {
 /** Prepare a full hiker before the booking transaction; the generated password is returned only to its caller. */
 export async function prepareFullHiker(body) {
   const profile = validateStaffHiker(body);
-  const generatedPassword = randomBytes(12).toString('hex');
+  const generatedPassword = Array.from(
+    { length: 12 },
+    () => PASSWORD_ALPHABET[randomInt(PASSWORD_ALPHABET.length)],
+  ).join('');
   const passwordHash = await hashPassword(generatedPassword);
   return { ...profile, passwordHash, mustChangePassword: true, generatedPassword };
 }

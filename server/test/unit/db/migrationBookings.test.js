@@ -1,6 +1,7 @@
 // MH-05 BT1 – migration seen from the bookings: a database left by sprint 1 (schema version 1) is upgraded to
-// version 2 when the server opens it, and its bookings are still read as before, now with an empty list of
-// party requirements; new bookings on it can have requirements. (The table-by-table checks are in db.test.js.)
+// the current schema version when the server opens it, and its bookings are still read as before, now with an
+// empty list of party requirements; new bookings on it can have requirements. (The table-by-table checks are
+// in db.test.js.)
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sqlite3 from 'sqlite3';
@@ -49,11 +50,11 @@ afterEach(async () => {
 });
 
 describe('a sprint 1 database opened by this server', () => {
-  it('is upgraded to version 2, and its bookings read as before with no requirements', async () => {
+  it('is upgraded to the current schema version, and its bookings read as before with no requirements', async () => {
     db = await openDatabase(file);
 
-    expect(SCHEMA_VERSION).toBe(2);
-    await expect(db.get('PRAGMA user_version')).resolves.toEqual({ user_version: 2 });
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
+    await expect(db.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
     await expect(bookingDao.findById(db, 1)).resolves.toEqual({
       id: 1,
       hikerId: 1,
