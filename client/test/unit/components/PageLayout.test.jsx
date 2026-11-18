@@ -53,11 +53,11 @@ describe('PageLayout', () => {
     expect(linkNames()).toEqual(['Mountain Hut', 'Check availability', 'Log in', 'Register']);
   });
 
-  it('hiker: Check availability, Book a table, name and Log out', async () => {
+  it('hiker: Check availability, Book a table, My bookings, name and Log out', async () => {
     vi.mocked(authApi.me).mockResolvedValue(hiker);
     renderLayout();
     expect(await within(navbar()).findByText('Hannah')).toBeInTheDocument();
-    expect(linkNames()).toEqual(['Mountain Hut', 'Check availability', 'Book a table']);
+    expect(linkNames()).toEqual(['Mountain Hut', 'Check availability', 'Book a table', 'My bookings']); // MH-06 FE1
     expect(within(navbar()).getByRole('button', { name: 'Log out' })).toBeInTheDocument();
   });
 
