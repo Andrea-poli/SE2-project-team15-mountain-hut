@@ -14,8 +14,10 @@
 // used elsewhere; E2 needs no empty slot, just 2 free seats in each run).
 // E3 books for the seeded Marco Rossi (+393401234567, no booking after 5 Nov): one booking per hiker per slot,
 // so each run takes its own Dinner, 6 Nov (desktop) and 11 Nov (phone), booked by no other spec.
-// E4 uses today's Lunch (12:00, 2 h from E2E_NOW): no spec books it (MH-06's changeBooking.spec uses today's
-// dinner, slots.spec only opens today's dinner); the seed has 11 of its 26 seats booked, E4 takes 2 per run.
+// E4 needs a slot starting in LESS than 2 hours (today's Lunch, at 12:00, is exactly 2 h away: hikers can still
+// book it). The employee creates one through POST /api/slots, today before the Lunch, one per run so they do
+// not overlap: 11:00–11:30 (desktop), 11:30–12:00 (phone, adjacent to the Lunch: allowed). No other spec
+// creates slots today (slots.spec creates on 4 Nov).
 import { randomUUID } from 'node:crypto';
 import { expectAccessible } from './helpers/axe.js';
 import { fillForm, registerHiker } from './helpers/booking.js';
@@ -23,7 +25,10 @@ import { expect, test } from './helpers/clock.js';
 import { expectNoHorizontalScroll } from './helpers/layout.js';
 
 const DINNER = 'Dinner – 1st turn, 19:00 – 20:30';
-const LUNCH = 'Lunch, 12:00 – 14:00';
+const SOON_SLOT_BY_PROJECT = {
+  desktop: { startTime: '11:00', endTime: '11:30' },
+  phone: { startTime: '11:30', endTime: '12:00' },
+};
 const DINNER_SEATS = 24;
 const DAY_BY_PROJECT = { desktop: '2026-11-07', phone: '2026-11-08' };
 const NEW_HIKER_DAY = '2026-11-14';
@@ -44,6 +49,19 @@ async function openReservationPage(page) {
   await page.goto('/staff/bookings/new');
   await expect(page.getByRole('heading', { level: 1, name: 'New reservation' })).toBeVisible();
   await expect(page).toHaveTitle('New reservation – Mountain Hut');
+}
+
+/**
+ * Confirms the reservation and waits for a still confirmation page. The mouse stays where "Confirm reservation"
+ * was, and a button of the confirmation ("Back to slots", "Copy password") can appear under it: axe would then
+ * read its colours halfway through the 0.15 s hover transition (e.g. 2.97:1) and fail at random. So the mouse
+ * leaves the page and the test waits until no CSS transition is running.
+ */
+async function confirmReservation(page) {
+  await page.getByRole('button', { name: 'Confirm reservation' }).click();
+  await expect(confirmed(page)).toBeVisible();
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
 }
 
 /** Check availability (MH-04) for `people` in the dinner of `date`: true when "Available". */
@@ -73,8 +91,7 @@ test.describe('Reserve for a hiker', () => {
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 
-    await page.getByRole('button', { name: 'Confirm reservation' }).click();
-    await expect(confirmed(page)).toBeVisible();
+    await confirmReservation(page);
     const main = page.getByRole('main');
     await expect(main).toContainText('Giulia');
     await expect(main).toContainText(/temporary/i);
@@ -108,8 +125,7 @@ test.describe('Reserve for a hiker', () => {
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 
-    await page.getByRole('button', { name: 'Confirm reservation' }).click();
-    await expect(confirmed(page)).toBeVisible();
+    await confirmReservation(page);
     await expect(page.getByRole('main')).toContainText('Paolo Neri');
 
     const region = passwordRegion(page);
@@ -157,8 +173,7 @@ test.describe('Reserve for a hiker', () => {
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 
-    await page.getByRole('button', { name: 'Confirm reservation' }).click();
-    await expect(confirmed(page)).toBeVisible();
+    await confirmReservation(page);
     const main = page.getByRole('main');
     await expect(main).toContainText('Marco Rossi');
     await expect(main).toContainText('marco.rossi@example.com');
@@ -169,21 +184,30 @@ test.describe('Reserve for a hiker', () => {
     await expectNoHorizontalScroll(page);
   });
 
-  test('E4: staff book today\'s Lunch 2 hours ahead (no 2-hour rule); a hiker sees it closed', async ({ page }) => {
+  test('E4: staff book a slot starting in less than 2 hours (no 2-hour rule); a hiker sees it closed', async ({
+    page,
+  }) => {
+    // A slot of today starting within 2 hours of E2E_NOW (10:00), created by the employee (beforeEach login).
+    const { startTime, endTime } = SOON_SLOT_BY_PROJECT[test.info().project.name];
+    const created = await page.request.post('/api/slots', {
+      data: { date: TODAY, startTime, endTime, label: 'Brunch', tables: [{ name: 'T1', seats: 4 }] },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const soon = `Brunch, ${startTime} – ${endTime}`;
+
     await openReservationPage(page);
     await page.getByRole('radio', { name: 'Quick entry' }).check();
     await page.getByLabel('First name', { exact: true }).fill('Tommaso');
     await page.getByLabel('Date', { exact: true }).fill(TODAY);
-    const lunch = page.getByLabel('Time', { exact: true }).getByRole('option', { name: LUNCH, exact: true });
-    await expect(lunch).toBeEnabled();
-    await fillForm(page, { date: TODAY, time: LUNCH, partySize: 2 });
+    const option = page.getByLabel('Time', { exact: true }).getByRole('option', { name: soon, exact: true });
+    await expect(option).toBeEnabled();
+    await fillForm(page, { date: TODAY, time: soon, partySize: 2 });
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 
-    await page.getByRole('button', { name: 'Confirm reservation' }).click();
-    await expect(confirmed(page)).toBeVisible();
+    await confirmReservation(page);
     await expect(page.getByRole('main')).toContainText('Mon 2 Nov');
-    await expect(page.getByRole('main')).toContainText(LUNCH);
+    await expect(page.getByRole('main')).toContainText(soon);
     await expectAccessible(page);
 
     // The same slot for a hiker: closed by the 2-hour rule.
@@ -192,7 +216,7 @@ test.describe('Reserve for a hiker', () => {
     await page.goto('/book');
     await expect(page.getByRole('heading', { level: 1, name: 'Book a table' })).toBeVisible();
     await page.getByLabel('Date', { exact: true }).fill(TODAY);
-    const closed = page.getByLabel('Time', { exact: true }).getByRole('option', { name: `${LUNCH} – booking closed` });
+    const closed = page.getByLabel('Time', { exact: true }).getByRole('option', { name: `${soon} – booking closed` });
     await expect(closed).toBeDisabled();
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
