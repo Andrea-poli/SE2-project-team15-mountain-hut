@@ -11,8 +11,9 @@
 //      Client checks before any request: new password (at least 8 characters, at most 128) and its confirmation.
 //      The token of the address and the new password are sent. Any 400 from confirm → bad-link message and a way
 //      to ask for a new link, no form (the password was checked already: only the link can be wrong); other
-//      errors → alert, the form stays. One request at a time. Success → a message and a link to log in; nobody
-//      is logged in afterwards in this browser.
+//      errors → alert, the form stays. One request at a time. Success → a message and a link to log in; the
+//      screen then shows who the server says is logged in (the link's user: logged out; another user: still in;
+//      server unreachable: the user is kept and the error shown).
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link } from 'react-router';
@@ -278,8 +279,11 @@ describe('ResetPasswordPage', () => {
       expectNoForm();
     });
 
-    it('a user logged in in this browser is logged out (the server ended the sessions)', async () => {
-      vi.mocked(authApi.me).mockResolvedValue(hiker);
+    // The link is Hannah's and Hannah is logged in here: the server ends her session, so /me now answers 401.
+    it("the link's user, logged in in this browser, is shown logged out (the server ended the session)", async () => {
+      vi.mocked(authApi.me)
+        .mockResolvedValueOnce(hiker) // startup
+        .mockRejectedValue(new ApiError(401, 'Not logged in')); // after the reset
       vi.mocked(authApi.confirmPasswordReset).mockResolvedValue(null);
       renderReset(`/reset-password?token=${TOKEN}`, <PageLayout />);
       const navbar = screen.getByRole('navigation');
@@ -289,6 +293,8 @@ describe('ResetPasswordPage', () => {
 
       expect(await within(navbar).findByRole('link', { name: 'Log in' })).toBeInTheDocument();
       expect(within(navbar).queryByText('Hannah')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(/password has been changed/i);
+      expect(authApi.me).toHaveBeenCalledTimes(2); // the page asked the server who is logged in now
       expect(authApi.login).not.toHaveBeenCalled();
     });
 
@@ -305,7 +311,27 @@ describe('ResetPasswordPage', () => {
       await fillAndSubmit();
       expect(await screen.findByRole('status')).toHaveTextContent(/password has been changed/i);
 
-      await waitFor(() => expect(within(navbar).getByText('Eric')).toBeInTheDocument());
+      await waitFor(() => expect(authApi.me).toHaveBeenCalledTimes(2));
+      expect(within(navbar).getByText('Eric')).toBeInTheDocument();
+      expect(within(navbar).queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument();
+    });
+
+    // The password is changed anyway; only the check of who is logged in failed: keep what the screen had and say
+    // why, instead of logging somebody out or hiding the success.
+    it('if /me cannot be reached after the reset: the success stays, the user is kept and the error is shown', async () => {
+      vi.mocked(authApi.me)
+        .mockResolvedValueOnce(hiker)
+        .mockRejectedValue(new ApiError(0, 'Cannot reach the server.'));
+      vi.mocked(authApi.confirmPasswordReset).mockResolvedValue(null);
+      renderReset(`/reset-password?token=${TOKEN}`, <PageLayout />);
+      const navbar = screen.getByRole('navigation');
+      expect(await within(navbar).findByText('Hannah')).toBeInTheDocument();
+
+      await fillAndSubmit();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server.');
+      expect(screen.getByRole('status')).toHaveTextContent(/password has been changed/i);
+      expect(within(navbar).getByText('Hannah')).toBeInTheDocument();
       expect(within(navbar).queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument();
     });
   });
