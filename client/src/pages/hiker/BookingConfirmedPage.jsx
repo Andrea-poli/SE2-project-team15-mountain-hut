@@ -11,10 +11,9 @@ import { Link, useParams } from 'react-router';
 import { getBooking } from '../../api/bookings.js';
 import { useAuth } from '../../auth/useAuth.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
+import BookingDetails from '../../components/BookingDetails.jsx';
 import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
-import { peopleText, seatSplitText } from '../../utils/booking.js';
-import { formatDate, formatTimeRange } from '../../utils/format.js';
 import { PartyRequirementsTextDisplay } from '../../components/PartyRequirements.jsx';
 
 /** The booking of `id`: { booking } or { error }, once the answer for that id has arrived; else null. */
@@ -53,7 +52,6 @@ export default function BookingConfirmedPage() {
   }
 
   const { booking } = result;
-  const { slot } = booking;
   return (
     <Row className="justify-content-center">
       <Col md={8} lg={6}>
@@ -68,19 +66,7 @@ export default function BookingConfirmedPage() {
             <p role="status" className="fs-5">
               Your table is booked. See you at the hut!
             </p>
-            <dl className="row mb-0">
-              <dt className="col-sm-4">Date</dt>
-              <dd className="col-sm-8">{formatDate(slot.date)}</dd>
-              <dt className="col-sm-4">Time</dt>
-              <dd className="col-sm-8">
-                {slot.label ? `${slot.label}, ` : ''}
-                {formatTimeRange(slot.startTime, slot.endTime)}
-              </dd>
-              <dt className="col-sm-4">Party</dt>
-              <dd className="col-sm-8">{peopleText(booking.partySize)}</dd>
-              <dt className="col-sm-4">Seating</dt>
-              <dd className="col-sm-8">{seatSplitText(booking.tables)}</dd>
-            </dl>
+            <BookingDetails booking={booking} />
             <PartyRequirementsTextDisplay requirements={booking.requirements ?? []} />
             {user?.email && (
               <p className="d-flex align-items-start gap-2 mt-3 mb-0 p-3 rounded-3 border border-success-subtle bg-success-subtle">

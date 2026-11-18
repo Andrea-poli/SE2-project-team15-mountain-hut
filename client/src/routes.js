@@ -10,6 +10,7 @@ export const routes = {
   bookingConfirmed: '/bookings/:id',
   staffSlots: '/staff/slots',
   newSlot: '/staff/slots/new',
+  staffNewBooking: '/staff/bookings/new', // MH-07 FE2
 };
 
 // Roles needed by each protected page; pages not listed are public.
@@ -20,4 +21,5 @@ export const pageRoles = {
   [routes.bookingConfirmed]: ['hiker'], // MH-01 booking confirmation
   [routes.staffSlots]: ['employee'],
   [routes.newSlot]: ['employee'],
+  [routes.staffNewBooking]: ['employee'], // MH-07 FE2
 };
