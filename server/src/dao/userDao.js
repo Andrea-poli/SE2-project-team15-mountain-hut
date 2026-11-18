@@ -54,7 +54,7 @@ export async function findHikerSummaryById(db, id) {
 
 /**
  * Search hiker profiles for the staff panel. Match text in JavaScript because SQLite's lower()
- * only folds ASCII; phone matching ignores spaces.
+ * only folds ASCII; phone matching ignores spaces. Temporary accounts have no email and password.
  */
 export async function searchHikers(db, query) {
   const rows = await db.all(
@@ -62,10 +62,10 @@ export async function searchHikers(db, query) {
             email IS NULL AND password_hash IS NULL AS temporary
      FROM users
      WHERE role = 'hiker'
-     ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE`,
+     ORDER BY coalesce(last_name, first_name) COLLATE NOCASE, first_name COLLATE NOCASE`,
   );
   const normalizedQuery = query.toLocaleLowerCase();
-  const normalizedPhoneQuery = query.replace(/ /g, '');
+  const normalizedPhoneQuery = query.replaceAll(' ', '');
   return rows
     .filter((row) => {
       const firstName = row.first_name;
@@ -77,7 +77,7 @@ export async function searchHikers(db, query) {
         `${lastName} ${firstName}`,
         row.email ?? '',
       ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
-      const phoneMatches = (row.phone ?? '').replace(/ /g, '').includes(normalizedPhoneQuery);
+      const phoneMatches = (row.phone ?? '').replaceAll(' ', '').includes(normalizedPhoneQuery);
       return textMatches || phoneMatches;
     })
     .slice(0, 20)
