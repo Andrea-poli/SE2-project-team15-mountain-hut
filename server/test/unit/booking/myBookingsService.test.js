@@ -1,8 +1,8 @@
 // MH-06 BT1 – unit tests of the change rules (services/myBookingsService.js), written from the story, the PO
 // answers and docs/openapi.yaml 0.2.1 (team rule: tests come from the contract, not from the code):
-// - 48 hours (PO #43): a booking can be changed while at least 48 hours remain before its slot starts; at
-//   18 Nov 13:00 changes to a meal on 20 Nov 13:00 are already closed ("that instant included"). A new slot
-//   must also start at least 48 hours from now ("both the original and the new slot").
+// - 48 hours (PO #43): a booking can be changed while at least 48 hours remain before its slot starts; for a
+//   meal on 20 Nov at 13:00 changes close on 18 Nov at 13:00, that instant still included. A new slot must also
+//   start at least 48 hours from now ("both the original and the new slot").
 // - any change is a new booking in that slot (PO #38, #48): the booking's own seats are released and the tables
 //   are assigned again with the allocation rule, possibly different ones; 409 if the party does not fit, and the
 //   booking stays as it was.
@@ -101,7 +101,7 @@ describe('48-hour rule: the window to change a booking (PO #43)', () => {
   it.each([
     ['48 hours and 1 minute before the slot', slotAt('2026-11-04', '10:01'), true],
     ['days before the slot', slotAt(FAR, '19:00'), true],
-    ['exactly 48 hours before the slot (that instant is already closed)', slotAt('2026-11-04', '10:00'), false],
+    ['exactly 48 hours before the slot (that instant still included)', slotAt('2026-11-04', '10:00'), true],
     ['47 hours and 59 minutes before the slot', slotAt('2026-11-04', '09:59'), false],
     ['the day before the slot', slotAt('2026-11-03', '19:00'), false],
     ['less than 2 hours before the slot', slotAt('2026-11-02', '11:30'), false],
@@ -118,18 +118,23 @@ describe('48-hour rule: the window to change a booking (PO #43)', () => {
     expect(isChangeable({ status: 'cancelled', slot: inside }, NOW)).toBe(false);
   });
 
-  it('changes a booking inside the window', async () => {
+  it.each([
+    ['exactly 48 hours before the slot', '10:00'],
+    ['48 hours and 1 minute before the slot', '10:01'],
+  ])('changes a booking %s, saves it and sends the email', async (_case, startTime) => {
     const hiker = await createHiker();
-    const slot = await createSlot({ date: '2026-11-04', startTime: '10:01' });
+    const slot = await createSlot({ date: '2026-11-04', startTime });
     const booking = await createBooking(slot, hiker, { T1: 2 });
 
     const changed = await changeBooking(hiker, booking.id, { partySize: 3 });
 
     expect(changed.partySize).toBe(3);
+    expect(await saved(booking.id)).toMatchObject({ partySize: 3, status: 'confirmed' });
+    expect(notifier.bookingChanged).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ['exactly 48 hours before', '2026-11-04', '10:00'],
+    ['47 hours and 59 minutes before', '2026-11-04', '09:59'],
     ['the day before', '2026-11-03', '19:00'],
   ])('refuses any change %s the booked slot, also of the requirements only, and keeps the booking', async (_case, date, startTime) => {
     const hiker = await createHiker();
@@ -151,7 +156,8 @@ describe('48-hour rule: the window to change a booking (PO #43)', () => {
 
   it.each([
     ['48 hours and 1 minute from now is accepted', '2026-11-04', '10:01', true],
-    ['exactly 48 hours from now is refused', '2026-11-04', '10:00', false],
+    ['exactly 48 hours from now is accepted', '2026-11-04', '10:00', true],
+    ['47 hours and 59 minutes from now is refused', '2026-11-04', '09:59', false],
     ['the day after is refused', '2026-11-03', '19:00', false],
   ])('moving to a new slot starting %s (the rule applies to both slots)', async (_case, date, startTime, accepted) => {
     const hiker = await createHiker();
@@ -322,5 +328,30 @@ describe('one booking per hiker per slot, and the 2-hour rule', () => {
     const booking = await createBooking(soon, hiker, { T1: 2 });
 
     await rejectsWith(changeBooking(hiker, booking.id, { partySize: 1 }), 400, MESSAGES.changeWindow);
+  });
+});
+
+// ---------- email hook and request body ----------
+
+describe('change: email hook and request body', () => {
+  it('keeps the change when the email hook fails anyway (it must not throw)', async () => {
+    const hiker = await createHiker();
+    const booking = await createBooking(await createSlot(), hiker, { T1: 2 });
+    const emailError = new Error('Email transport unavailable');
+    vi.mocked(notifier.bookingChanged).mockRejectedValue(emailError);
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const changed = await changeBooking(hiker, booking.id, { partySize: 3 });
+
+    expect(changed.partySize).toBe(3);
+    expect(await saved(booking.id)).toMatchObject({ partySize: 3, status: 'confirmed' });
+    expect(logError).toHaveBeenCalledWith('bookingChanged failed, the change stays valid:', emailError);
+  });
+
+  it.each([null, 'party of 3', [3]])('refuses a body that is not an object (%o) with 400', async (body) => {
+    const hiker = await createHiker();
+    const booking = await createBooking(await createSlot(), hiker, { T1: 2 });
+
+    await rejectsWith(changeBooking(hiker, booking.id, body), 400, MESSAGES.nothingToChange);
   });
 });

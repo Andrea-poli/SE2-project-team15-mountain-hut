@@ -19,7 +19,7 @@ export const MESSAGES = {
   newSlotWindow: 'The new slot must start at least 48 hours from now',
 };
 
-// PO issue #43: a booking can be changed while more than 48 hours remain before its slot starts
+// PO issue #43: a booking can be changed while at least 48 hours remain before its slot starts
 // (meal on 20 Nov at 13:00 → changes close on 18 Nov at 13:00, that instant included).
 const CHANGE_WINDOW_MS = 48 * 60 * 60 * 1000;
 
@@ -30,9 +30,9 @@ function slotStart(slot) {
   return new Date(year, month - 1, day, hours, minutes);
 }
 
-/** True while more than 48 hours remain before the slot starts: exactly 48 hours before, it is already closed. */
+/** True while at least 48 hours remain before the slot starts. */
 export function changeWindowOpen(slot, at) {
-  return slotStart(slot).getTime() - at.getTime() > CHANGE_WINDOW_MS;
+  return slotStart(slot).getTime() - at.getTime() >= CHANGE_WINDOW_MS;
 }
 
 /** True when the booking can still be changed: confirmed, and the change window is open. */
@@ -82,9 +82,9 @@ export function validateChange(body) {
  * change (MH-06 BE2), so that what it reads cannot change before the write.
  * - owner only: an unknown booking, or someone else's, is 404 (its existence is not revealed);
  * - a cancelled booking cannot be changed (400);
- * - the change window: more than 48 hours before the booked slot starts (400, PO issue #43);
+ * - the change window: at least 48 hours before the booked slot starts (400, PO issue #43);
  * - a new slot must exist (404), the hiker must not already have a booking there (409, one per slot), it must
- *   be open (400) and start more than 48 hours from now (400): PO issue #43 applies the rule to both slots.
+ *   be open (400) and start at least 48 hours from now (400): PO issue #43 applies the rule to both slots.
  * @param {object} db the connection of the transaction
  * @param {{ id: number }} hiker the logged-in hiker
  * @param {number} bookingId
