@@ -171,6 +171,7 @@ export async function confirmPasswordReset(token, newPassword) {
   const found = users.find((u) => u.id === id);
   found.password = newPassword;
   delete found.mustChangePassword;
-  saveUser(null); // every session of that user ends
+  // Like the server: the sessions of the link's user end; whoever else is logged in here stays logged in.
+  if (loadUser()?.id === id) saveUser(null);
   return null;
 }

@@ -70,7 +70,12 @@ export default function ForgotPasswordPage() {
               required
               error={errors.email}
             />
-            <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+            <Button
+              type="submit"
+              className="w-100 mt-2"
+              disabled={submitting}
+              onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
+            >
               {submitting ? 'Sending…' : 'Send the link'}
             </Button>
           </Form>
