@@ -10,7 +10,7 @@ import Row from 'react-bootstrap/Row';
 // Flags are bundled SVGs: without the `flags` prop the library would load them from an external site.
 import PhoneInput from 'react-phone-number-input';
 import flags from 'react-phone-number-input/flags';
-import 'react-phone-number-input/style.css'; // the only import of the library CSS (colours: theme.css, section 11)
+import 'react-phone-number-input/style.css'; // library CSS, also in HikerPanel (MH-07) (colours: theme.css, section 11)
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { nextFor } from '../../auth/roles.js';
 import { useAuth } from '../../auth/useAuth.js';
