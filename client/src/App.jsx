@@ -9,6 +9,8 @@ import PageLayout from './components/PageLayout.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import BookingConfirmedPage from './pages/hiker/BookingConfirmedPage.jsx';
 import BookPage from './pages/hiker/BookPage.jsx';
+import ChangeBookingPage from './pages/hiker/ChangeBookingPage.jsx';
+import MyBookingsPage from './pages/hiker/MyBookingsPage.jsx';
 import CheckAvailabilityPage from './pages/public/CheckAvailabilityPage.jsx';
 import HomePage from './pages/public/HomePage.jsx';
 import LoginPage from './pages/public/LoginPage.jsx';
@@ -42,6 +44,10 @@ export default function App() {
           <Route element={<RequireRole roles={pageRoles[routes.book]} />}>
             <Route path={routes.book} element={<BookPage />} />
             <Route path={routes.bookingConfirmed} element={<BookingConfirmedPage />} />
+          </Route>
+          <Route element={<RequireRole roles={pageRoles[routes.myBookings]} />}>
+            <Route path={routes.myBookings} element={<MyBookingsPage />} />
+            <Route path={routes.changeBooking} element={<ChangeBookingPage />} />
           </Route>
 
           {/* Staff (employee; the warden passes too) */}
