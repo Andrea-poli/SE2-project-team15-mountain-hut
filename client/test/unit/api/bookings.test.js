@@ -87,6 +87,36 @@ describe('api/bookings and api/publicSlots', () => {
       expect(fetch.mock.lastCall[0]).toBe('/api/public/slots?date=2026-11-03%26x%3D1');
     });
 
+    it('listMyBookings gets the hiker\'s bookings (MH-06)', async () => {
+      const fetch = vi.fn().mockResolvedValue(reply(200, [{ ...booking, changeable: true }]));
+      vi.stubGlobal('fetch', fetch);
+      const api = await load(false);
+      await expect(api.listMyBookings()).resolves.toEqual([{ ...booking, changeable: true }]);
+      expect(fetch.mock.lastCall[0]).toBe('/api/bookings');
+      expect(fetch.mock.lastCall[1].method).toBeUndefined(); // GET
+    });
+
+    it('changeBooking patches only the fields it is given, with the id encoded (MH-06)', async () => {
+      const fetch = vi.fn().mockImplementation(async () => reply(200, booking));
+      vi.stubGlobal('fetch', fetch);
+      const api = await load(false);
+      const sent = () => JSON.parse(fetch.mock.lastCall[1].body);
+
+      await expect(api.changeBooking(7, { partySize: 5 })).resolves.toEqual(booking);
+      expect(fetch.mock.lastCall[0]).toBe('/api/bookings/7');
+      expect(fetch.mock.lastCall[1])
+        .toMatchObject({ method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+      expect(sent()).toEqual({ partySize: 5 });
+
+      await api.changeBooking(7, { slotId: 11, requirements: [] });
+      expect(sent()).toEqual({ slotId: 11, requirements: [] });
+      await api.changeBooking(7, { slotId: undefined, partySize: undefined, requirements: undefined });
+      expect(sent()).toEqual({});
+      await api.changeBooking('1/../2');
+      expect(fetch.mock.lastCall[0]).toBe('/api/bookings/1%2F..%2F2');
+      expect(sent()).toEqual({});
+    });
+
     it('passes on the server errors as ApiError with status and message', async () => {
       vi.stubGlobal(
         'fetch',
@@ -110,7 +140,12 @@ describe('api/bookings and api/publicSlots', () => {
     it('answers from the mock modules, without any request to the server', async () => {
       const fetch = vi.fn();
       vi.stubGlobal('fetch', fetch);
-      const mockBookings = { createBooking: vi.fn().mockResolvedValue(booking), getBooking: vi.fn().mockResolvedValue(booking) };
+      const mockBookings = {
+        createBooking: vi.fn().mockResolvedValue(booking),
+        getBooking: vi.fn().mockResolvedValue(booking),
+        listMyBookings: vi.fn().mockResolvedValue([booking]),
+        changeBooking: vi.fn().mockResolvedValue(booking),
+      };
       const mockSlots = { listPublicSlots: vi.fn().mockResolvedValue(slots) };
       vi.doMock('../../../src/api/mocks/bookings.js', () => mockBookings);
       vi.doMock('../../../src/api/mocks/publicSlots.js', () => mockSlots);
@@ -120,6 +155,9 @@ describe('api/bookings and api/publicSlots', () => {
       expect(mockBookings.createBooking).toHaveBeenCalledWith({ slotId: 4, partySize: 3 });
       await expect(api.getBooking('7')).resolves.toEqual(booking);
       expect(mockBookings.getBooking).toHaveBeenCalledWith('7');
+      await expect(api.listMyBookings()).resolves.toEqual([booking]);
+      await expect(api.changeBooking(7, { partySize: 5, slotId: undefined })).resolves.toEqual(booking);
+      expect(mockBookings.changeBooking).toHaveBeenCalledWith(7, { partySize: 5 });
       await expect(api.listPublicSlots('2026-11-03')).resolves.toEqual(slots);
       expect(mockSlots.listPublicSlots).toHaveBeenCalledWith('2026-11-03');
       expect(fetch).not.toHaveBeenCalled();
