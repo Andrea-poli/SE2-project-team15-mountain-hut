@@ -64,6 +64,9 @@ export function loadConfig(env) {
       : path.join(dataDir, 'sessions.db'),
     sessionSecret: env.SESSION_SECRET,
     fakeNow,
+    // MH-07: the address of the pages in the password reset email. In development the pages are served by Vite.
+    publicUrl: (env.PUBLIC_URL || (nodeEnv === 'production' ? `http://localhost:${env.PORT || 3001}` :
+      'http://localhost:5173')).replace(/\/+$/, ''),
   };
 }
 

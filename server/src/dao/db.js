@@ -25,6 +25,18 @@ const MIGRATIONS = [
      description   TEXT NOT NULL CHECK (trim(description) <> '')
    );
    CREATE INDEX booking_requirements_by_booking ON booking_requirements (booking_id, id);`,
+  // Version 3 (MH-07): staff-created hikers must change their generated password after login.
+  `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0
+     CHECK (must_change_password IN (0, 1));`,
+  // Version 4 (MH-07): password reset links by email, valid 24 h, usable once (PO #36, #44). Only the SHA-256
+  // of the token is stored: a copy of the database gives no working link. CASCADE: they go with their user.
+  `CREATE TABLE password_resets (
+     token_hash TEXT PRIMARY KEY,
+     user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+     expires_at TEXT NOT NULL,
+     used_at    TEXT
+   );
+   CREATE INDEX password_resets_by_user ON password_resets (user_id);`,
 ];
 
 export const SCHEMA_VERSION = 1 + MIGRATIONS.length;

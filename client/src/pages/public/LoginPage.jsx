@@ -95,6 +95,9 @@ export default function LoginPage() {
                 required
                 error={errors.password}
               />
+              <p className="small mb-3">
+                <Link to={routes.forgotPassword}>Forgot your password?</Link>
+              </p>
               {/* preventDefault on mousedown: the field keeps the focus, so its blur check cannot remove
                   an error above the button and move the button away before the click ends. */}
               <Button
