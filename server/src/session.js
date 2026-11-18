@@ -61,6 +61,14 @@ export async function logIn(req, user) {
   await call(req, 'save');
 }
 
+/**
+ * Logs `userId` out everywhere (MH-07, after a password reset): every stored session of that user is removed.
+ * The store keeps sessions as JSON, so the user id is read from it (sessions of guests have none).
+ */
+export async function endSessionsOf(userId) {
+  await getSessionStore().destroyAllOf(userId);
+}
+
 /** Ends the session, if there is one. */
 export async function logOut(req) {
   if (!req.session) return;

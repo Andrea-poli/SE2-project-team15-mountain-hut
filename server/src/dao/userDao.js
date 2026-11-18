@@ -112,3 +112,8 @@ export async function updatePassword(db, id, expectedPasswordHash, passwordHash)
   );
   return changes > 0;
 }
+
+/** Sets a new password chosen by the user (reset link, MH-07): the generated one, if any, no longer applies. */
+export async function setPassword(db, id, passwordHash) {
+  await db.run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', [passwordHash, id]);
+}

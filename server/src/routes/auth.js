@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { requireLogin } from '../middleware/auth.js';
 import * as authService from '../services/authService.js';
+import * as passwordResetService from '../services/passwordResetService.js';
 import { SESSION_COOKIE, logIn, logOut } from '../session.js';
 
 const router = Router();
@@ -24,6 +25,18 @@ router.post('/login', async (req, res) => {
 // PUT /api/auth/password → 200 updated User | 400 invalid new password | 401 wrong current password
 router.put('/password', requireLogin, async (req, res) => {
   res.json(await authService.changePassword(req.user, req.body));
+});
+
+// POST /api/auth/password-reset {email} → 202 always (an unknown email gets the same answer) | 400 invalid email
+router.post('/password-reset', async (req, res) => {
+  await passwordResetService.requestPasswordReset(req.body);
+  res.status(202).end();
+});
+
+// POST /api/auth/password-reset/confirm {token, newPassword} → 204 | 400 missing, short, or bad/used/expired link
+router.post('/password-reset/confirm', async (req, res) => {
+  await passwordResetService.confirmPasswordReset(req.body);
+  res.status(204).end();
 });
 
 // POST /api/auth/logout → 204, also with no active session (idempotent)

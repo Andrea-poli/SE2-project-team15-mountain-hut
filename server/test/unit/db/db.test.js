@@ -31,6 +31,7 @@ describe('database', () => {
       { name: 'booking_requirements' },
       { name: 'booking_tables' },
       { name: 'bookings' },
+      { name: 'password_resets' },
       { name: 'slot_tables' },
       { name: 'slots' },
       { name: 'users' },
@@ -205,7 +206,7 @@ describe('schema migrations', () => {
 
     upgraded = await openDatabase(versionOnePath);
 
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
     await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
     const after = await rowsOfVersionOne((sql) => upgraded.all(sql));
     after.users = after.users.map(({ must_change_password: _mustChangePassword, ...user }) => user);
