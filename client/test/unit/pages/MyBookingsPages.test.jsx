@@ -25,7 +25,8 @@
 //      booking is read from listMyBookings(). Not one of the hiker's bookings, or not changeable → a message
 //      and a link back to My bookings, no form.
 //  X2  Button "Save changes": changeBooking(id, change) with only the changed fields (numbers, not strings);
-//      nothing changed → no call and a message "Nothing to change". The button is disabled while saving.
+//      nothing changed → no call and a message "Nothing to change". While saving the button is disabled and
+//      may say "Saving…" (like "Booking…" on the Book page).
 //  X3  Empty or invalid fields: the same errors as the Book page, on the field; nothing sent.
 //  X4  Server errors: 409 → on "Time" (as on the Book page); 400 → role=alert with the server's message.
 //  X5  Success → back to My bookings, which says "Booking changed" (M6). A link "Back" goes to My bookings.
@@ -99,7 +100,7 @@ function renderChange(id = 7) {
     guard: <RequireRole roles={['hiker']} /> });
 }
 const item = (text) => screen.getAllByRole('listitem').find((li) => li.textContent.includes(text));
-const saveButton = () => screen.getByRole('button', { name: 'Save changes' });
+const saveButton = () => screen.getByRole('button', { name: /^(Save changes|Saving…?)$/ });
 const party = () => screen.getByLabelText('Number of people');
 
 beforeEach(() => {
