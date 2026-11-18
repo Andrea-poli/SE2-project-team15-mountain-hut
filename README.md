@@ -79,7 +79,7 @@ Read from `.env` in the repository root (template: `.env.example`). Variables al
 | `PORT` | `3001` | server port |
 | `TZ` | `Europe/Rome` | hut local time (set by the server if missing) |
 | `DATA_DIR` | `server/data` | folder of `mountain-hut.db` and `sessions.db`; relative paths start from the repository root |
-| `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active |
+| `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active. The pages still use the PC clock: e.g. the staff time menu marks a slot "started" by the PC time, so for a demo keep the PC near `FAKE_NOW` |
 
 ## Tests
 

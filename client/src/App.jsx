@@ -14,11 +14,11 @@ import HomePage from './pages/public/HomePage.jsx';
 import LoginPage from './pages/public/LoginPage.jsx';
 import NewSlotPage from './pages/staff/NewSlotPage.jsx';
 import SlotsWeekPage from './pages/staff/SlotsWeekPage.jsx';
-import StaffReservationPage from './pages/staff/StaffReservationPage.jsx';
 import { pageRoles, routes } from './routes.js';
 
-// Loaded on its own: the phone library (flags, metadata, CSS) stays out of the bundle of the other pages.
+// Loaded on their own: the phone library (flags, metadata, CSS) stays out of the bundle of the other pages.
 const RegisterPage = lazy(() => import('./pages/public/RegisterPage.jsx'));
+const StaffReservationPage = lazy(() => import('./pages/staff/StaffReservationPage.jsx'));
 
 export default function App() {
   return (
@@ -49,7 +49,14 @@ export default function App() {
           <Route element={<RequireRole roles={pageRoles[routes.staffSlots]} />}>
             <Route path={routes.staffSlots} element={<SlotsWeekPage />} />
             <Route path={routes.newSlot} element={<NewSlotPage />} />
-            <Route path={routes.staffNewBooking} element={<StaffReservationPage />} />
+            <Route
+              path={routes.staffNewBooking}
+              element={
+                <Suspense fallback={<Loading />}>
+                  <StaffReservationPage />
+                </Suspense>
+              }
+            />
           </Route>
 
           <Route path="*" element={<NotFoundPage />} />
