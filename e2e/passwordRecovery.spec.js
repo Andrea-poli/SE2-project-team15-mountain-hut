@@ -7,7 +7,8 @@
 //   E5 A hiker created by staff logs in with the generated password, is sent to Change password and cannot open
 //      other pages until they choose their own; then they use the site, and the generated password no longer works.
 //   E6 Forgot password → the emailed link (read from the captured mailbox) → a new password → log in with it; the
-//      old password no longer works; the same link a second time is not valid any more.
+//      old password no longer works; the same link a second time says "not valid" as soon as the page opens
+//      (GET /api/auth/password-reset/validity), with no form.
 //   E5b/E6b/E6c On these three forms, after an error, fixing the fields and clicking the button once sends the
 //      form (as on the Log in page).
 //
@@ -179,15 +180,15 @@ test.describe('Forced password change and recovery by email', () => {
     expect((await me.json()).email).toBe(hiker.email);
     expect((await apiLogin(playwright, baseURL, hiker.email, hiker.password)).status).toBe(401);
 
-    // The same link again: not valid, with a way to ask for a new one.
+    // The same link again: "not valid" as soon as the page opens, with a way to ask for a new one, and no form
+    // (nothing to type).
     await page.goto(link);
-    await page.getByLabel('New password', { exact: true }).fill('another-password');
-    await page.getByLabel('Confirm new password', { exact: true }).fill('another-password');
-    await page.getByRole('button', { name: 'Save the new password' }).click();
     await expect(page.getByRole('alert')).toContainText(/not valid/i);
     await expect(page.getByRole('link', { name: /new link/i })).toHaveAttribute('href', '/forgot-password');
+    await expect(page.getByLabel('New password', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save the new password' })).toHaveCount(0);
     await expectPageOk(page);
-    expect((await apiLogin(playwright, baseURL, hiker.email, 'another-password')).status).toBe(401);
+    expect((await apiLogin(playwright, baseURL, hiker.email, NEW_PASSWORD)).status).toBe(200);
   });
 
   // A user who first sends a form with an error, then fixes the fields and clicks the button once: the click must

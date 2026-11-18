@@ -21,6 +21,9 @@
 //      missing fields or a short password 400 (and the link is not used up); the call logs nobody in; every open
 //      session of that user is logged out (the other users' are not).
 //   B5 Only the hash of the token is stored, never the token itself (not even in the database file).
+//   B6 GET /api/auth/password-reset/validity?token=: public; 200 for a valid link; 400 "This link is not valid or
+//      has expired: ask for a new one" for a missing, empty, unknown, used, replaced or expired (24 h) token, the
+//      same answer for all; it never consumes the link (checked twice, confirm still works).
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import request from 'supertest';
@@ -478,6 +481,79 @@ describe('B4 POST /api/auth/password-reset/confirm', () => {
     expectError(await phone.get('/api/auth/me'), 401);
     expectError(await laptop.get('/api/auth/me'), 401);
     expect((await otherAgent.get('/api/auth/me')).status).toBe(200);
+  });
+});
+
+// ---------- B6 GET /api/auth/password-reset/validity ----------
+
+const checkLink = (token) =>
+  request(app)
+    .get('/api/auth/password-reset/validity')
+    .query(token === undefined ? {} : { token });
+
+describe('B6 GET /api/auth/password-reset/validity', () => {
+  it('200 for a valid link, and no login is needed', async () => {
+    const user = await createUser();
+    const token = await resetToken(user);
+    const res = await checkLink(token);
+    expect(res.status).toBe(200);
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['unknown', '0123456789abcdef'.repeat(4)],
+  ])('400 "%s" token, with the contract message', async (_case, token) => {
+    await createUser();
+    expectError(await checkLink(token), 400, BAD_LINK);
+  });
+
+  it('400 for a used link', async () => {
+    const user = await createUser();
+    const token = await resetToken(user);
+    expect((await confirmReset(token, NEW_PASSWORD)).status).toBe(204);
+    expectError(await checkLink(token), 400, BAD_LINK);
+  });
+
+  it('400 for a link replaced by a newer one; the newer one is valid', async () => {
+    const user = await createUser();
+    const old = await resetToken(user);
+    const newer = await resetToken(user);
+    expectError(await checkLink(old), 400, BAD_LINK);
+    expect((await checkLink(newer)).status).toBe(200);
+  });
+
+  it('valid for 24 hours: 200 one minute before, 400 one minute after', async () => {
+    const user = await createUser();
+    const token = await resetToken(user); // asked at 10:00 of 2 Nov
+    setNow('2026-11-03T09:59');
+    expect((await checkLink(token)).status).toBe(200);
+    setNow('2026-11-03T10:01');
+    expectError(await checkLink(token), 400, BAD_LINK);
+  });
+
+  it('never consumes the link: checked twice, then confirm still works (and after it the check says 400)', async () => {
+    const user = await createUser();
+    const token = await resetToken(user);
+
+    expect((await checkLink(token)).status).toBe(200);
+    expect((await checkLink(token)).status).toBe(200);
+    expect((await confirmReset(token, NEW_PASSWORD)).status).toBe(204);
+
+    expect((await login(request(app), user.email, NEW_PASSWORD)).status).toBe(200);
+    expectError(await checkLink(token), 400, BAD_LINK);
+  });
+
+  it('gives the same answer for every kind of bad link (nothing more than "not valid")', async () => {
+    const user = await createUser();
+    const used = await resetToken(user);
+    await confirmReset(used, NEW_PASSWORD);
+    const answers = [await checkLink('nope'), await checkLink(used), await checkLink('')];
+    for (const res of answers) expect({ status: res.status, body: res.body }).toEqual({
+      status: 400,
+      body: { error: BAD_LINK },
+    });
   });
 });
 

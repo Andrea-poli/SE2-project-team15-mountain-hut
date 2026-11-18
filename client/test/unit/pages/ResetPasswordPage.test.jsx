@@ -1,17 +1,21 @@
 // MH-07 FT2 – the page of the reset link (/reset-password?token=…), from the story (recovery by email), PO #44
-// (link valid 24 hours) and the contract of POST /api/auth/password-reset/confirm (204; 400 for a short password
-// or for a link that is unknown, used or expired; the user is not logged in by the call and every session of that
-// user is logged out).
+// (link valid 24 hours) and the contract of GET /api/auth/password-reset/validity (200 valid, 400 missing /
+// unknown / used / expired; called on load, never consumes the link) and POST /api/auth/password-reset/confirm
+// (204; 400; the user is not logged in by the call and every session of that user is logged out).
 //
 // CONTRACT
-//   F4 Without a token: a message and a way to ask for a new link, and no form (it could not work).
+//   F4 Without a token: a message and a way to ask for a new link, and no form (it could not work), no request.
+//      With a token the link is checked on load: "Loading" meanwhile, then the form for a valid link; for a bad
+//      link (400) its message and a way to ask for a new link, no form, without typing anything. Only the answer
+//      about the link now in the address counts (a late answer about a previous link is ignored).
 //      Client checks before any request: new password (at least 8 characters, at most 128) and its confirmation.
-//      The token of the address and the new password are sent. 400 for a bad or expired link → its message and a
-//      way to ask for a new link, no form; 400 for the password → error on the field; other errors → alert, the
-//      form stays. One request at a time. Success → a message and a link to log in; nobody is logged in
-//      afterwards in this browser.
-import { screen, waitFor, within } from '@testing-library/react';
+//      The token of the address and the new password are sent. Any 400 from confirm → bad-link message and a way
+//      to ask for a new link, no form (the password was checked already: only the link can be wrong); other
+//      errors → alert, the form stays. One request at a time. Success → a message and a link to log in; nobody
+//      is logged in afterwards in this browser.
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Link } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as authApi from '../../../src/api/auth.js';
 import { ApiError } from '../../../src/api/client.js';
@@ -27,6 +31,7 @@ vi.mock('../../../src/api/auth.js', () => ({
   logout: vi.fn(),
   changePassword: vi.fn(),
   requestPasswordReset: vi.fn(),
+  checkPasswordResetToken: vi.fn(),
   confirmPasswordReset: vi.fn(),
 }));
 
@@ -62,6 +67,7 @@ describe('ResetPasswordPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(authApi.me).mockRejectedValue(new ApiError(401, 'Not logged in'));
+    vi.mocked(authApi.checkPasswordResetToken).mockResolvedValue(null); // 200: a valid link, unless a test says else
   });
 
   describe('without a token', () => {
@@ -70,7 +76,86 @@ describe('ResetPasswordPage', () => {
       expect(await askAgainLink()).toHaveAttribute('href', '/forgot-password');
       expect(screen.getByRole('alert')).toHaveTextContent(/link/i);
       expectNoForm();
+      expect(authApi.checkPasswordResetToken).not.toHaveBeenCalled();
       expect(authApi.confirmPasswordReset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the link is checked on load', () => {
+    it('shows "Loading" while checking, then the form for a valid link', async () => {
+      let answer;
+      vi.mocked(authApi.checkPasswordResetToken).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+      renderReset('/reset-password?token=a%2Bb%3Dc');
+      expect(await screen.findByRole('status')).toHaveTextContent(/loading/i);
+      expectNoForm();
+      expect(authApi.checkPasswordResetToken).toHaveBeenCalledWith('a+b=c');
+
+      answer(null);
+      expect(await screen.findByLabelText('New password')).toBeInTheDocument();
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('a bad link (400): its message and a way to ask for a new link at once, no form, no confirm', async () => {
+      vi.mocked(authApi.checkPasswordResetToken).mockRejectedValue(new ApiError(400, BAD_LINK));
+      renderReset();
+      expect(await askAgainLink()).toHaveAttribute('href', '/forgot-password');
+      expect(screen.getByRole('alert')).toHaveTextContent(BAD_LINK);
+      expectNoForm();
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+      expect(authApi.confirmPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('checking the link sends nothing else (it is not a use of the link)', async () => {
+      renderReset();
+      await screen.findByLabelText('New password');
+      expect(authApi.checkPasswordResetToken).toHaveBeenCalledTimes(1);
+      expect(authApi.confirmPasswordReset).not.toHaveBeenCalled();
+    });
+
+    // Opening a second link while the first one is still being checked: only the answer about the link in the
+    // address counts, whatever the order the two answers arrive in.
+    it.each([
+      ['old link bad, new link valid → the form', false, true],
+      ['old link valid, new link bad → the bad-link message', true, false],
+    ])('a late answer about a previous link is ignored (%s)', async (_case, oldValid, newValid) => {
+      const answers = {};
+      vi.mocked(authApi.checkPasswordResetToken).mockImplementation(
+        (token) => new Promise((resolve, reject) => (answers[token] = { resolve, reject })),
+      );
+      renderPage(
+        <>
+          <ResetPasswordPage />
+          <Link to="/reset-password?token=new">Open the new link</Link>
+        </>,
+        { path: '/reset-password', url: '/reset-password?token=old' },
+      );
+      await waitFor(() => expect(answers.old).toBeDefined());
+      await userEvent.click(screen.getByRole('link', { name: 'Open the new link' }));
+      await waitFor(() => expect(answers.new).toBeDefined());
+
+      const settle = (token, valid) =>
+        valid ? answers[token].resolve(null) : answers[token].reject(new ApiError(400, BAD_LINK));
+      await act(async () => settle('new', newValid));
+      await act(async () => settle('old', oldValid));
+
+      if (newValid) {
+        expect(screen.getByLabelText('New password')).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByRole('alert')).toHaveTextContent(BAD_LINK);
+        expectNoForm();
+      }
+    });
+
+    // The link may be fine: the page only could not reach the server. It must say so, not call the link invalid.
+    it('no connection during the check: says the server cannot be reached, not that the link is invalid', async () => {
+      vi.mocked(authApi.checkPasswordResetToken).mockRejectedValue(new ApiError(0, 'Cannot reach the server.'));
+      renderReset();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Cannot reach the server.');
+      expect(alert).not.toHaveTextContent(/not valid|expired/i);
+      expectNoForm();
     });
   });
 
@@ -142,15 +227,17 @@ describe('ResetPasswordPage', () => {
       expectNoForm();
     });
 
-    it('400 for the password: the error is on the new password field', async () => {
+    // Changed on purpose (617a7fb): the password is checked before sending, so every 400 of confirm is the link
+    // (used in another tab, or expired while typing).
+    it('any other 400 from confirm is treated as a bad link too', async () => {
       vi.mocked(authApi.confirmPasswordReset).mockRejectedValue(
         new ApiError(400, 'Password must be at least 8 characters long'),
       );
       renderReset();
-      const f = await fillAndSubmit();
-      await waitFor(() => expect(f.next).toHaveAccessibleDescription(/at least 8 characters long\./));
-      expect(f.next).toHaveFocus();
-      expect(screen.queryByRole('link', { name: /new link/i })).not.toBeInTheDocument();
+      await fillAndSubmit();
+      expect(await askAgainLink()).toHaveAttribute('href', '/forgot-password');
+      expect(screen.getByRole('alert')).toHaveTextContent('Password must be at least 8 characters long');
+      expectNoForm();
     });
 
     it.each([

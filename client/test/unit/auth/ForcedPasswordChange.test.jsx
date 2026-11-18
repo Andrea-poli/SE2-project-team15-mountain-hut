@@ -26,6 +26,7 @@ vi.mock('../../../src/api/auth.js', () => ({
   logout: vi.fn(),
   changePassword: vi.fn(),
   requestPasswordReset: vi.fn(),
+  checkPasswordResetToken: vi.fn(),
   confirmPasswordReset: vi.fn(),
 }));
 
@@ -128,6 +129,7 @@ describe('F1 forced password change', () => {
 
     it('the reset page of an email link opens, without a redirect', async () => {
       vi.mocked(authApi.me).mockResolvedValue(forcedHiker);
+      vi.mocked(authApi.checkPasswordResetToken).mockResolvedValue(null); // a valid link
       renderApp('/reset-password?token=abc123');
       expect(await screen.findByLabelText('New password')).toBeInTheDocument();
       expect(window.location.pathname).toBe('/reset-password');

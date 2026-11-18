@@ -4,11 +4,13 @@
 //
 // CONTRACT
 //   F5 PUT /api/auth/password {currentPassword, newPassword} → the User; POST /api/auth/password-reset {email} →
-//      202, nothing to read (null); POST /api/auth/password-reset/confirm {token, newPassword} → 204 (null).
+//      202, nothing to read (null); GET /api/auth/password-reset/validity?token= (encoded) → 200 / 400;
+//      POST /api/auth/password-reset/confirm {token, newPassword} → 204 (null).
 //      Errors come back as ApiError with the status and the server message.
 //      Mock: the same rules and messages as the server: change (401 not logged in / wrong current password,
 //      400 missing / short / same, success clears mustChangePassword); reset request (400 invalid email, the
-//      same answer for an unknown email, a new link makes the old one invalid); reset confirm (400 missing,
+//      same answer for an unknown email, a new link makes the old one invalid); link check (400 empty, unknown,
+//      replaced or used link; checking does not use it up); reset confirm (400 missing,
 //      short, bad link; the link works once; the new password logs in, the old one does not; the session of
 //      that user ends).
 import { setImmediate } from 'node:timers';
@@ -68,6 +70,29 @@ describe('api/auth password calls', () => {
       expect(path).toBe('/api/auth/password-reset/confirm');
       expect(init.method).toBe('POST');
       expect(JSON.parse(init.body)).toEqual({ token: '7f3c9a', newPassword: 'my-own-secret-pw' });
+    });
+
+    it('checkPasswordResetToken: GET /api/auth/password-reset/validity with the token encoded; 200 resolves', async () => {
+      const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+      vi.stubGlobal('fetch', fetch);
+      const auth = await loadAuth(false);
+
+      await expect(auth.checkPasswordResetToken('a+b=c&x')).resolves.toBeNull();
+      const [path, init] = fetch.mock.lastCall;
+      expect(path).toBe('/api/auth/password-reset/validity?token=a%2Bb%3Dc%26x');
+      expect(init.method).toBeUndefined(); // GET
+      expect(init.body).toBeUndefined();
+    });
+
+    it('checkPasswordResetToken: 400 comes back as ApiError with the message', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(reply(400, { error: 'This link is not valid or has expired: ask for a new one' })),
+      );
+      const auth = await loadAuth(false);
+      await expect(auth.checkPasswordResetToken('old')).rejects.toMatchObject({
+        name: 'ApiError', status: 400, message: 'This link is not valid or has expired: ask for a new one',
+      });
     });
 
     it('passes on the server refusals as ApiError with status and message', async () => {
@@ -187,6 +212,26 @@ describe('api/auth password calls', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
+    it('checkPasswordResetToken: valid only for the newest unused link, and checking never uses it up', async () => {
+      const { auth, fetch } = await loadMockAuth();
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const badLink = { status: 400, message: 'This link is not valid or has expired: ask for a new one' };
+      await run(auth.requestPasswordReset('hiker@example.com'));
+      const old = lastMockToken(info);
+      await run(auth.requestPasswordReset('hiker@example.com'));
+      const token = lastMockToken(info);
+
+      expect((await run(auth.checkPasswordResetToken(''))).error).toMatchObject(badLink);
+      expect((await run(auth.checkPasswordResetToken('unknown'))).error).toMatchObject(badLink);
+      expect((await run(auth.checkPasswordResetToken(old))).error).toMatchObject(badLink);
+      expect((await run(auth.checkPasswordResetToken(token))).error).toBeUndefined();
+      expect((await run(auth.checkPasswordResetToken(token))).error).toBeUndefined(); // twice: still valid
+
+      expect(await run(auth.confirmPasswordReset(token, 'my-own-secret-pw'))).toEqual({ value: null });
+      expect((await run(auth.checkPasswordResetToken(token))).error).toMatchObject(badLink); // used
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
     it('confirmPasswordReset: the session of another user stays open', async () => {
       const { auth } = await loadMockAuth();
       const info = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -204,6 +249,7 @@ describe('api/auth password calls', () => {
     it.each([
       ['changePassword', (m) => m.changePassword('generated1', 'my-own-secret-pw')],
       ['requestPasswordReset', (m) => m.requestPasswordReset('hiker@example.com')],
+      ['checkPasswordResetToken', (m) => m.checkPasswordResetToken('7f3c9a')],
       ['confirmPasswordReset', (m) => m.confirmPasswordReset('7f3c9a', 'my-own-secret-pw')],
     ])('%s never loads the mock when VITE_USE_MOCKS is not "true"', async (_name, call) => {
       const auth = await loadAuth(true);
