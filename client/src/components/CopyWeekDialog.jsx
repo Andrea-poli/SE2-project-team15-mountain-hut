@@ -45,6 +45,16 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
   // Slots of the target week that the copy would replace, with the week they belong to.
   const [targetSlots, setTargetSlots] = useState({ week: null, count: 0 });
   const targetIso = toLocalIsoDate(target);
+  // Where the focus goes once the next render is on screen (the 409 message or the error), set by submit().
+  // Clicking "Copy slots" disables it, so the browser drops the focus to the page: it is moved here after the
+  // render that shows the message (a setTimeout could run before that render, and the focus stayed lost).
+  const focusAfterRender = useRef(null);
+  useEffect(() => {
+    const messageRef = focusAfterRender.current;
+    if (!messageRef) return;
+    focusAfterRender.current = null;
+    messageRef.current?.focus();
+  });
 
   // Read the target week whenever it changes; answers for a week the user already left are ignored.
   // If the read fails, no warning is shown: the copy itself still reports any error.
@@ -84,13 +94,13 @@ export default function CopyWeekDialog({ weekStart, onHide, onCopied }) {
       // so the focus moves to the message.
       if (error.status === 409) {
         setBookedWeeks((weeks) => new Set(weeks).add(targetIso));
-        setTimeout(() => bookedRef.current?.focus());
+        focusAfterRender.current = bookedRef;
         return;
       }
       setMessageLive(true);
       setSubmitError(error.message);
       // After the render that shows the error, move the focus to it so screen readers read it.
-      setTimeout(() => errorRef.current?.focus());
+      focusAfterRender.current = errorRef;
     }
   }
 
