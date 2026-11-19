@@ -117,6 +117,26 @@ describe('api/bookings and api/publicSlots', () => {
       expect(sent()).toEqual({});
     });
 
+    it('cancelBooking posts to the cancel path of the booking, with the id encoded (MH-08)', async () => {
+      const cancelled = { ...booking, status: 'cancelled', tables: [] };
+      const fetch = vi.fn().mockImplementation(async () => reply(200, cancelled));
+      vi.stubGlobal('fetch', fetch);
+      const api = await load(false);
+      await expect(api.cancelBooking(7)).resolves.toEqual(cancelled);
+      expect(fetch.mock.lastCall[0]).toBe('/api/bookings/7/cancel');
+      expect(fetch.mock.lastCall[1].method).toBe('POST');
+      await api.cancelBooking('1/../2');
+      expect(fetch.mock.lastCall[0]).toBe('/api/bookings/1%2F..%2F2/cancel');
+    });
+
+    it('cancelBooking passes on 409 "already cancelled" as ApiError (MH-08)', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(409, { error: 'This booking is already cancelled' })));
+      const api = await load(false);
+      await expect(api.cancelBooking(7)).rejects.toMatchObject({
+        name: 'ApiError', status: 409, message: 'This booking is already cancelled',
+      });
+    });
+
     it('passes on the server errors as ApiError with status and message', async () => {
       vi.stubGlobal(
         'fetch',
@@ -145,6 +165,7 @@ describe('api/bookings and api/publicSlots', () => {
         getBooking: vi.fn().mockResolvedValue(booking),
         listMyBookings: vi.fn().mockResolvedValue([booking]),
         changeBooking: vi.fn().mockResolvedValue(booking),
+        cancelBooking: vi.fn().mockResolvedValue({ ...booking, status: 'cancelled', tables: [] }),
       };
       const mockSlots = { listPublicSlots: vi.fn().mockResolvedValue(slots) };
       vi.doMock('../../../src/api/mocks/bookings.js', () => mockBookings);
@@ -158,6 +179,8 @@ describe('api/bookings and api/publicSlots', () => {
       await expect(api.listMyBookings()).resolves.toEqual([booking]);
       await expect(api.changeBooking(7, { partySize: 5, slotId: undefined })).resolves.toEqual(booking);
       expect(mockBookings.changeBooking).toHaveBeenCalledWith(7, { partySize: 5 });
+      await expect(api.cancelBooking(7)).resolves.toMatchObject({ id: 7, status: 'cancelled' });
+      expect(mockBookings.cancelBooking).toHaveBeenCalledWith(7);
       await expect(api.listPublicSlots('2026-11-03')).resolves.toEqual(slots);
       expect(mockSlots.listPublicSlots).toHaveBeenCalledWith('2026-11-03');
       expect(fetch).not.toHaveBeenCalled();
