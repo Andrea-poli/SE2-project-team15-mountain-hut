@@ -17,12 +17,12 @@
 //   B4 POST /api/auth/password-reset/confirm {token, newPassword}: 204 with a valid token and a good password; the
 //      new password works, the old one does not; mustChangePassword becomes false; the link works once
 //      (400 the second time, also for two requests at once); valid 24 hours (PO #44, NIST SP 800-63A-4 3.8):
-//      400 after, works just before; unknown token 400 "This link is not valid or has expired: ask for a new one";
+//      works just before and at exactly 24 h, 400 after; unknown token 400 "This link is not valid or has expired: ask for a new one";
 //      missing fields or a short password 400 (and the link is not used up); the call logs nobody in; every open
 //      session of that user is logged out (the other users' are not).
 //   B5 Only the hash of the token is stored, never the token itself (not even in the database file).
 //   B6 GET /api/auth/password-reset/validity?token=: public; 200 for a valid link; 400 "This link is not valid or
-//      has expired: ask for a new one" for a missing, empty, unknown, used, replaced or expired (24 h) token, the
+//      has expired: ask for a new one" for a missing, empty, unknown, used, replaced or expired (more than 24 h) token, the
 //      same answer for all; it never consumes the link (checked twice, confirm still works).
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -420,11 +420,17 @@ describe('B4 POST /api/auth/password-reset/confirm', () => {
     expect(answers.map((r) => r.status).sort()).toEqual([204, 400]);
   });
 
-  it('valid for 24 hours: works one minute before, 400 one minute after', async () => {
+  it('valid for 24 hours: works one minute before and at exactly 24 h, 400 one minute after', async () => {
     const user = await createUser();
     const early = await resetToken(user); // asked at 10:00 of 2 Nov
     setNow('2026-11-03T09:59');
-    expect((await confirmReset(early, NEW_PASSWORD)).status).toBe(204);
+    expect((await confirmReset(early, 'one-minute-before')).status).toBe(204);
+
+    setNow(`${TODAY}T10:00`);
+    const exact = await resetToken(user);
+    setNow('2026-11-03T10:00'); // exactly 24 h later: still valid, expired only after
+    expect((await confirmReset(exact, NEW_PASSWORD)).status).toBe(204);
+    expect((await login(request(app), user.email, NEW_PASSWORD)).status).toBe(200);
 
     setNow(`${TODAY}T10:00`);
     const late = await resetToken(user);
@@ -524,10 +530,12 @@ describe('B6 GET /api/auth/password-reset/validity', () => {
     expect((await checkLink(newer)).status).toBe(200);
   });
 
-  it('valid for 24 hours: 200 one minute before, 400 one minute after', async () => {
+  it('valid for 24 hours: 200 one minute before and at exactly 24 h, 400 one minute after', async () => {
     const user = await createUser();
     const token = await resetToken(user); // asked at 10:00 of 2 Nov
     setNow('2026-11-03T09:59');
+    expect((await checkLink(token)).status).toBe(200);
+    setNow('2026-11-03T10:00'); // exactly 24 h later: still valid, expired only after
     expect((await checkLink(token)).status).toBe(200);
     setNow('2026-11-03T10:01');
     expectError(await checkLink(token), 400, BAD_LINK);

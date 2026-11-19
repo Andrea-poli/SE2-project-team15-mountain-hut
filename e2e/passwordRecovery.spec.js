@@ -14,18 +14,28 @@
 //
 // Data: the demo seed on E2E_NOW (Mon 2 Nov 2026, 10:00), employee@example.com / employeepass; the E2E server
 // captures the emails (GET /api/test/emails?recipient=, shared mailbox: every test uses a new random email).
-// E5 and E5b book 2 seats each of the "Dinner – 1st turn" of 15 Nov (24 seats; 8 in all with the two runs): no
-// other spec books that Dinner (others: Dinner 6, 7, 8, 11, 14 staffReservation; 12 requirements and
-// changeBooking; 13 booking; 16 confirmationEmail). E6 and E6b book nothing.
+// E5 and E5b book in a "Hikers' picnic" slot they create through POST /api/slots, one per test and project (the
+// desktop and phone runs share the database), on 20 Nov, after the last seeded day. E6 and E6b book nothing.
 // The link in the email starts with PUBLIC_URL (default http://localhost:5173, not set for the E2E client on
 // 5174): the test opens its path and query on the E2E client.
 import { randomUUID } from 'node:crypto';
 import { expectAccessible } from './helpers/axe.js';
-import { registerHiker, slotId } from './helpers/booking.js';
+import { registerHiker } from './helpers/booking.js';
 import { expect, test } from './helpers/clock.js';
 import { expectNoHorizontalScroll } from './helpers/layout.js';
 
-const STAFF_BOOKING_DAY = '2026-11-15';
+const STAFF_BOOKING_DAY = '2026-11-20';
+// The slot where staff book the new hiker: one per test and project, so none is created twice.
+const PICNIC_SLOT = {
+  E5: {
+    desktop: { startTime: '10:00', endTime: '11:00' },
+    phone: { startTime: '11:00', endTime: '12:00' },
+  },
+  E5b: {
+    desktop: { startTime: '12:00', endTime: '13:00' },
+    phone: { startTime: '13:00', endTime: '14:00' },
+  },
+};
 const NEW_PASSWORD = 'my-own-secret-pw';
 
 const heading = (page, name) => page.getByRole('heading', { level: 1, name });
@@ -55,19 +65,35 @@ async function apiLogin(playwright, baseURL, email, password) {
 }
 
 /**
- * The employee creates a hiker with a booking (POST /api/staff/bookings, newHiker), in a context of their own:
- * returns the hiker's email and the generated password.
+ * Creates a slot as the employee logged in on `request` (POST /api/slots) and returns it (with its id).
+ * Same approach as createSlot in staffReservation.spec.js.
  */
-async function hikerCreatedByStaff(playwright, baseURL) {
+async function createSlot(request, { date, startTime, endTime, label, tables }) {
+  const created = await request.post('/api/slots', { data: { date, startTime, endTime, label, tables } });
+  expect(created.status(), await created.text()).toBe(201);
+  return created.json();
+}
+
+/**
+ * The employee creates a hiker with a booking (POST /api/staff/bookings, newHiker) in a slot of their own
+ * (`slotTime`: start and end), in a context of their own: returns the hiker's email and the generated password.
+ */
+async function hikerCreatedByStaff(playwright, baseURL, slotTime) {
   const email = `staff-made-${randomUUID()}@example.com`;
   const staff = await playwright.request.newContext({ baseURL });
   try {
     const login = await staff.post('/api/auth/login', { data: { email: 'employee@example.com', password: 'employeepass' } });
     expect(login.ok(), await login.text()).toBe(true);
+    const slot = await createSlot(staff, {
+      date: STAFF_BOOKING_DAY,
+      ...slotTime,
+      label: "Hikers' picnic",
+      tables: [{ name: 'T1', seats: 4 }],
+    });
     const res = await staff.post('/api/staff/bookings', {
       data: {
         newHiker: { firstName: 'Paolo', lastName: 'Neri', email, phone: '+393335551234' },
-        slotId: await slotId(staff, STAFF_BOOKING_DAY, 'Dinner – 1st turn'),
+        slotId: slot.id,
         partySize: 2,
       },
     });
@@ -100,7 +126,7 @@ test.describe('Forced password change and recovery by email', () => {
     playwright,
     baseURL,
   }) => {
-    const { email, generated } = await hikerCreatedByStaff(playwright, baseURL);
+    const { email, generated } = await hikerCreatedByStaff(playwright, baseURL, PICNIC_SLOT.E5[test.info().project.name]);
 
     // First login: straight to Change password.
     await logInOnPage(page, email, generated);
@@ -195,7 +221,7 @@ test.describe('Forced password change and recovery by email', () => {
   // send the form (on Log in it does). Leaving the last field removes its error message, so the button must not
   // move away under the pointer before the click ends.
   test('E5b: after an error, one click on "Change password" is enough', async ({ page, playwright, baseURL }) => {
-    const { email, generated } = await hikerCreatedByStaff(playwright, baseURL);
+    const { email, generated } = await hikerCreatedByStaff(playwright, baseURL, PICNIC_SLOT.E5b[test.info().project.name]);
     await logInOnPage(page, email, generated);
     await expect(heading(page, 'Change password')).toBeVisible();
 
