@@ -21,6 +21,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # MH-07: address of the pages in the password reset email; follows HOST_PORT unless set.
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:${HOST_PORT:-3001}}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
     volumes:
       - mountain-hut-data:/data

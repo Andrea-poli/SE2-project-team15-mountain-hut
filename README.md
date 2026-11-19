@@ -128,24 +128,27 @@ The variables are read when the container starts: no secret is ever written into
 
 ### Run the published image (Docker Hub, no source code needed)
 
-The image is on Docker Hub: https://hub.docker.com/r/fedeangio/mountain-hut (tag `trial` now, `release-1` at the end of sprint 2). It runs on Windows, macOS (Intel and Apple silicon) and Linux; all you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux).
+Release 1 (sprint 2) is the image `fedeangio/mountain-hut:release-1` on Docker Hub: https://hub.docker.com/r/fedeangio/mountain-hut. It runs on Windows, macOS (Intel and Apple silicon) and Linux; all you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux). The image contains the whole application (pages, API, database with the demo data); only the settings with the secrets come from outside.
 
-1. **A test mailbox (1 minute).** The booking emails need an SMTP server. Open https://ethereal.email and click *Create Ethereal Account*: keep the page open, it shows the user and the password. The emails reach nobody; you read them there under *Messages*.
-2. **A settings file.** In an empty folder, create a file `mountain-hut.env` with these lines, replacing each `<…>` with your value, angle brackets included (no quotes, no spaces around `=`):
-   ```
-   SESSION_SECRET=<a long random text>
-   SMTP_HOST=smtp.ethereal.email
-   SMTP_PORT=587
-   SMTP_SECURE=false
-   SMTP_USER=<the Ethereal user>
-   SMTP_PASS=<the Ethereal password>
-   ```
-   For `SESSION_SECRET` any long random text works, e.g. the output of `openssl rand -hex 32` (macOS, Linux) or of `-join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })` in Windows PowerShell. Keep this file to yourself: it is read when the container starts and is never part of the image.
-3. **Start it**, from that folder (the same command on Windows, macOS and Linux):
+1. **The settings file.** Choose one:
+   - **With the team's secrets file (course instructors).** Download `Team15-secrets.zip` from the "Elaborati" section of the portal and unzip it into an empty folder. It contains `mountain-hut.env`, ready to use: the session secret and the SMTP account of a test mailbox ([Ethereal](https://ethereal.email)) for the booking emails. Don't edit it and don't share it.
+   - **With your own settings.** Open https://ethereal.email and click *Create Ethereal Account* (1 minute, free): it shows a user and a password. In an empty folder, create a file `mountain-hut.env` with these lines, replacing each `<…>` with your value, angle brackets included (no quotes, no spaces around `=`):
+     ```
+     SESSION_SECRET=<a long random text>
+     SMTP_HOST=smtp.ethereal.email
+     SMTP_PORT=587
+     SMTP_SECURE=false
+     SMTP_USER=<the Ethereal user>
+     SMTP_PASS=<the Ethereal password>
+     ```
+     For `SESSION_SECRET` any long random text works, e.g. the output of `openssl rand -hex 32` (macOS, Linux) or of `-join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })` in Windows PowerShell. Keep this file to yourself: it is read when the container starts and is never part of the image.
+2. **Start it**, from the folder of `mountain-hut.env` (the same command on Windows, macOS and Linux):
    ```bash
-   docker run -d --name mountain-hut -p 3001:3001 --env-file mountain-hut.env -v mountain-hut-data:/data fedeangio/mountain-hut:trial
+   docker run -d --name mountain-hut -p 3001:3001 --env-file mountain-hut.env -v mountain-hut-data:/data fedeangio/mountain-hut:release-1
    ```
-   Then open http://localhost:3001 (port 3001 busy? use `-p 8080:3001` and http://localhost:8080). On the first start the demo data is loaded, with dates from that day on: the accounts are in [Demo accounts](#demo-accounts).
+   Then open http://localhost:3001. On the first start the demo data is loaded, with dates from that day on. Log in with the [Demo accounts](#demo-accounts) (hiker, employee, warden; passwords in that table).
+   Port 3001 busy? Use `-p 8080:3001`, open http://localhost:8080, and add the line `PUBLIC_URL=http://localhost:8080` to `mountain-hut.env`, so the link in the password reset email points there.
+3. **Read the emails** (booking confirmed, changed or cancelled; password reset link): log in at https://ethereal.email/login with the `SMTP_USER` and `SMTP_PASS` of `mountain-hut.env`, then open *Messages*. The emails reach nobody else: every address of the demo accounts is fake, all the emails land in that mailbox.
 4. **Day to day.** `docker logs mountain-hut` shows the startup messages and any error. `docker stop mountain-hut` and `docker start mountain-hut` keep the data (it lives in the volume `mountain-hut-data`). Back to fresh demo data: `docker rm -f mountain-hut`, then `docker volume rm mountain-hut-data`, then start again. A newer image: `docker pull fedeangio/mountain-hut:<tag>`, remove the container and start it again with the new tag. Changed `mountain-hut.env`? A restart is not enough, the settings are read when the container is created: `docker rm -f mountain-hut`, then the `docker run` command above again (the data stays in the volume).
 
 If it does not start, `docker logs mountain-hut` says why: `SESSION_SECRET is missing` or `SMTP_HOST is missing` means a line of `mountain-hut.env` is missing or misspelt. `535 Authentication failed` after a booking means the Ethereal user or password is wrong (the booking is saved anyway, only its email is lost).
