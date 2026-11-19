@@ -67,13 +67,14 @@ const PartyRequirementsForm = forwardRef(function PartyRequirementsForm(
 
   return (
     <fieldset className="mb-3">
-      <legend className="d-flex align-items-center gap-2 h5">
-        <Utensils aria-hidden="true" size={18} />
+      <legend className="d-flex align-items-start gap-2 h5">
+        <Utensils aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
         Dietary needs and allergies
         <span className="ms-auto small fw-normal text-body-secondary">(optional)</span>
       </legend>
-      <p className="small mb-3 align-items-center d-flex gap-1">
-        Tick <TriangleAlert aria-hidden="true" size={16} /> Allergies when the kitchen must take special care.
+      <p className="small mb-3 align-items-start d-flex gap-1">
+        Tick <TriangleAlert aria-hidden="true" size={16} className="flex-shrink-0 mt-1"/>
+        Allergies when the kitchen must take special care.
       </p>
       {requirements.length > 0 && (
         <div className="d-grid gap-3 mb-3">
