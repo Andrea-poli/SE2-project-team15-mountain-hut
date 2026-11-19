@@ -35,3 +35,28 @@ export async function me() {
   if (useMocks) return (await mocks()).me();
   return apiFetch('/api/auth/me');
 }
+
+// PUT /api/auth/password {currentPassword, newPassword} → 200 User | 400 | 401 wrong current password (MH-07)
+export async function changePassword(currentPassword, newPassword) {
+  if (useMocks) return (await mocks()).changePassword(currentPassword, newPassword);
+  return apiFetch('/api/auth/password', { method: 'PUT', body: { currentPassword, newPassword } });
+}
+
+// POST /api/auth/password-reset {email} → 202 always (an unknown email gets the same answer) | 400 (MH-07)
+export async function requestPasswordReset(email) {
+  if (useMocks) return (await mocks()).requestPasswordReset(email);
+  return apiFetch('/api/auth/password-reset', { method: 'POST', body: { email } });
+}
+
+// GET /api/auth/password-reset/validity?token=… → 200 valid | 400 missing/bad/used/expired link (MH-07).
+// Never consumes the token: safe to call just to decide whether to show the form.
+export async function checkPasswordResetToken(token) {
+  if (useMocks) return (await mocks()).checkPasswordResetToken(token);
+  return apiFetch(`/api/auth/password-reset/validity?token=${encodeURIComponent(token)}`);
+}
+
+// POST /api/auth/password-reset/confirm {token, newPassword} → 204 | 400 bad, used or expired link (MH-07)
+export async function confirmPasswordReset(token, newPassword) {
+  if (useMocks) return (await mocks()).confirmPasswordReset(token, newPassword);
+  return apiFetch('/api/auth/password-reset/confirm', { method: 'POST', body: { token, newPassword } });
+}

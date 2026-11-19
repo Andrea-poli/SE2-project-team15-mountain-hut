@@ -19,7 +19,7 @@ const hasConfirmedBooking = (bookings, hikerId, slotId, exceptId) =>
   bookings.some((b) => b.id !== exceptId && b.hikerId === hikerId && b.slot.id === slotId && b.status === 'confirmed');
 
 /** Logged-in mock user (api/mocks/auth.js keeps it in sessionStorage). */
-function currentUser() {
+export function currentUser() {
   try {
     return JSON.parse(sessionStorage.getItem('mh-mock-user'));
   } catch {
@@ -28,7 +28,7 @@ function currentUser() {
 }
 
 /** Slot id → date (the mock ids are YYYYMMDD * 10 + turn). */
-function dateOfSlot(slotId) {
+export function dateOfSlot(slotId) {
   const day = Math.floor(slotId / 10);
   const text = String(day);
   return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
@@ -38,7 +38,7 @@ function dateOfSlot(slotId) {
  * Seat split for a party: one table if any fits (the smallest that fits), otherwise as few tables
  * as possible, largest first. Close enough to the real rule (planning 3.2) for a mock.
  */
-function allocate(free, partySize) {
+export function allocate(free, partySize) {
   const single = free.filter((t) => t.free >= partySize).sort((a, b) => a.free - b.free)[0];
   if (single) return [{ table: single, seats: partySize }];
   const result = [];

@@ -12,6 +12,9 @@ const users = [
   { id: 1, firstName: 'Hannah', lastName: 'Hiker', email: 'hiker@example.com', phone: '+39 333 1111111', role: 'hiker', password: 'hikerpass' },
   { id: 2, firstName: 'Eric', lastName: 'Employee', email: 'employee@example.com', phone: null, role: 'employee', password: 'employeepass' },
   { id: 3, firstName: 'Wendy', lastName: 'Warden', email: 'warden@example.com', phone: '+39 333 3333333', role: 'warden', password: 'wardenpass' },
+  // MH-07: a hiker created by staff, who must change the generated password at the next login.
+  { id: 4, firstName: 'Paolo', lastName: 'Neri', email: 'paolo.neri@example.com', phone: '+39 333 4444444',
+    role: 'hiker', password: 'generated1', mustChangePassword: true },
 ];
 let nextId = users.length + 1;
 
@@ -114,4 +117,61 @@ export async function me() {
   const user = loadUser();
   if (!user) throw new ApiError(401, 'Not logged in');
   return user;
+}
+
+// MH-07 – password change and reset. The mock has no email: the reset link is printed on the browser console.
+const resetTokens = new Map(); // token → user id (one link per user, like the server)
+
+export async function changePassword(currentPassword, newPassword) {
+  await wait();
+  const current = loadUser();
+  if (!current) throw new ApiError(401, 'Not logged in');
+  if (isBlank(currentPassword) || isBlank(newPassword)) {
+    throw new ApiError(400, 'Current and new password are required');
+  }
+  if (newPassword.length < 8) throw new ApiError(400, 'Password must be at least 8 characters long');
+  const found = users.find((u) => u.id === current.id);
+  if (found.password !== currentPassword) throw new ApiError(401, 'The current password is wrong');
+  if (currentPassword === newPassword) {
+    throw new ApiError(400, 'New password must be different from the current password');
+  }
+  found.password = newPassword;
+  delete found.mustChangePassword;
+  const user = toUser(found);
+  saveUser(user);
+  return user;
+}
+
+export async function requestPasswordReset(email) {
+  await wait();
+  if (isBlank(email) || !EMAIL_RE.test(email.trim())) throw new ApiError(400, 'Enter a valid email');
+  const found = findByEmail(email);
+  if (!found) return null;
+  for (const [token, id] of resetTokens) if (id === found.id) resetTokens.delete(token);
+  const token = crypto.randomUUID();
+  resetTokens.set(token, found.id);
+  console.info(`[mock email] reset link for ${found.email}: /reset-password?token=${token}`);
+  return null;
+}
+
+export async function checkPasswordResetToken(token) {
+  await wait();
+  if (isBlank(token) || !resetTokens.has(token)) {
+    throw new ApiError(400, 'This link is not valid or has expired: ask for a new one');
+  }
+}
+
+export async function confirmPasswordReset(token, newPassword) {
+  await wait();
+  if (isBlank(token) || isBlank(newPassword)) throw new ApiError(400, 'The link and a new password are required');
+  if (newPassword.length < 8) throw new ApiError(400, 'Password must be at least 8 characters long');
+  const id = resetTokens.get(token);
+  if (!id) throw new ApiError(400, 'This link is not valid or has expired: ask for a new one');
+  resetTokens.delete(token);
+  const found = users.find((u) => u.id === id);
+  found.password = newPassword;
+  delete found.mustChangePassword;
+  // Like the server: the sessions of the link's user end; whoever else is logged in here stays logged in.
+  if (loadUser()?.id === id) saveUser(null);
+  return null;
 }

@@ -240,8 +240,8 @@ paths:
         The current password is checked; the new one follows the registration
         rule (at least 8 characters) and must differ from the current one.
         On success `mustChangePassword` becomes false and the session stays
-        logged in. (Recovery of a forgotten password by email, also mentioned
-        in the clarification, is not part of this contract.)
+        logged in. A forgotten password is recovered by email
+        (`POST /api/auth/password-reset`).
       operationId: changePassword
       security:
         - sessionCookie: []
@@ -279,6 +279,125 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: 'The current password is wrong'
+
+  /api/auth/password-reset:
+    post:
+      tags: [auth]
+      summary: Ask for a password reset link by email (MH-07)
+      description: >
+        Public. "The hiker can recover their password via email" (MH-07
+        clarification, PO issue #36). When the email belongs to a user with a
+        password, the server emails a link to the client page
+        `/reset-password?token=…`, valid **24 hours** (PO issue #44) and
+        usable once; asking again makes the previous links invalid. The answer
+        is always the same 202, whether or not the email is registered, so the
+        page never reveals who has an account. Temporary hikers have no email
+        and cannot ask. The token is random and only its hash is stored.
+      operationId: requestPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: marco.rossi@example.com
+      responses:
+        '202':
+          description: >
+            Request taken: if the email is registered, a link is on its way.
+            Same answer for an unknown email.
+        '400':
+          description: Missing or invalid email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Enter a valid email'
+
+  /api/auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      summary: Set a new password with the token of a reset link (MH-07)
+      description: >
+        Public. The token from the link and the new password (registration
+        rule: at least 8 characters). On success the password is changed,
+        `mustChangePassword` becomes false (the hiker chose it), the token
+        cannot be used again and every open session of that user is logged
+        out. The user is **not** logged in by this call: they log in with the
+        new password. An unknown, used or expired token (more than 24 h) gets
+        the same 400.
+      operationId: confirmPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                  example: 7f3c9a…
+                newPassword:
+                  type: string
+                  minLength: 8
+                  example: my-own-secret-pw
+      responses:
+        '204':
+          description: Password changed; log in with the new one
+        '400':
+          description: >
+            Missing fields, new password shorter than 8 characters, or a link
+            that is unknown, already used or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                badLink:
+                  value: { error: 'This link is not valid or has expired: ask for a new one' }
+                short:
+                  value: { error: 'Password must be at least 8 characters long' }
+
+  /api/auth/password-reset/validity:
+    get:
+      tags: [auth]
+      summary: Check a reset link before showing the form (MH-07)
+      description: >
+        Public. Same token as the link, as a query parameter. Never consumes
+        it (does not count as a use, does not affect `/confirm`): the
+        Reset-password page calls this on load, so a dead link is caught
+        immediately instead of after the hiker has typed a new password
+        twice. 200 and 400 carry no information beyond "valid or not", same
+        as `/password-reset` never reveals whether an email is registered.
+      operationId: checkPasswordResetToken
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            example: 7f3c9a…
+      responses:
+        '200':
+          description: The link is still valid (not used, not expired)
+        '400':
+          description: Missing token, or a link that is unknown, used or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'This link is not valid or has expired: ask for a new one'
 
   /api/health:
     get:

@@ -270,7 +270,7 @@ svg {
   color: var(--mh-primary);
 }
 
-/* 11. Phone field (react-phone-number-input in RegisterPage; its style.css is loaded with that page).
+/* 11. Phone field (react-phone-number-input in RegisterPage and HikerPanel; its style.css is loaded with them).
    The container .PhoneInput is the .form-control (border, 44px, is-invalid); the inner <input> has none. */
 .PhoneInput {
   /* The library's own blue and greys, replaced by the palette (set here, not on :root, so they win). */
