@@ -1,9 +1,9 @@
 // Staff hiker search and account preparation (MH-07).
 import { randomInt } from 'node:crypto';
-import { Conflict } from '../errors.js';
+import { Conflict, BadRequest } from '../errors.js';
 import { getDb } from '../dao/db.js';
 import * as userDao from '../dao/userDao.js';
-import { BadRequest } from '../errors.js';
+import { hashPassword, validateStaffHiker, validateTemporaryHiker } from './authService.js';
 
 export const MESSAGES = {
   invalidQuery: 'Type at least 2 characters to search',
@@ -26,14 +26,12 @@ export function validateSearchQuery(query) {
  * Validates the query, then delegates to the DAO.
  * @throws {BadRequest} missing or too short query
  */
-import { hashPassword, validateStaffHiker, validateTemporaryHiker } from './authService.js';
-
-const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
 export async function searchHikers(query) {
   const q = validateSearchQuery(query);
   return userDao.searchHikers(await getDb(), q);
 }
+
+const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Prepare a full hiker before the booking transaction; the generated password is returned only to its caller. */
 export async function prepareFullHiker(body) {

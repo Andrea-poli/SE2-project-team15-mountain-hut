@@ -57,10 +57,6 @@ function validateStaffBooking(body) {
   }
 }
 
-const isSecondBooking = (err) =>
-  err?.code === 'SQLITE_CONSTRAINT' &&
-  /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
-
 /**
  * Creates a staff booking, plus a regular or temporary hiker when requested.
  * The staff cutoff is the slot start (not the public hiker 2-hour deadline).
@@ -116,7 +112,7 @@ export async function createStaffBooking(body) {
       return { booking, hiker, hikerSummary, generatedPassword };
     });
   } catch (err) {
-    if (isSecondBooking(err)) throw new Conflict(MESSAGES.alreadyBooked);
+    if (bookingDao.isSecondBooking(err)) throw new Conflict(MESSAGES.alreadyBooked);
     throw err;
   }
 
