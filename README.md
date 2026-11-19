@@ -47,6 +47,11 @@ Demo cases, ready to show:
 | Full (listed, cannot be chosen) | the dinner in 3 days |
 | Past days, greyed out with "Past" (their bookings are only in the data: no page lists bookings yet) | 3, 2 and 1 days ago in the staff week view |
 | Booking closing within 2 hours | today's lunch: set `FAKE_NOW=<today>T10:30` in `.env` and restart, it shows "booking closed" |
+| Party requirements with allergies, without allergies | the lunch in 3 days: Luca Verdi (the PO example), Anna Bianchi (1 vegetarian) |
+| A temporary hiker booked by staff (no email, cannot log in) | the lunch in 3 days: Giorgio Montano |
+| A cancelled booking, then booked again | the lunch in 3 days: Anna Bianchi |
+| Change allowed / not allowed (48 h before the meal) | `hiker@example.com`: the dinner in 3 days / tomorrow's dinner |
+| Copy a week (MH-09) | this week onto the week after next (it has slots and no bookings: its schedule is replaced); onto a week with bookings still to come it is refused, e.g. next week when the data is loaded Fri–Sun |
 
 | Role | Email | Password |
 |---|---|---|
@@ -77,9 +82,10 @@ Read from `.env` in the repository root (template: `.env.example`). Variables al
 |---|---|---|
 | `SESSION_SECRET` | – (required) | session cookie secret, your own random value |
 | `PORT` | `3001` | server port |
+| `PUBLIC_URL` | `http://localhost:5173` (production: `http://localhost:<PORT>`) | address of the pages, used in the link of the password reset email (MH-07) |
 | `TZ` | `Europe/Rome` | hut local time (set by the server if missing) |
 | `DATA_DIR` | `server/data` | folder of `mountain-hut.db` and `sessions.db`; relative paths start from the repository root |
-| `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active |
+| `FAKE_NOW` | – | fixed "now" in hut local time, `YYYY-MM-DDTHH:mm`, for demos only; refused in production, a warning is printed when active. The pages still use the PC clock: e.g. the staff time menu marks a slot "started" by the PC time, so for a demo keep the PC near `FAKE_NOW` |
 
 ## Tests
 

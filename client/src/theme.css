@@ -23,6 +23,7 @@
   --mh-danger-hover: color-mix(in srgb, var(--mh-danger), black 15%); /* danger button on hover */
   --mh-danger-active: color-mix(in srgb, var(--mh-danger), black 25%); /* danger button pressed */
   --mh-focus-on-dark: var(--mh-on-primary); /* focus outline on a dark background (e.g. navbar) */
+  --mh-highlight-bg: color-mix(in srgb, var(--mh-highlight), white 88%); /* background of highlighted cards */
 
   /* Focus outline colour in use, switched to --mh-focus-on-dark inside dark areas (see 5) */
   --mh-focus-color: var(--mh-primary);
@@ -117,6 +118,22 @@
   --bs-btn-active-border-color: var(--mh-danger-active);
   --bs-btn-disabled-color: var(--mh-on-primary);
   --bs-btn-disabled-bg: var(--mh-danger);
+  --bs-btn-disabled-border-color: var(--mh-danger);
+}
+
+/* Destructive actions that are not the main one (e.g. "Cancel booking", MH-08): palette red, filled on hover.
+   Bootstrap's own #dc3545 is not the palette and only just reaches 4.5:1 on white. */
+.btn-outline-danger {
+  --bs-btn-color: var(--mh-danger);
+  --bs-btn-border-color: var(--mh-danger);
+  --bs-btn-hover-color: var(--mh-on-primary);
+  --bs-btn-hover-bg: var(--mh-danger);
+  --bs-btn-hover-border-color: var(--mh-danger);
+  --bs-btn-focus-shadow-rgb: var(--mh-danger-rgb);
+  --bs-btn-active-color: var(--mh-on-primary);
+  --bs-btn-active-bg: var(--mh-danger-active);
+  --bs-btn-active-border-color: var(--mh-danger-active);
+  --bs-btn-disabled-color: var(--mh-danger);
   --bs-btn-disabled-border-color: var(--mh-danger);
 }
 
@@ -289,7 +306,7 @@ svg {
   color: var(--mh-primary);
 }
 
-/* 11. Phone field (react-phone-number-input in RegisterPage; its style.css is loaded with that page).
+/* 11. Phone field (react-phone-number-input in RegisterPage and HikerPanel; its style.css is loaded with them).
    The container .PhoneInput is the .form-control (border, 44px, is-invalid); the inner <input> has none. */
 .PhoneInput {
   /* The library's own blue and greys, replaced by the palette (set here, not on :root, so they win). */
@@ -406,4 +423,15 @@ svg {
 .mh-char-count-over {
   color: var(--mh-danger);
   font-weight: 600;
+}
+
+/* Party requirements involving allergies use the theme accent without relying on color alone. */
+.mh-requirement-allergy {
+  border-color: var(--mh-highlight) !important;
+  background-color: var(--mh-highlight-bg);
+}
+
+.mh-requirement-allergy-badge {
+  background-color: var(--mh-highlight);
+  color: var(--mh-text);
 }

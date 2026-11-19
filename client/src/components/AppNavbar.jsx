@@ -1,6 +1,6 @@
 // Navbar with the entries of the current role. Colours in theme.css (.navbar.bg-primary).
 // NavLink marks the current page with the "active" class and aria-current="page".
-import { CalendarDays, CalendarPlus, CalendarSearch, DoorClosed, DoorOpen, Mountain, User, UserPlus } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CalendarPlus, CalendarSearch, DoorClosed, DoorOpen, Mountain, User, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import Container from 'react-bootstrap/Container';
 import Nav from 'react-bootstrap/Nav';
@@ -64,6 +64,11 @@ export default function AppNavbar() {
                 Slots
               </NavItem>
             )}
+            {!loading && isStaff && (
+              <NavItem to={routes.staffNewBooking} icon={CalendarPlus}>
+                New reservation
+              </NavItem>
+            )}
             {/* Everyone, staff included: the page answers phone questions too (MH-04, contract C6c). */}
             {!loading && (
               <NavItem to={routes.checkAvailability} icon={CalendarSearch}>
@@ -73,6 +78,11 @@ export default function AppNavbar() {
             {user?.role === 'hiker' && (
               <NavItem to={routes.book} icon={CalendarPlus}>
                 Book a table
+              </NavItem>
+            )}
+            {user?.role === 'hiker' && (
+              <NavItem to={routes.myBookings} icon={CalendarCheck}>
+                My bookings
               </NavItem>
             )}
           </Nav>

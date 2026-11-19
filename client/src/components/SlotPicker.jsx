@@ -15,11 +15,19 @@
 //   with the reason in the option text; no seat counts are shown;
 // - a day with no slots shows "No meal service on this day";
 // - party size: a whole number, at least 1, no upper limit (PO, issue #27).
+// MH-06 (Change booking) adds two optional props, unused by Book and Check availability: currentSlotId and
+// minNoticeHours (48 h change window, PO issue #43). MH-07 (staff reservation) adds untilStart: no 2-hour rule.
 import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import { listPublicSlots } from '../api/publicSlots.js';
 import { isIsoDate, toIsoDate } from '../utils/dates.js';
-import { slotOptionLabel, slotPickerFieldIds } from '../utils/slotPicker.js';
+import {
+  isSelectableState,
+  pickerSlotState,
+  slotOptionLabel,
+  slotOptionState,
+  slotPickerFieldIds,
+} from '../utils/slotPicker.js';
 import ErrorMessage from './ErrorMessage.jsx';
 import FormField from './FormField.jsx';
 import Loading from './Loading.jsx';
@@ -46,6 +54,13 @@ function useDaySlots(date) {
   return result?.date === date ? result : null;
 }
 
+/** The help under Time: which slots cannot be chosen, for the hikers (2 hours), staff or a change. */
+function timeHelp(minNoticeHours, untilStart) {
+  if (minNoticeHours) return `Full slots and slots starting in less than ${minNoticeHours} hours cannot be chosen.`;
+  if (untilStart) return 'Full slots and slots that have already started cannot be chosen.';
+  return 'Full slots and slots starting in less than 2 hours cannot be chosen.';
+}
+
 /**
  * @param {object} props
  * @param {string} props.idPrefix   prefix of the control ids, unique in the page (e.g. "book")
@@ -53,19 +68,43 @@ function useDaySlots(date) {
  * @param {(value: object) => void} props.onChange
  * @param {{date?: string, slotId?: string, partySize?: string}} [props.errors]
  * @param {(name: string) => void} [props.onBlurField] e.g. recheck of useFormErrors
- * @param {Date} [props.today] first selectable day (tests pass a fixed one)
+ * @param {Date} [props.today] first selectable day, and "now" for minNoticeHours (tests pass a fixed one)
+ * @param {number} [props.currentSlotId] MH-06: the slot of the booking being changed, always selectable,
+ *   its option ends with " – your booking"
+ * @param {number} [props.minNoticeHours] MH-06: slots starting sooner than this are shown but disabled, and
+ *   the first selectable day is the day of now + minNoticeHours
+ * @param {boolean} [props.untilStart] staff (MH-07): a slot can be chosen until it starts, no 2-hour rule
  */
-export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onBlurField, today }) {
+export default function SlotPicker({
+  idPrefix,
+  value,
+  onChange,
+  errors = {},
+  onBlurField,
+  today,
+  currentSlotId,
+  minNoticeHours,
+  untilStart,
+}) {
   const ids = slotPickerFieldIds(idPrefix);
-  const minDate = toIsoDate(today ?? new Date());
+  const now = today ?? new Date();
+  const minDate = toIsoDate(minNoticeHours ? new Date(now.getTime() + minNoticeHours * 60 * 60 * 1000) : now);
 
   const day = useDaySlots(value.date);
   const slots = day?.slots ?? null;
   const loading = isIsoDate(value.date) && !day;
+  // Staff (MH-07, untilStart) first: a slot closed only by the 2-hour rule stays bookable until it starts;
+  // then the Change booking page (MH-06): the booking's own slot, and the minimum notice.
+  const stateOf = (slot) =>
+    slotOptionState({ ...slot, bookingState: pickerSlotState(slot, value.date, { untilStart, now }) }, value.date, {
+      currentSlotId,
+      minNoticeHours,
+      now,
+    });
 
-  // A prefilled or previous slotId that is not a bookable slot of this day is dropped.
+  // A prefilled or previous slotId that is not a selectable slot of this day is dropped.
   const chosen = slots?.find((s) => s.id === value.slotId);
-  const staleSlot = slots && value.slotId != null && chosen?.bookingState !== 'bookable';
+  const staleSlot = slots && value.slotId != null && !(chosen && isSelectableState(stateOf(chosen)));
   useEffect(() => {
     if (staleSlot) onChange({ ...value, slotId: null });
   }, [staleSlot, value, onChange]);
@@ -116,11 +155,14 @@ export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onB
               aria-describedby={[timeErrorId, timeHelpId].filter(Boolean).join(' ')}
             >
               <option value="">{slots ? 'Choose a time' : 'Choose a date first'}</option>
-              {slots?.map((slot) => (
-                <option key={slot.id} value={slot.id} disabled={slot.bookingState !== 'bookable'}>
-                  {slotOptionLabel(slot)}
-                </option>
-              ))}
+              {slots?.map((slot) => {
+                const state = stateOf(slot);
+                return (
+                  <option key={slot.id} value={slot.id} disabled={!isSelectableState(state)}>
+                    {slotOptionLabel(slot, state, minNoticeHours)}
+                  </option>
+                );
+              })}
             </Form.Select>
             {errors.slotId && (
               <Form.Control.Feedback type="invalid" id={timeErrorId}>
@@ -128,7 +170,7 @@ export default function SlotPicker({ idPrefix, value, onChange, errors = {}, onB
               </Form.Control.Feedback>
             )}
             <Form.Text id={timeHelpId} className="d-block">
-              Full slots and slots starting in less than 2 hours cannot be chosen.
+              {timeHelp(minNoticeHours, untilStart)}
             </Form.Text>
           </>
         )}

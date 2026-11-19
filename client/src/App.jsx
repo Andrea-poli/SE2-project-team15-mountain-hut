@@ -7,8 +7,13 @@ import RequireRole from './auth/RequireRole.jsx';
 import Loading from './components/Loading.jsx';
 import PageLayout from './components/PageLayout.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import ChangePasswordPage from './pages/auth/ChangePasswordPage.jsx';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
 import BookingConfirmedPage from './pages/hiker/BookingConfirmedPage.jsx';
 import BookPage from './pages/hiker/BookPage.jsx';
+import ChangeBookingPage from './pages/hiker/ChangeBookingPage.jsx';
+import MyBookingsPage from './pages/hiker/MyBookingsPage.jsx';
 import CheckAvailabilityPage from './pages/public/CheckAvailabilityPage.jsx';
 import HomePage from './pages/public/HomePage.jsx';
 import LoginPage from './pages/public/LoginPage.jsx';
@@ -16,8 +21,9 @@ import NewSlotPage from './pages/staff/NewSlotPage.jsx';
 import SlotsWeekPage from './pages/staff/SlotsWeekPage.jsx';
 import { pageRoles, routes } from './routes.js';
 
-// Loaded on its own: the phone library (flags, metadata, CSS) stays out of the bundle of the other pages.
+// Loaded on their own: the phone library (flags, metadata, CSS) stays out of the bundle of the other pages.
 const RegisterPage = lazy(() => import('./pages/public/RegisterPage.jsx'));
+const StaffReservationPage = lazy(() => import('./pages/staff/StaffReservationPage.jsx'));
 
 export default function App() {
   return (
@@ -38,16 +44,35 @@ export default function App() {
             }
           />
 
+          {/* MH-07: forgotten password (public) and password change (any logged-in user) */}
+          <Route path={routes.forgotPassword} element={<ForgotPasswordPage />} />
+          <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
+          <Route element={<RequireRole roles={['hiker', 'employee']} />}>
+            <Route path={routes.changePassword} element={<ChangePasswordPage />} />
+          </Route>
+
           {/* Hiker */}
           <Route element={<RequireRole roles={pageRoles[routes.book]} />}>
             <Route path={routes.book} element={<BookPage />} />
             <Route path={routes.bookingConfirmed} element={<BookingConfirmedPage />} />
+          </Route>
+          <Route element={<RequireRole roles={pageRoles[routes.myBookings]} />}>
+            <Route path={routes.myBookings} element={<MyBookingsPage />} />
+            <Route path={routes.changeBooking} element={<ChangeBookingPage />} />
           </Route>
 
           {/* Staff (employee; the warden passes too) */}
           <Route element={<RequireRole roles={pageRoles[routes.staffSlots]} />}>
             <Route path={routes.staffSlots} element={<SlotsWeekPage />} />
             <Route path={routes.newSlot} element={<NewSlotPage />} />
+            <Route
+              path={routes.staffNewBooking}
+              element={
+                <Suspense fallback={<Loading />}>
+                  <StaffReservationPage />
+                </Suspense>
+              }
+            />
           </Route>
 
           <Route path="*" element={<NotFoundPage />} />
