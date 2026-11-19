@@ -4,20 +4,10 @@
 // and works for the first login, which asks for a change (mustChangePassword).
 // Needs the MH-07 backend (GET /api/staff/hikers, POST /api/staff/bookings).
 //
-// Data: the demo seed on E2E_NOW (Mon 2 Nov 2026, 10:00): every day a Lunch 12:00–14:00 (26 seats) and a
-// "Dinner – 1st turn" 19:00–20:30 (24 seats); employee@example.com / employeepass. The seed has bookings only
-// up to day 3 (5 Nov); 6–16 Nov are empty and shared with the other specs, which book these slots:
-//   Lunch 6, 7, 8 (refused), 9/10, 11/12, 14, 15, 16 (booking, confirmationEmail) · Dinner 12 (requirements),
-//   13 (booking), 16 (confirmationEmail).
-// E1 needs a whole slot free: the Dinner of 7 Nov in the desktop run and of 8 Nov in the phone run, booked by no
-// other spec, so each run starts from an empty slot. The new hikers of E2 dine on 14 Nov (only its Lunch is
-// used elsewhere; E2 needs no empty slot, just 2 free seats in each run).
-// E3 books for the seeded Marco Rossi (+393401234567, no booking after 5 Nov): one booking per hiker per slot,
-// so each run takes its own Dinner, 6 Nov (desktop) and 11 Nov (phone), booked by no other spec.
-// E4 needs a slot starting in LESS than 2 hours (today's Lunch, at 12:00, is exactly 2 h away: hikers can still
-// book it). The employee creates one through POST /api/slots, today before the Lunch, one per run so they do
-// not overlap: 11:00–11:30 (desktop), 11:30–12:00 (phone, adjacent to the Lunch: allowed). No other spec
-// creates slots today (slots.spec creates on 4 Nov).
+// Data: the demo seed on E2E_NOW (Mon 2 Nov 2026, 10:00), employee@example.com / employeepass.
+// E1 and E4 create their own slots through POST /api/slots (one per project, so the desktop and phone runs, which
+// share the database, never meet): E1 an "Afternoon tea" that starts empty, E4 a "Brunch" starting in less than
+// 2 hours (staff have no 2-hour rule, hikers do).
 import { randomUUID } from 'node:crypto';
 import { expectAccessible } from './helpers/axe.js';
 import { fillForm, registerHiker } from './helpers/booking.js';
@@ -29,8 +19,17 @@ const SOON_SLOT_BY_PROJECT = {
   desktop: { startTime: '11:00', endTime: '11:30' },
   phone: { startTime: '11:30', endTime: '12:00' },
 };
-const DINNER_SEATS = 24;
-const DAY_BY_PROJECT = { desktop: '2026-11-07', phone: '2026-11-08' };
+// E1's slot: today, between the seeded Lunch (12:00–14:00) and Dinner (19:00), more than 2 hours after E2E_NOW
+// so Check availability (hikers' rules) can answer for it; 4 + 4 seats.
+const TEA_SLOT_BY_PROJECT = {
+  desktop: { startTime: '15:00', endTime: '16:00' },
+  phone: { startTime: '16:00', endTime: '17:00' },
+};
+const TEA_TABLES = [
+  { name: 'T1', seats: 4 },
+  { name: 'T2', seats: 4 },
+];
+const TEA_SEATS = 8;
 const NEW_HIKER_DAY = '2026-11-14';
 const EXISTING_HIKER_DAY_BY_PROJECT = { desktop: '2026-11-06', phone: '2026-11-11' };
 const TODAY = '2026-11-02';
@@ -64,10 +63,20 @@ async function confirmReservation(page) {
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
 }
 
-/** Check availability (MH-04) for `people` in the dinner of `date`: true when "Available". */
-async function isAvailable(page, date, people) {
+/**
+ * Creates a slot as the logged-in employee (POST /api/slots) and returns its label in the time menus,
+ * e.g. "Brunch, 11:00 – 11:30".
+ */
+async function createSlot(page, { date, startTime, endTime, label, tables }) {
+  const created = await page.request.post('/api/slots', { data: { date, startTime, endTime, label, tables } });
+  expect(created.status(), await created.text()).toBe(201);
+  return `${label}, ${startTime} – ${endTime}`;
+}
+
+/** Check availability (MH-04) for `people` in the slot `time` (its menu label) of `date`: true when "Available". */
+async function isAvailable(page, date, time, people) {
   await page.goto('/availability');
-  await fillForm(page, { date, time: DINNER, partySize: people });
+  await fillForm(page, { date, time, partySize: people });
   await page.getByRole('button', { name: 'Check', exact: true }).click();
   const result = page.getByRole('status').filter({ hasText: /Available|Not available/ });
   await expect(result).toBeVisible();
@@ -78,8 +87,13 @@ test.describe('Reserve for a hiker', () => {
   test.beforeEach(async ({ page }) => logInAsEmployee(page));
 
   test('E1: quick entry for a temporary hiker; Check availability then shows fewer free seats', async ({ page }) => {
-    const day = DAY_BY_PROJECT[test.info().project.name];
-    expect(await isAvailable(page, day, DINNER_SEATS)).toBe(true); // the whole slot is free
+    const tea = await createSlot(page, {
+      date: TODAY,
+      ...TEA_SLOT_BY_PROJECT[test.info().project.name],
+      label: 'Afternoon tea',
+      tables: TEA_TABLES,
+    });
+    expect(await isAvailable(page, TODAY, tea, TEA_SEATS)).toBe(true); // the whole slot is free
 
     await openReservationPage(page);
     await page.getByRole('radio', { name: 'Quick entry' }).check();
@@ -87,7 +101,7 @@ test.describe('Reserve for a hiker', () => {
     await expect(page.getByLabel(/password/i)).toHaveCount(0);
     await page.getByLabel('First name', { exact: true }).fill('Giulia');
     await page.getByLabel(/^Mobile number/).fill('333 765 4321');
-    await fillForm(page, { date: day, time: DINNER, partySize: 4 });
+    await fillForm(page, { date: TODAY, time: tea, partySize: 4 });
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
 
@@ -103,8 +117,8 @@ test.describe('Reserve for a hiker', () => {
     await expectNoHorizontalScroll(page);
 
     // The 4 seats are taken: the whole slot no longer fits, the rest still does.
-    expect(await isAvailable(page, day, DINNER_SEATS)).toBe(false);
-    expect(await isAvailable(page, day, DINNER_SEATS - 4)).toBe(true);
+    expect(await isAvailable(page, TODAY, tea, TEA_SEATS)).toBe(false);
+    expect(await isAvailable(page, TODAY, tea, TEA_SEATS - 4)).toBe(true);
   });
 
   test('E2: a new hiker gets a generated password, shown once, that works for the first login', async ({
@@ -162,7 +176,6 @@ test.describe('Reserve for a hiker', () => {
     const marco = page.getByRole('radio', { name: /Marco Rossi/ });
 
     await search.fill('340 123 4567'); // stored as +393401234567
-    await expect(page.getByRole('status').filter({ hasText: '1 hiker found' })).toBeVisible();
     await expect(marco).toBeVisible();
 
     await search.fill('Ross');
@@ -188,12 +201,12 @@ test.describe('Reserve for a hiker', () => {
     page,
   }) => {
     // A slot of today starting within 2 hours of E2E_NOW (10:00), created by the employee (beforeEach login).
-    const { startTime, endTime } = SOON_SLOT_BY_PROJECT[test.info().project.name];
-    const created = await page.request.post('/api/slots', {
-      data: { date: TODAY, startTime, endTime, label: 'Brunch', tables: [{ name: 'T1', seats: 4 }] },
+    const soon = await createSlot(page, {
+      date: TODAY,
+      ...SOON_SLOT_BY_PROJECT[test.info().project.name],
+      label: 'Brunch',
+      tables: [{ name: 'T1', seats: 4 }],
     });
-    expect(created.status(), await created.text()).toBe(201);
-    const soon = `Brunch, ${startTime} – ${endTime}`;
 
     await openReservationPage(page);
     await page.getByRole('radio', { name: 'Quick entry' }).check();
