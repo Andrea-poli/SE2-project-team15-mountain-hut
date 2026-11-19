@@ -66,7 +66,7 @@ describe('PageLayout', () => {
       vi.mocked(authApi.me).mockResolvedValue(user);
       const { unmount } = renderPage(<p>Page content</p>, { path: '/x', layout: <PageLayout /> });
       expect(await within(navbar()).findByText(user.firstName)).toBeInTheDocument();
-      expect(linkNames(), user.role).toEqual(['Mountain Hut', 'Slots', 'Check availability']);
+      expect(linkNames(), user.role).toEqual(['Mountain Hut', 'Slots', 'New reservation', 'Check availability']);
       expect(within(navbar()).getByRole('link', { name: 'Mountain Hut' })).toHaveAttribute('href', '/staff/slots');
       unmount();
     }
