@@ -18,15 +18,11 @@
 //
 // Real app, real SQLite (temporary DB from setupTestDb.js), real sessions; data created through DAOs;
 // clock fixed. No unit tests of invented service functions: focused integration tests satisfy BT1.
-import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { setNow } from '../../src/clock.js';
-import { getDb } from '../../src/dao/db.js';
-import * as slotDao from '../../src/dao/slotDao.js';
-import * as userDao from '../../src/dao/userDao.js';
-import { hashPassword } from '../../src/services/authService.js';
+import { booked, clearDb, createSlot as newSlot, loggedIn as loggedInOn } from '../helpers/bookingApi.js';
 import { useFixedClock } from '../helpers/fixedClock.js';
 
 // "Now" for every test: Monday 2 Nov 2026, 10:00 in the hut
@@ -35,49 +31,17 @@ const TOMORROW = '2026-11-03';
 useFixedClock(`${TODAY}T10:00`);
 
 const app = createApp();
-const PASSWORD = 'mountain-pass-123';
 
 // ---------- data helpers ----------
 
-async function clearDb() {
-  const db = await getDb();
-  for (const table of ['booking_requirements', 'booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
-    await db.run(`DELETE FROM ${table}`);
-  }
-}
+/** A new logged-in user of `role`, with a valid phone (helpers/bookingApi.js). */
+const loggedIn = (role) => loggedInOn(app, role, { phone: '+393334445566' });
 
-/** A new user of `role`, logged in: the agent keeps the session cookie. */
-async function loggedIn(role = 'hiker') {
-  const db = await getDb();
-  const email = `${role}-${randomUUID()}@example.com`;
-  const user = await userDao.create(db, {
-    email, passwordHash: await hashPassword(PASSWORD), firstName: 'Hannah', lastName: 'Tester', role,
-    phone: '+393334445566',
-  });
-  const agent = request.agent(app);
-  const res = await agent.post('/api/auth/login').send({ email, password: PASSWORD });
-  expect(res.status, 'login of the test user').toBe(200);
-  return { agent, user: { ...user, email } };
-}
-
-/** Creates a slot with its tables; seats = list of table sizes, e.g. [4, 4, 6]. */
-async function createSlot({ date = TOMORROW, startTime = '19:00', endTime = '20:30', label = 'Dinner', status = 'open',
-  seats = [4, 4, 6] } = {}) {
-  const db = await getDb();
-  return slotDao.create(db, {
-    date, startTime, endTime, label, status, tables: seats.map((n, i) => ({ name: `T${i + 1}`, seats: n })),
-  });
-}
+/** A slot tomorrow unless `date` is given (helpers/bookingApi.js); seats = table sizes, e.g. [4, 4, 6]. */
+const createSlot = (options = {}) => newSlot({ date: TOMORROW, ...options });
 
 const book = (agent, slotId, partySize) => agent.post('/api/bookings')
   .send({ slotId, partySize });
-
-/** Books through the API and fails the test at once if the booking itself is refused (MH-01 rules). */
-async function booked(agent, slotId, partySize) {
-  const res = await book(agent, slotId, partySize);
-  expect(res.status, 'booking set up by the test').toBe(201);
-  return res.body;
-}
 
 const cancel = (agent, id) => agent.post(`/api/bookings/${id}/cancel`);
 
