@@ -11,10 +11,13 @@ export async function replaceForUser(db, { tokenHash, userId, expiresAt }) {
   ]);
 }
 
-/** The user id of a link that is not used and not expired at `nowIso`, or null. */
+/**
+ * The user id of a link that is not used and not expired at `nowIso`, or null. Still valid at exactly 24 h,
+ * expired only after (contract: "expired (more than 24 h)"). Used by both confirm and /validity, so they agree.
+ */
 export async function findValid(db, tokenHash, nowIso) {
   const row = await db.get(
-    'SELECT user_id FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?',
+    'SELECT user_id FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?',
     [tokenHash, nowIso],
   );
   return row ? row.user_id : null;
