@@ -50,10 +50,10 @@ afterEach(async () => {
 });
 
 describe('a sprint 1 database opened by this server', () => {
-  it('is upgraded to the current schema version, and its bookings read as before with no requirements', async () => {
+  it('is upgraded to the current version, and its bookings read as before with no requirements', async () => {
     db = await openDatabase(file);
 
-    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
+    expect(SCHEMA_VERSION).toBe(4); // 2 requirements (U2), 3 must_change_password and 4 password_resets (MH-07)
     await expect(db.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
     await expect(bookingDao.findById(db, 1)).resolves.toEqual({
       id: 1,
