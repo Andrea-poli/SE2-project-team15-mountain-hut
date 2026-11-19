@@ -1,4 +1,5 @@
 // Log in (U8). After success, or when already logged in, the page sends the user to nextFor(user, ?next=).
+import { DoorOpen, LockKeyhole, Mail } from 'lucide-react';
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
@@ -76,6 +77,7 @@ export default function LoginPage() {
               <FormField
                 id={FIELD_IDS.email}
                 label="Email"
+                icon={Mail}
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -87,6 +89,7 @@ export default function LoginPage() {
               <PasswordField
                 id={FIELD_IDS.password}
                 label="Password"
+                icon={LockKeyhole}
                 toggleLabel="Show password"
                 autoComplete="current-password"
                 value={password}
@@ -102,10 +105,11 @@ export default function LoginPage() {
                   an error above the button and move the button away before the click ends. */}
               <Button
                 type="submit"
-                className="w-100 mt-2"
+                className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
                 disabled={submitting}
                 onMouseDown={(e) => e.preventDefault()}
               >
+                <DoorOpen aria-hidden="true" size={18} />
                 {submitting ? 'Logging in…' : 'Log in'}
               </Button>
             </Form>

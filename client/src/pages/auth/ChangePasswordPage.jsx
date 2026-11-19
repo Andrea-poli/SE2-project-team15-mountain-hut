@@ -1,6 +1,7 @@
 // MH-07 – Change password (any logged-in user with a password). A hiker created by staff has
 // mustChangePassword: true and is sent here by RequirePasswordChange until the generated password is replaced
 // (PO #36: "they will be forced to change the password on their next login"). PUT /api/auth/password.
+import { KeyRound, Save } from 'lucide-react';
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
@@ -77,6 +78,7 @@ export default function ChangePasswordPage() {
         <PasswordField
           id={FIELD_IDS.currentPassword}
           label={forced ? 'Password you were given' : 'Current password'}
+          icon={KeyRound}
           toggleLabel="Show current password"
           autoComplete="current-password"
           value={values.currentPassword}
@@ -94,10 +96,11 @@ export default function ChangePasswordPage() {
         />
         <Button
           type="submit"
-          className="w-100 mt-2"
+          className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
           disabled={submitting}
           onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
         >
+          <Save aria-hidden="true" size={18} />
           {submitting ? 'Saving…' : 'Change password'}
         </Button>
       </Form>

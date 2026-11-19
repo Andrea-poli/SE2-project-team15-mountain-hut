@@ -17,6 +17,7 @@
 // - party size: a whole number, at least 1, no upper limit (PO, issue #27).
 // MH-06 (Change booking) adds two optional props, unused by Book and Check availability: currentSlotId and
 // minNoticeHours (48 h change window, PO issue #43). MH-07 (staff reservation) adds untilStart: no 2-hour rule.
+import { CalendarDays, Clock, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import { listPublicSlots } from '../api/publicSlots.js';
@@ -29,6 +30,7 @@ import {
   slotPickerFieldIds,
 } from '../utils/slotPicker.js';
 import ErrorMessage from './ErrorMessage.jsx';
+import FieldLabel from './FieldLabel.jsx';
 import FormField from './FormField.jsx';
 import Loading from './Loading.jsx';
 
@@ -125,6 +127,7 @@ export default function SlotPicker({
       <FormField
         id={ids.date}
         label="Date"
+        icon={CalendarDays}
         type="date"
         min={minDate}
         value={value.date}
@@ -135,7 +138,7 @@ export default function SlotPicker({
       />
 
       <Form.Group controlId={ids.slotId} className="mb-3">
-        <Form.Label>Time</Form.Label>
+        <FieldLabel icon={Clock}>Time</FieldLabel>
         {loading && <Loading />}
         <ErrorMessage message={day?.error} />
         {slots && slots.length === 0 ? (
@@ -179,6 +182,7 @@ export default function SlotPicker({
       <FormField
         id={ids.partySize}
         label="Number of people"
+        icon={Users}
         help="Everyone in your party, you included."
         type="number"
         inputMode="numeric"

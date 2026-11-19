@@ -3,6 +3,7 @@
 // before the hiker types a new password twice. On success the server logs the user out everywhere; the
 // page then asks to log in with the new password.
 import { useEffect, useState } from 'react';
+import { Save } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
 import { Link, useSearchParams } from 'react-router';
@@ -108,10 +109,11 @@ export default function ResetPasswordPage() {
             />
             <Button
               type="submit"
-              className="w-100 mt-2"
+              className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
               disabled={submitting}
               onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
             >
+              <Save aria-hidden="true" size={18} />
               {submitting ? 'Saving…' : 'Save the new password'}
             </Button>
           </Form>

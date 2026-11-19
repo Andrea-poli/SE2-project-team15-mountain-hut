@@ -5,6 +5,7 @@
 // - 409 (seats taken meanwhile, or already booked this slot) and 400 (closed / less than 2 h):
 //   on the time field, so the hiker picks another time;
 // - 404 (slot removed) and network errors: one general message above the form.
+import { CalendarCheck, Clock } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
@@ -80,7 +81,10 @@ export default function BookPage() {
         <Card>
           <Card.Body className="p-4">
             <h1 className="mb-2">Book a table</h1>
-            <p className="mb-4">Bookings close 2 hours before the meal starts.</p>
+            <p className="d-flex align-items-start gap-2 mb-4">
+              <Clock aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+              Bookings close 2 hours before the meal starts.
+            </p>
             <ErrorMessage message={generalError} ref={generalRef} />
             {/* noValidate: our checks run on submit instead of the browser's bubbles. */}
             <Form noValidate onSubmit={handleSubmit}>
@@ -100,7 +104,12 @@ export default function BookPage() {
                 onChange={setRequirements}
                 submitAttempt={requirementSubmitAttempt}
               />
-              <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+              <Button
+                type="submit"
+                className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
+                disabled={submitting}
+              >
+                <CalendarCheck aria-hidden="true" size={18} />
                 {submitting ? 'Booking…' : 'Confirm booking'}
               </Button>
             </Form>

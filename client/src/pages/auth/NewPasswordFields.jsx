@@ -1,5 +1,6 @@
 // MH-07 – the "new password" + "confirm new password" pair, identical on Change password and Set new
 // password (reset link): same labels, help text and autoComplete; only the field ids differ per page.
+import { LockKeyhole } from 'lucide-react';
 import PasswordField from '../../components/PasswordField.jsx';
 import { NEW_PASSWORD_HELP } from '../../utils/password.js';
 
@@ -9,6 +10,7 @@ export default function NewPasswordFields({ fieldIds, values, errors, onFieldCha
       <PasswordField
         id={fieldIds.newPassword}
         label="New password"
+        icon={LockKeyhole}
         toggleLabel="Show new password"
         autoComplete="new-password"
         help={NEW_PASSWORD_HELP}
@@ -21,6 +23,7 @@ export default function NewPasswordFields({ fieldIds, values, errors, onFieldCha
       <PasswordField
         id={fieldIds.confirmPassword}
         label="Confirm new password"
+        icon={LockKeyhole}
         toggleLabel="Show confirmed password"
         autoComplete="new-password"
         value={values.confirmPassword}

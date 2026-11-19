@@ -2,7 +2,7 @@
 // label, and a list of tables. The form validates the input and displays errors for missing or invalid fields.
 // Staff can also copy the table layout from nearby slots. Upon submission, the form sends a POST request to create
 // the new slot and navigates back to the slots week view.
-import { Plus } from 'lucide-react';
+import { Armchair, CalendarDays, Clock, Copy, Plus, Tag, Trash2, UtensilsCrossed } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import Button from 'react-bootstrap/Button';
@@ -10,6 +10,7 @@ import Card from 'react-bootstrap/Card';
 import Form from 'react-bootstrap/Form';
 import { createSlot, listSlots } from '../../api/slots.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
+import FieldLabel from '../../components/FieldLabel.jsx';
 import FormField from '../../components/FormField.jsx';
 import Loading from '../../components/Loading.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
@@ -210,6 +211,7 @@ export default function NewSlotPage() {
               name="date"
               type="date"
               label="Date"
+              icon={CalendarDays}
               value={values.date}
               onChange={updateValue}
               onBlur={() => recheck('date', formValues)}
@@ -224,6 +226,7 @@ export default function NewSlotPage() {
                   name="startTime"
                   type="time"
                   label="Start time"
+                  icon={Clock}
                   value={values.startTime}
                   onChange={updateValue}
                   onBlur={() => recheck('startTime', formValues)}
@@ -237,6 +240,7 @@ export default function NewSlotPage() {
                   name="endTime"
                   type="time"
                   label="End time"
+                  icon={Clock}
                   value={values.endTime}
                   onChange={updateValue}
                   onBlur={() => recheck('endTime', formValues)}
@@ -249,6 +253,7 @@ export default function NewSlotPage() {
               id="slot-label"
               name="label"
               label="Label"
+              icon={Tag}
               value={values.label}
               onChange={updateValue}
               onBlur={() => recheck('label', formValues)}
@@ -259,7 +264,7 @@ export default function NewSlotPage() {
             <h2 className="h3">Tables</h2>
             <Form.Group>
               <Form.Group controlId="copy-tables" className="mh-copy-tables-box p-3 mb-4">
-                <Form.Label>Copy tables from</Form.Label>
+                <FieldLabel icon={Copy}>Copy tables from</FieldLabel>
                 <Form.Select defaultValue="" onChange={copyTables}>
                   <option value="">Choose a slot</option>
                   {nearbySlots.map((slot) => (
@@ -279,6 +284,7 @@ export default function NewSlotPage() {
                       <FormField
                         id={`table-name-${index}`}
                         label="Table name"
+                        icon={UtensilsCrossed}
                         value={table.name}
                         onChange={(event) => updateTable(index, 'name', event.target.value)}
                         onBlur={() => recheck(`tableName-${index}`, formValues)}
@@ -290,6 +296,7 @@ export default function NewSlotPage() {
                       <FormField
                         id={`table-seats-${index}`}
                         label="Seats"
+                        icon={Armchair}
                         type="number"
                         min="1"
                         value={table.seats}
@@ -303,11 +310,12 @@ export default function NewSlotPage() {
                       <Button
                         type="button"
                         variant="outline-danger"
-                        className="w-100"
+                        className="w-100 d-inline-flex align-items-center justify-content-center gap-2"
                         aria-label={`Remove table ${index + 1}`}
                         disabled={tables.length === 1}
                         onClick={() => removeTable(index)}
                       >
+                        <Trash2 aria-hidden="true" size={18} />
                         Remove table
                       </Button>
                     </div>
@@ -337,7 +345,13 @@ export default function NewSlotPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={submitting}>
+              <Button
+                type="submit"
+                variant="primary"
+                className="d-inline-flex align-items-center gap-2"
+                disabled={submitting}
+              >
+                <Plus aria-hidden="true" size={18} />
                 {submitting ? 'Creating…' : 'Create slot'}
               </Button>
             </div>
