@@ -1,0 +1,4 @@
+# Files that run inside the Linux container keep LF line endings on every OS. On Windows, core.autocrlf would turn
+# them into CRLF and the container would fail to start the entrypoint ("exec … no such file or directory").
+*.sh text eol=lf
+Dockerfile text eol=lf

@@ -125,6 +125,30 @@ The variables are read when the container starts: no secret is ever written into
 
 **Check that a started container works** (e.g. after building it, or on another PC for the deployment test): on a fresh start (`docker compose down -v && docker compose up -d`) run `node docker/smoke-test.js` (or `node docker/smoke-test.js http://host:port`). It calls every API endpoint as a guest, a hiker, an employee and the warden, with the main error answers and the demo data, checks that the pages are served, and prints PASS/FAIL per check (exit code 0 = all passed). It writes a new hiker, a booking and a slot, so run it once per fresh start. The confirmation email is checked in the mailbox (e.g. Ethereal → Messages). Needs Node 22 on the machine running it; without Node, run it inside the container: `docker compose exec mountain-hut node docker/smoke-test.js`.
 
+### Run the published image (Docker Hub, no source code needed)
+
+The image is on Docker Hub: https://hub.docker.com/r/fedeangio/mountain-hut (tag `trial` now, `release-1` at the end of sprint 2). It runs on Windows, macOS (Intel and Apple silicon) and Linux; all you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux).
+
+1. **A test mailbox (1 minute).** The booking emails need an SMTP server. Open https://ethereal.email and click *Create Ethereal Account*: keep the page open, it shows the user and the password. The emails reach nobody; you read them there under *Messages*.
+2. **A settings file.** In an empty folder, create a file `mountain-hut.env` with these lines, replacing each `<…>` with your value, angle brackets included (no quotes, no spaces around `=`):
+   ```
+   SESSION_SECRET=<a long random text>
+   SMTP_HOST=smtp.ethereal.email
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=<the Ethereal user>
+   SMTP_PASS=<the Ethereal password>
+   ```
+   For `SESSION_SECRET` any long random text works, e.g. the output of `openssl rand -hex 32` (macOS, Linux) or of `-join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })` in Windows PowerShell. Keep this file to yourself: it is read when the container starts and is never part of the image.
+3. **Start it**, from that folder (the same command on Windows, macOS and Linux):
+   ```bash
+   docker run -d --name mountain-hut -p 3001:3001 --env-file mountain-hut.env -v mountain-hut-data:/data fedeangio/mountain-hut:trial
+   ```
+   Then open http://localhost:3001 (port 3001 busy? use `-p 8080:3001` and http://localhost:8080). On the first start the demo data is loaded, with dates from that day on: the accounts are in [Demo accounts](#demo-accounts).
+4. **Day to day.** `docker logs mountain-hut` shows the startup messages and any error. `docker stop mountain-hut` and `docker start mountain-hut` keep the data (it lives in the volume `mountain-hut-data`). Back to fresh demo data: `docker rm -f mountain-hut`, then `docker volume rm mountain-hut-data`, then start again. A newer image: `docker pull fedeangio/mountain-hut:<tag>`, remove the container and start it again with the new tag. Changed `mountain-hut.env`? A restart is not enough, the settings are read when the container is created: `docker rm -f mountain-hut`, then the `docker run` command above again (the data stays in the volume).
+
+If it does not start, `docker logs mountain-hut` says why: `SESSION_SECRET is missing` or `SMTP_HOST is missing` means a line of `mountain-hut.env` is missing or misspelt. `535 Authentication failed` after a booking means the Ethereal user or password is wrong (the booking is saved anyway, only its email is lost).
+
 ## Tests
 
 - Tests never touch the development database: a Vitest setup file (`server/test/setupTestDb.js`) gives every server test file its own temporary DB before any import, and deletes it at the end. Nothing to call in the tests.
