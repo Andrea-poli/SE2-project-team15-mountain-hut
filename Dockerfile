@@ -47,7 +47,10 @@ COPY server/src/ server/src/
 COPY docker/smoke-test.js docker/smoke-test.js
 COPY --from=client-build /app/client/dist client/dist
 COPY docker/entrypoint.sh /usr/local/bin/mountain-hut-entrypoint
-RUN chmod +x /usr/local/bin/mountain-hut-entrypoint \
+# sed: a checkout on Windows (core.autocrlf) gives the script CRLF line endings, and Linux would then fail to start
+# it ("exec … no such file or directory"). .gitattributes keeps it LF; this also covers older checkouts.
+RUN sed -i 's/\r$//' /usr/local/bin/mountain-hut-entrypoint \
+ && chmod +x /usr/local/bin/mountain-hut-entrypoint \
  && mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]
