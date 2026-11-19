@@ -6,6 +6,9 @@
 // The whole list is shown PAGE_SIZE bookings at a time, in the server's order.
 // After a change, ChangeBookingPage (FE2) comes back here with router state { bookingChanged: true, bookingId }:
 // a message (focused) and the changed card highlighted; the state is cleared, so a refresh shows neither.
+// MH-08 FE1: "Cancel booking" on every confirmed booking that has not started (also inside the 48 hours, when it
+// can no longer be changed), with a confirmation dialog (CancelBookingDialog). After a cancel the card shows
+// "Cancelled" at once, the list is read again and "Booking cancelled" appears at the top (focused).
 import {
   Armchair,
   Ban,
@@ -15,6 +18,7 @@ import {
   CalendarPlus,
   ChevronDown,
   CircleCheck,
+  CircleX,
   Clock,
   LockKeyhole,
   Pencil,
@@ -31,6 +35,7 @@ import Loading from '../../components/Loading.jsx';
 import { routes } from '../../routes.js';
 import { peopleText, seatSplitText } from '../../utils/booking.js';
 import { formatDate, formatTimeRange } from '../../utils/format.js';
+import CancelBookingDialog from './CancelBookingDialog.jsx';
 import './MyBookingsPage.css';
 
 // Bookings shown at first, and added by each "Show more".
@@ -66,12 +71,15 @@ function Requirements({ requirements }) {
 }
 
 // `changed`: the booking just changed (MH-06 FE2): a highlight that fades, and a "Changed" label.
-function BookingCard({ booking, past, changed, itemRef }) {
+// `onCancel` opens the cancel dialog; `cancelRef` lets the page give the focus back to the button.
+function BookingCard({ booking, past, changed, itemRef, onCancel, cancelRef }) {
   const { id, slot } = booking;
   const cancelled = booking.status === 'cancelled';
   const headingId = `booking-${id}-date`;
   const timeId = `booking-${id}-time`;
   const seats = seatSplitText(booking.tables);
+  // The API allows a cancel at any time, but on a booking already under way it makes no sense here.
+  const canCancel = !cancelled && !past;
 
   return (
     // tabIndex -1: "Show more" moves the focus to the first new card (not in the Tab order).
@@ -128,7 +136,7 @@ function BookingCard({ booking, past, changed, itemRef }) {
           </div>
           <Requirements requirements={booking.requirements ?? []} />
         </div>
-        {/* Actions. MH-08 adds "Cancel" here, next to "Change". */}
+        {/* Actions: "Change" (or why not), then "Cancel booking". */}
         <div className="d-flex flex-wrap align-items-center gap-2">
           {booking.changeable ? (
             // aria-describedby: screen readers hear which booking each "Change" is for.
@@ -149,6 +157,18 @@ function BookingCard({ booking, past, changed, itemRef }) {
               </p>
             )
           )}
+          {canCancel && (
+            <Button
+              ref={cancelRef}
+              variant="outline-danger"
+              className="d-inline-flex align-items-center gap-2"
+              aria-describedby={`${headingId} ${timeId}`}
+              onClick={() => onCancel(booking)}
+            >
+              <CircleX aria-hidden="true" size={18} />
+              Cancel booking
+            </Button>
+          )}
         </div>
       </div>
     </li>
@@ -166,6 +186,11 @@ export default function MyBookingsPage() {
   const itemRefs = useRef(new Map());
   const changedRef = useRef(null);
   const headingRef = useRef(null);
+  // MH-08: the booking whose cancel dialog is open, and "Booking cancelled" after a cancel.
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [bookingCancelled, setBookingCancelled] = useState(false);
+  const cancelButtonRefs = useRef(new Map());
+  const cancelledRef = useRef(null);
 
   // "Booking changed" appears only once the list has loaded (bookings or error), together with the highlighted
   // card: while loading, Loading is already a status region, and two at once would both be announced.
@@ -178,11 +203,47 @@ export default function MyBookingsPage() {
     if (loaded) changedRef.current?.focus();
   }, [loaded]);
 
-  /** Closes "Booking changed"; the focus, which was on its close button, goes to the page heading. */
+  /** Closes "Booking changed" or "Booking cancelled"; the focus, which was on its close button, goes to the heading. */
   function closeMessage() {
     setBookingChanged(false);
+    setBookingCancelled(false);
     setTimeout(() => headingRef.current?.focus());
   }
+
+  /** Reads the list again (after a cancel, or when the dialog finds it out of date); keeps it if the read fails. */
+  function reloadList() {
+    listMyBookings().then(
+      (bookings) => setResult({ bookings, loadedAt: Date.now() }),
+      () => {}, // the list on screen stays; the next visit reads it again
+    );
+  }
+
+  /** Closes the cancel dialog without a cancel: the focus goes back to its "Cancel booking" (or to the heading). */
+  function keepBooking() {
+    const button = cancelButtonRefs.current.get(cancelTarget.id);
+    setCancelTarget(null);
+    setTimeout(() => (button?.isConnected ? button.focus() : headingRef.current?.focus()));
+  }
+
+  /**
+   * After a cancel: the card shows the booking as the server returned it (Cancelled) at once, the list is read
+   * again, and "Booking cancelled" appears at the top with the focus (one message at a time).
+   */
+  function bookingWasCancelled(cancelled) {
+    setCancelTarget(null);
+    setResult((current) => ({
+      ...current,
+      bookings: current.bookings.map((b) => (b.id === cancelled.id ? { ...b, ...cancelled, changeable: false } : b)),
+    }));
+    reloadList();
+    setBookingChanged(false);
+    setBookingCancelled(true); // the effect below moves the focus to the message
+  }
+
+  // "Booking cancelled" just appeared (the dialog is gone in the same render): the focus goes to it.
+  useEffect(() => {
+    if (bookingCancelled) cancelledRef.current?.focus();
+  }, [bookingCancelled]);
 
   useEffect(() => {
     if (location.state?.bookingChanged) {
@@ -246,6 +307,11 @@ export default function MyBookingsPage() {
                 itemRef={(node) => {
                   if (node) itemRefs.current.set(booking.id, node);
                   else itemRefs.current.delete(booking.id);
+                }}
+                onCancel={setCancelTarget}
+                cancelRef={(node) => {
+                  if (node) cancelButtonRefs.current.set(booking.id, node);
+                  else cancelButtonRefs.current.delete(booking.id);
                 }}
               />
             ))}
@@ -316,7 +382,30 @@ export default function MyBookingsPage() {
           Booking changed. We sent you an email with the new details.
         </Alert>
       )}
+      {bookingCancelled && (
+        <Alert
+          ref={cancelledRef}
+          tabIndex={-1}
+          variant="success"
+          role="status"
+          dismissible
+          closeLabel="Close"
+          onClose={closeMessage}
+          className="d-flex align-items-center gap-2"
+        >
+          <CircleCheck aria-hidden="true" size={20} className="flex-shrink-0" />
+          Booking cancelled. We sent you an email.
+        </Alert>
+      )}
       {content}
+      {cancelTarget && (
+        <CancelBookingDialog
+          booking={cancelTarget}
+          onHide={keepBooking}
+          onCancelled={bookingWasCancelled}
+          onStale={reloadList}
+        />
+      )}
     </>
   );
 }
