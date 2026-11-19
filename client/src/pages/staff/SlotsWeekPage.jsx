@@ -2,13 +2,18 @@
 // schedule with a compact summary of each slot. Each slot can be expanded to view its details.
 // The week can be navigated with previous/next buttons, past and current day are distinguished. Using a link to 
 // the "New slot" page prefilled the date in it. This page then displays a success message when a new slot is created.
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+// MH-09 FE1 – "Copy week" copies the slots of the shown week into another week (CopyWeekDialog), then shows the
+// target week with a summary of the slots copied, of the ones they replaced and of the ones skipped (already past
+// or overlapping a slot already under way).
+import { CalendarDays, ChevronLeft, ChevronRight, Copy, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from 'react-bootstrap/Alert';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
+import Collapse from 'react-bootstrap/Collapse';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { listSlots } from '../../api/slots.js';
+import CopyWeekDialog from '../../components/CopyWeekDialog.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import Loading from '../../components/Loading.jsx';
 import SlotCard from '../../components/SlotCard.jsx';
@@ -31,6 +36,35 @@ function parseWeekStart(value) {
   return startOfWeek(date);
 }
 
+const countOf = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`;
+
+// One line about a copy, zero counts left out. Examples: "3 slots copied, 2 replaced."
+// "1 slot copied, 2 not copied (1 overlap, 1 already past)." "No slots copied: 2 slots are already past."
+// `replaced` are the existing slots of the target week deleted by the copy (PO, issue #45).
+function copySummary({ created, replaced, skipped }) {
+  const overlap = skipped.filter((slot) => slot.reason === 'overlap').length;
+  const past = skipped.length - overlap;
+  const replacedPart = replaced.length > 0 ? `, ${replaced.length} replaced` : '';
+  if (created.length === 0) {
+    const reasons = [
+      overlap > 0 &&
+        countOf(
+          overlap,
+          'slot is at the same time as a slot that has already started',
+          'slots are at the same time as slots that have already started',
+        ),
+      past > 0 && `${countOf(past, 'slot is already past', 'slots are already past')}`,
+    ].filter(Boolean);
+    return reasons.length > 0
+      ? `No slots copied${replacedPart}: ${reasons.join(', ')}.`
+      : `No slots copied${replacedPart}.`;
+  }
+  const copied = `${countOf(created.length, 'slot', 'slots')} copied${replacedPart}`;
+  if (skipped.length === 0) return `${copied}.`;
+  const reasons = [overlap > 0 && `${overlap} overlap`, past > 0 && `${past} already past`].filter(Boolean);
+  return `${copied}, ${skipped.length} not copied (${reasons.join(', ')}).`;
+}
+
 export default function SlotsWeekPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -47,6 +81,10 @@ export default function SlotsWeekPage() {
   const [slotResult, setSlotResult] = useState({ rangeKey: null, slots: [], error: null });
   const [selectedSlotId, setSelectedSlotId] = useState(null);
   const [createdSlot, setCreatedSlot] = useState(() => location.state?.created ?? null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  // Result of the last copy, with the Monday of its target week: the summary is shown only on that week.
+  const [copyResult, setCopyResult] = useState(null);
+  const [copyDetailsOpen, setCopyDetailsOpen] = useState(false);
   const currentUrl = useRef(`${location.pathname}${location.search}`);
 
   // If a slot was just created, clear the state so that the success message is not shown again on page reload.
@@ -111,6 +149,7 @@ export default function SlotsWeekPage() {
 
   function moveWeek(amount) {
     setSelectedSlotId(null);
+    setCopyResult(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('week', toLocalIsoDate(addDays(weekStart, amount)));
     setSearchParams(nextParams);
@@ -118,10 +157,25 @@ export default function SlotsWeekPage() {
 
   function moveToToday() {
     setSelectedSlotId(null);
+    setCopyResult(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('week', toLocalIsoDate(currentWeek));
     setSearchParams(nextParams);
   }
+
+  // After a copy, show the target week: the summary survives the URL change (it is not cleared with createdSlot).
+  function handleCopied(result, targetWeek) {
+    setCopyOpen(false);
+    setSelectedSlotId(null);
+    setCreatedSlot(null);
+    setCopyResult({ week: targetWeek, ...result });
+    setCopyDetailsOpen(false);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('week', targetWeek);
+    setSearchParams(nextParams);
+  }
+
+  const shownCopyResult = copyResult?.week === from ? copyResult : null;
 
   return (
     <>
@@ -160,10 +214,59 @@ export default function SlotsWeekPage() {
           </nav>
           <Link to={routes.newSlot} className="btn btn-primary d-inline-flex align-items-center gap-1">  
             <Plus aria-hidden="true" size={18} />
-            New slot  
+            New slot
           </Link>
+          <Button
+            variant="outline-primary"
+            className="d-inline-flex align-items-center gap-1"
+            onClick={() => setCopyOpen(true)}
+            disabled={!canShowWeek || !hasSlots}
+          >
+            <Copy aria-hidden="true" size={18} />
+            Copy week
+          </Button>
         </div>
       </div>
+      {copyOpen && (
+        <CopyWeekDialog weekStart={weekStart} onHide={() => setCopyOpen(false)} onCopied={handleCopied} />
+      )}
+
+      {shownCopyResult && (
+        <Alert
+          variant={shownCopyResult.created.length > 0 ? 'success' : 'warning'}
+          dismissible
+          role="status"
+          onClose={() => setCopyResult(null)}
+        >
+          <p className="mb-0">{copySummary(shownCopyResult)}</p>
+          {shownCopyResult.skipped.length > 0 && (
+            <>
+              <Button
+                variant="link"
+                className="p-0 align-baseline"
+                aria-expanded={copyDetailsOpen}
+                aria-controls="copy-week-details"
+                onClick={() => setCopyDetailsOpen((open) => !open)}
+              >
+                {copyDetailsOpen ? 'Hide details' : 'Show details'}
+              </Button>
+              <Collapse in={copyDetailsOpen}>
+                <div id="copy-week-details">
+                  <p className="mt-2 mb-1">Not copied:</p>
+                  <ul className="mb-0">
+                    {shownCopyResult.skipped.map((slot) => (
+                      <li key={`${slot.date}-${slot.startTime}-${slot.endTime}`}>
+                        {formatDate(slot.date)}, {formatTimeRange(slot.startTime, slot.endTime)} {slot.label} –{' '}
+                        {slot.reason === 'past' ? 'already past' : 'a slot has already started at that time'}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </Collapse>
+            </>
+          )}
+        </Alert>
+      )}
 
       {createdSlot && (
         <Alert
