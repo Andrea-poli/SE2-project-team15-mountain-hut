@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mountain Hut API
-  version: 0.2.0
+  version: 0.2.1
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -47,8 +47,13 @@ info:
     * **Change window (MH-06)** - a booking can be changed only while at least
       48 hours remain before its slot starts (PO, issue #43: for a meal on
       20 Nov at 13:00, changes close on 18 Nov at 13:00, that instant included).
-      A change must also respect the one-booking-per-slot rule. Cancelling
-      (MH-08) has **no** time limit (PO, issue #8).
+      When the change moves the booking to another slot, the new slot must
+      also start at least 48 hours after the change (PO, issue #43: "both the
+      original and the new slot"). Any change is treated as a new booking: the
+      tables are assigned again with the allocation rule, possibly different
+      ones (PO, issues #38 and #48). A change must also respect the
+      one-booking-per-slot rule. Cancelling (MH-08) has **no** time limit
+      (PO, issue #8).
     * **Emails (MH-03, MH-06, MH-08)** - every change to a booking is notified
       by email to the hiker (PO, issue #41, MH-06 clarification): a new booking,
       a change and a cancellation each send one email, after the commit; if
@@ -68,10 +73,11 @@ info:
 
     Version 0.2.0 (Sprint 2, U1) adds the endpoints of MH-05 → MH-09, updated
     with the PO answers of 9-12 Nov (issues #35-#45 and the story
-    clarifications). Still **pending PO**: question 2 of the planning (can a
-    change move a booking into, or out of, a slot that starts within 2 hours?)
-    and question 6 (limits on the requirements); issue #46 (generated password
-    sent by email instead of verbally).
+    clarifications). Version 0.2.1 (MH-06 BE1+BE2) applies PO issues #43
+    (the 48-hour rule also on the new slot of a change: planning question 2
+    answered) and #48 (any change is a new booking). Still **pending PO**:
+    question 6 of the planning (limits on the requirements); issue #46
+    (generated password sent by email instead of verbally).
 
 servers:
   - url: http://localhost:3001
@@ -716,13 +722,13 @@ paths:
         GET). Any of `slotId`, `partySize` and `requirements` can be sent;
         what is not sent stays as it is. A cancelled booking cannot be
         changed. Rules: the change window (at least 48 hours before the
-        booked slot starts, PO issue #43); the new slot, if any, must be
-        bookable like a new booking (open, not within 2 hours: whether it must
-        also be 48 hours away is **pending PO**, planning question 2); one
-        booking per hiker per slot. When the slot or the party size changes,
-        the change is treated as a new booking in that slot (PO issue #38,
-        MH-06 clarification): this booking's own seats are released, the
-        tables are assigned again with the allocation rule, and if the party
+        booked slot starts, PO issue #43); the new slot, if any, must exist,
+        be open and also start at least 48 hours after the change (PO issue
+        #43: the rule applies to both slots); one booking per hiker per slot.
+        Any change, also one of the requirements only, is treated as a new
+        booking in that slot (PO issues #38 and #48, MH-06 clarification):
+        this booking's own seats are released, the tables are assigned again
+        with the allocation rule (possibly different tables), and if the party
         does not fit the answer is 409 and the booking stays exactly as it was
         (one transaction). `requirements`, when sent, replaces the whole list
         (an empty list removes them). `createdAt` does not change. After the
@@ -751,7 +757,7 @@ paths:
           description: >
             Invalid body (nothing to change, invalid values or requirements),
             booking cancelled, less than 48 hours before the booked slot, or
-            the new slot is closed or starts within 2 hours.
+            the new slot is closed or starts less than 48 hours from now.
           content:
             application/json:
               schema:
@@ -763,8 +769,10 @@ paths:
                   value: { error: 'A cancelled booking cannot be changed' }
                 window:
                   value: { error: 'Bookings can be changed up to 48 hours before the slot starts' }
-                deadline:
-                  value: { error: 'Bookings are accepted up to 2 hours before the slot starts' }
+                newSlotClosed:
+                  value: { error: 'This slot is closed' }
+                newSlotWindow:
+                  value: { error: 'The new slot must start at least 48 hours from now' }
         '401':
           description: Not logged in
           content:

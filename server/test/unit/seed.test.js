@@ -38,12 +38,15 @@ describe('demo data seed', () => {
     expect(result.users).toBe(USERS.length);
     expect(result.bookings).toBe(BOOKINGS.length);
 
-    // Demo accounts must be complete, use valid roles, and have unique emails.
+    // Demo accounts use valid roles and unique emails; everyone can log in except the temporary hiker (MH-07),
+    // a hiker entered by staff with no email and no password.
     expect(users).toHaveLength(USERS.length);
-    expect(new Set(users.map(({ email }) => email.toLowerCase())).size).toBe(users.length);
-    expect(users.every(({ email, passwordHash, role }) =>
-      email && passwordHash && ['hiker', 'employee', 'warden'].includes(role),
-    )).toBe(true);
+    const withEmail = users.filter(({ email }) => email);
+    expect(new Set(withEmail.map(({ email }) => email.toLowerCase())).size).toBe(withEmail.length);
+    expect(users.every(({ role }) => ['hiker', 'employee', 'warden'].includes(role))).toBe(true);
+    const temporary = users.filter(({ email, passwordHash }) => !email && !passwordHash);
+    expect(temporary.map(({ role }) => role)).toEqual(['hiker']);
+    expect(users.every((user) => temporary.includes(user) || (user.email && user.passwordHash))).toBe(true);
 
     // Check each slot's tables and basic fields, then verify daily timing and Saturday-only slots.
     const slotsByDate = new Map();
@@ -134,5 +137,16 @@ describe('demo data seed', () => {
       const capacity = slots.find((slot) => slot.id === slotId && slot.tableId === tableId).capacity;
       expect(seats).toBeLessThanOrEqual(capacity);
     }
+
+    // Party requirements (MH-05) are saved with their bookings, in the order of the seed.
+    const saved = await db.all(
+      `SELECT b.party_size AS partySize, r.has_allergies AS hasAllergies, r.description
+       FROM booking_requirements r JOIN bookings b ON b.id = r.booking_id ORDER BY r.booking_id, r.id`,
+    );
+    const expected = BOOKINGS.flatMap(({ partySize, requirements = [] }) =>
+      requirements.map((r) => ({ partySize, hasAllergies: Number(r.hasAllergies), description: r.description })));
+    expect(saved).toEqual(expected);
+    expect(saved.some(({ hasAllergies }) => hasAllergies)).toBe(true);
+    expect(saved.some(({ hasAllergies }) => !hasAllergies)).toBe(true);
   });
 });

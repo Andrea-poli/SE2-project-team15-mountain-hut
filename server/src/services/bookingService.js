@@ -50,12 +50,6 @@ export function validateNewBooking(body) {
   return { slotId, partySize, requirements: validateRequirements(requirements) };
 }
 
-// Index bookings_one_per_hiker_slot (schema.sql): one confirmed booking per hiker per slot.
-// Safety net behind hasConfirmedBooking(): even if a check is missed, the database never accepts a second one.
-const isSecondBooking = (err) =>
-  err?.code === 'SQLITE_CONSTRAINT' &&
-  /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
-
 /**
  * Books a table for `hiker` and returns the booking as GET /api/bookings/:id shows it.
  * Slot, deadline and seats are read again inside the transaction: two bookings at the same time for the
@@ -94,7 +88,9 @@ export async function createBooking(hiker, body) {
       });
     });
   } catch (err) {
-    if (isSecondBooking(err)) throw new Conflict(MESSAGES.alreadyBooked);
+    // Index bookings_one_per_hiker_slot: safety net behind hasConfirmedBooking(), the database never accepts
+    // a second confirmed booking of the hiker in the slot.
+    if (bookingDao.isSecondBooking(err)) throw new Conflict(MESSAGES.alreadyBooked);
     throw err;
   }
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isSelectableState,
   isSlotPickerComplete,
   slotOptionLabel,
+  slotOptionState,
   slotPickerValueFromParams,
   slotPickerValueToParams,
   validateSlotPicker,
@@ -10,6 +12,32 @@ import {
 const lunch = { id: 4, label: 'Lunch', startTime: '12:00', endTime: '14:00', bookingState: 'bookable' };
 const params = (query) => new URLSearchParams(query);
 const valid = { date: '2026-11-06', slotId: 4, partySize: '3' };
+
+describe('slotOptionState (MH-06 Change booking: the new slot needs 48 h notice)', () => {
+  // Lunch on Thu 5 Nov at 12:00; exactly 48 h before is Tue 3 Nov at 12:00.
+  const at = (day, hours, minutes) => new Date(2026, 10, day, hours, minutes);
+  const notice = (now) => ({ minNoticeHours: 48, now });
+
+  it('less than the notice before the start is tooSoon; exactly the notice is still allowed', () => {
+    expect(slotOptionState(lunch, '2026-11-05', notice(at(3, 12, 1)))).toBe('tooSoon');
+    expect(slotOptionState(lunch, '2026-11-05', notice(at(3, 12, 0)))).toBe('bookable');
+    expect(slotOptionState({ ...lunch, bookingState: 'full' }, '2026-11-05', notice(at(3, 12, 0)))).toBe('full');
+  });
+
+  it('the booking\'s own slot is "current", even when it is too soon; without options it is the bookingState', () => {
+    expect(slotOptionState(lunch, '2026-11-05', { currentSlotId: 4, ...notice(at(5, 11, 0)) })).toBe('current');
+    expect(slotOptionState(lunch, '2026-11-05')).toBe('bookable');
+  });
+
+  it('only bookable and current options can be chosen', () => {
+    expect(['bookable', 'current', 'tooSoon', 'full', 'tooLate'].map(isSelectableState))
+      .toEqual([true, true, false, false, false]);
+  });
+
+  it('a tooSoon option says how much notice is needed', () => {
+    expect(slotOptionLabel(lunch, 'tooSoon', 48)).toBe('Lunch, 12:00 – 14:00 – less than 48 hours away');
+  });
+});
 
 describe('slotOptionLabel', () => {
   it('shows label and time of a bookable slot, without a suffix', () => {

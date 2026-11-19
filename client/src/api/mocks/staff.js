@@ -3,7 +3,8 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { pickerSlotState } from '../../utils/slotPicker.js';
 import { ApiError } from '../client.js';
-import { TABLES, allocate, currentUser, dateOfSlot } from './bookings.js';
+import { allocate, currentUser, dateOfSlot } from './bookings.js';
+import { TABLES } from './bookingStore.js';
 import { listPublicSlots } from './publicSlots.js';
 
 const DELAY_MS = 300;
