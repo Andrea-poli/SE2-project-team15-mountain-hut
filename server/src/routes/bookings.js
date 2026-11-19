@@ -1,11 +1,13 @@
 // /api/bookings – create a booking, get a booking (MH-01 BE2, openapi.yaml tag bookings); both answers include
-// the party requirements (MH-05). The hiker's own list (MH-06 BE1) and the change of a booking (MH-06 BE2).
+// the party requirements (MH-05). The hiker's own list (MH-06 BE1), the change of a booking (MH-06 BE2) and its
+// cancellation (MH-08 BE1).
 import { Router } from 'express';
 import * as bookingDao from '../dao/bookingDao.js';
 import { getDb } from '../dao/db.js';
 import { BadRequest, NotFound } from '../errors.js';
 import { requireLogin, requireRole } from '../middleware/auth.js';
 import * as bookingService from '../services/bookingService.js';
+import { cancelBooking } from '../services/cancelBookingService.js';
 import { changeBooking, listMyBookings } from '../services/myBookingsService.js';
 
 const router = Router();
@@ -37,6 +39,13 @@ router.get('/:id', requireLogin, async (req, res) => {
 router.patch('/:id', requireLogin, async (req, res) => {
   if (!/^[1-9]\d*$/.test(req.params.id)) throw new BadRequest('id must be a positive integer');
   res.json(await changeBooking(req.user, Number(req.params.id), req.body));
+});
+
+// POST /api/bookings/:id/cancel → 200 Booking (status cancelled) | 400 | 401 | 404 | 409 already cancelled (MH-08)
+// Owner only, at any time: anyone else (staff included) gets 404, as for GET. A POST, not DELETE: the booking stays.
+router.post('/:id/cancel', requireLogin, async (req, res) => {
+  if (!/^[1-9]\d*$/.test(req.params.id)) throw new BadRequest('id must be a positive integer');
+  res.json(await cancelBooking(req.user, Number(req.params.id)));
 });
 
 export default router;

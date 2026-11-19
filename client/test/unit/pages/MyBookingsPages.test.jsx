@@ -55,6 +55,7 @@ import ChangeBookingPage from '../../../src/pages/hiker/ChangeBookingPage.jsx';
 import MyBookingsPage from '../../../src/pages/hiker/MyBookingsPage.jsx';
 import { routes } from '../../../src/routes.js';
 import { renderPage } from '../../helpers/renderPage.jsx';
+import { booking, CANCELLED, NOW, PAST, SOON, UPCOMING } from '../../helpers/myBookings.js';
 import { employee, hiker } from '../../helpers/users.js';
 
 vi.mock('../../../src/api/auth.js', () => ({ me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
@@ -63,38 +64,10 @@ vi.mock('../../../src/api/bookings.js', () => ({
 }));
 vi.mock('../../../src/api/publicSlots.js', () => ({ listPublicSlots: vi.fn() }));
 
-// "Now": Tuesday 3 November 2026, 10:00 in the hut.
-const NOW = new Date(2026, 10, 3, 10, 0);
 const SLOTS = [
   { id: 10, label: 'Lunch', startTime: '12:00', endTime: '14:00', bookingState: 'bookable' },
   { id: 11, label: 'Dinner – 1st turn', startTime: '19:00', endTime: '20:30', bookingState: 'bookable' },
 ];
-
-const booking = (over) => ({
-  id: 7,
-  slot: { id: 10, date: '2026-11-10', startTime: '12:00', endTime: '14:00', label: 'Lunch' },
-  partySize: 3,
-  tables: [{ slotTableId: 1, tableName: 'T1', seats: 2 }, { slotTableId: 2, tableName: 'T2', seats: 1 }],
-  requirements: [],
-  status: 'confirmed',
-  createdAt: '2026-10-30T09:00:00Z',
-  changeable: true,
-  ...over,
-});
-const UPCOMING = booking({
-  requirements: [
-    { hasAllergies: true, description: '1 shellfish allergy' },
-    { hasAllergies: false, description: '2 vegetarians' },
-  ],
-});
-const SOON = booking({
-  id: 8, changeable: false,
-  slot: { id: 11, date: '2026-11-04', startTime: '19:00', endTime: '20:30', label: 'Dinner – 1st turn' },
-});
-const CANCELLED = booking({ id: 9, status: 'cancelled', changeable: false, tables: [] });
-const PAST = booking({
-  id: 6, changeable: false, slot: { id: 5, date: '2026-10-28', startTime: '12:00', endTime: '14:00', label: 'Lunch' },
-});
 
 const MY_BOOKINGS = '/my-bookings';
 const changeUrl = (id) => `/my-bookings/${id}/change`;

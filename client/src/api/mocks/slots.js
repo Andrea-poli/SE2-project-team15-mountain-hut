@@ -1,4 +1,4 @@
-// Mock of GET /api/slots (VITE_USE_MOCKS=true): returns API-shaped slots for the requested range.
+// Mocks of the slots endpoints (VITE_USE_MOCKS=true): API-shaped slots kept in memory.
 import { addDays, startOfWeek, toLocalIsoDate } from '../../utils/format.js';
 
 const today = new Date();
@@ -153,8 +153,11 @@ const mockSlots = mockSlotDefinitions.map((definition, index) => {
   };
 });
 
+// Same order as the server (ORDER BY date, start_time, id): created or copied slots appear in the right place.
 export async function listSlots(from, to) {
-  return mockSlots.filter((slot) => slot.date >= from && slot.date <= to);
+  return mockSlots
+    .filter((slot) => slot.date >= from && slot.date <= to)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id - b.id);
 }
 
 export async function createSlot(slot) {
@@ -178,4 +181,77 @@ export async function createSlot(slot) {
   };
   mockSlots.push(created);
   return created;
+}
+
+// Slots with a confirmed booking (the mock has no bookings): the Friday "special event" of the current week, so
+// copying a week into the current one answers 409 until that slot starts.
+const bookedSlotIds = new Set([9]);
+
+// Mock of POST /api/slots/copy-week: same rules as the server. `sourceWeek` and `targetWeek` are any day of the
+// two weeks. The not-started slots of the target week are replaced (409 if one is booked); started ones are kept.
+export async function copyWeek(sourceWeek, targetWeek) {
+  const toLocalDate = (isoDate) => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+  const sourceStart = startOfWeek(toLocalDate(sourceWeek));
+  const targetStart = startOfWeek(toLocalDate(targetWeek));
+  const sourceFrom = toLocalIsoDate(sourceStart);
+  const sourceTo = toLocalIsoDate(addDays(sourceStart, 6));
+  const targetFrom = toLocalIsoDate(targetStart);
+  const targetTo = toLocalIsoDate(addDays(targetStart, 6));
+  if (sourceFrom === targetFrom) {
+    const error = new Error('Choose a different week to copy into');
+    error.status = 400;
+    throw error;
+  }
+
+  // Whole days between the two Mondays: Math.round absorbs the hour gained or lost with daylight saving time.
+  const shift = Math.round((targetStart - sourceStart) / 86400000);
+  const now = new Date();
+  const nowDate = toLocalIsoDate(now);
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const hasStarted = ({ date, startTime }) => date < nowDate || (date === nowDate && startTime <= nowTime);
+
+  const targetSlots = mockSlots.filter((slot) => slot.date >= targetFrom && slot.date <= targetTo);
+  const replaced = targetSlots.filter((slot) => !hasStarted(slot));
+  if (replaced.some((slot) => bookedSlotIds.has(slot.id))) {
+    const error = new Error('The target week has bookings: its schedule cannot be replaced');
+    error.status = 409;
+    throw error;
+  }
+  const sourceSlots = mockSlots
+    .filter((slot) => slot.date >= sourceFrom && slot.date <= sourceTo)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  for (const slot of replaced) mockSlots.splice(mockSlots.indexOf(slot), 1);
+  const kept = targetSlots.filter(hasStarted);
+
+  const created = [];
+  const skipped = [];
+  for (const slot of sourceSlots) {
+    const date = toLocalIsoDate(addDays(toLocalDate(slot.date), shift));
+    const { startTime, endTime, label } = slot;
+    if (hasStarted({ date, startTime })) {
+      skipped.push({ date, startTime, endTime, label, reason: 'past' });
+    } else if (kept.some((existing) =>
+      existing.date === date && startTime < existing.endTime && endTime > existing.startTime
+    )) {
+      skipped.push({ date, startTime, endTime, label, reason: 'overlap' });
+    } else {
+      const tableId = Math.max(0, ...mockSlots.flatMap((existing) => existing.tables.map((table) => table.id)));
+      const copy = {
+        id: Math.max(0, ...mockSlots.map((existing) => existing.id)) + 1,
+        date,
+        startTime,
+        endTime,
+        label,
+        status: 'open',
+        past: false,
+        tables: slot.tables.map((table, index) => ({ id: tableId + index + 1, name: table.name, seats: table.seats })),
+      };
+      mockSlots.push(copy);
+      created.push(copy);
+    }
+  }
+  return { created, replaced, skipped };
 }

@@ -4,11 +4,13 @@
 // Other props (value, onChange, onBlur, autoComplete, required…) go to the input.
 // toggleLabel: fixed accessible name of the button ("Show password"); aria-pressed tells whether
 // the password is shown. The password is hidden again when the form is submitted.
+// icon (optional): a decorative icon before the label text (FieldLabel, I2).
 import { Eye, EyeOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Form from 'react-bootstrap/Form';
+import FieldLabel from './FieldLabel.jsx';
 
-export default function PasswordField({ id, label, toggleLabel, help, error, ...inputProps }) {
+export default function PasswordField({ id, label, toggleLabel, help, error, icon, ...inputProps }) {
   const [visible, setVisible] = useState(false);
   const inputRef = useRef(null);
 
@@ -28,7 +30,7 @@ export default function PasswordField({ id, label, toggleLabel, help, error, ...
 
   return (
     <Form.Group controlId={id} className="mb-3 mh-password">
-      <Form.Label>{label}</Form.Label>
+      <FieldLabel icon={icon}>{label}</FieldLabel>
       {/* Input and button only: the button is centred on the input's height (theme.css, section 12). */}
       <div className="mh-password-box">
         <Form.Control

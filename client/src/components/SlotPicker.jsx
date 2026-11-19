@@ -16,13 +16,21 @@
 // - a day with no slots shows "No meal service on this day";
 // - party size: a whole number, at least 1, no upper limit (PO, issue #27).
 // MH-06 (Change booking) adds two optional props, unused by Book and Check availability: currentSlotId and
-// minNoticeHours (48 h change window, PO issue #43).
+// minNoticeHours (48 h change window, PO issue #43). MH-07 (staff reservation) adds untilStart: no 2-hour rule.
+import { CalendarDays, Clock, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import { listPublicSlots } from '../api/publicSlots.js';
 import { isIsoDate, toIsoDate } from '../utils/dates.js';
-import { isSelectableState, slotOptionLabel, slotOptionState, slotPickerFieldIds } from '../utils/slotPicker.js';
+import {
+  isSelectableState,
+  pickerSlotState,
+  slotOptionLabel,
+  slotOptionState,
+  slotPickerFieldIds,
+} from '../utils/slotPicker.js';
 import ErrorMessage from './ErrorMessage.jsx';
+import FieldLabel from './FieldLabel.jsx';
 import FormField from './FormField.jsx';
 import Loading from './Loading.jsx';
 
@@ -48,6 +56,13 @@ function useDaySlots(date) {
   return result?.date === date ? result : null;
 }
 
+/** The help under Time: which slots cannot be chosen, for the hikers (2 hours), staff or a change. */
+function timeHelp(minNoticeHours, untilStart) {
+  if (minNoticeHours) return `Full slots and slots starting in less than ${minNoticeHours} hours cannot be chosen.`;
+  if (untilStart) return 'Full slots and slots that have already started cannot be chosen.';
+  return 'Full slots and slots starting in less than 2 hours cannot be chosen.';
+}
+
 /**
  * @param {object} props
  * @param {string} props.idPrefix   prefix of the control ids, unique in the page (e.g. "book")
@@ -60,6 +75,7 @@ function useDaySlots(date) {
  *   its option ends with " – your booking"
  * @param {number} [props.minNoticeHours] MH-06: slots starting sooner than this are shown but disabled, and
  *   the first selectable day is the day of now + minNoticeHours
+ * @param {boolean} [props.untilStart] staff (MH-07): a slot can be chosen until it starts, no 2-hour rule
  */
 export default function SlotPicker({
   idPrefix,
@@ -70,6 +86,7 @@ export default function SlotPicker({
   today,
   currentSlotId,
   minNoticeHours,
+  untilStart,
 }) {
   const ids = slotPickerFieldIds(idPrefix);
   const now = today ?? new Date();
@@ -78,7 +95,14 @@ export default function SlotPicker({
   const day = useDaySlots(value.date);
   const slots = day?.slots ?? null;
   const loading = isIsoDate(value.date) && !day;
-  const stateOf = (slot) => slotOptionState(slot, value.date, { currentSlotId, minNoticeHours, now });
+  // Staff (MH-07, untilStart) first: a slot closed only by the 2-hour rule stays bookable until it starts;
+  // then the Change booking page (MH-06): the booking's own slot, and the minimum notice.
+  const stateOf = (slot) =>
+    slotOptionState({ ...slot, bookingState: pickerSlotState(slot, value.date, { untilStart, now }) }, value.date, {
+      currentSlotId,
+      minNoticeHours,
+      now,
+    });
 
   // A prefilled or previous slotId that is not a selectable slot of this day is dropped.
   const chosen = slots?.find((s) => s.id === value.slotId);
@@ -103,6 +127,7 @@ export default function SlotPicker({
       <FormField
         id={ids.date}
         label="Date"
+        icon={CalendarDays}
         type="date"
         min={minDate}
         value={value.date}
@@ -113,7 +138,7 @@ export default function SlotPicker({
       />
 
       <Form.Group controlId={ids.slotId} className="mb-3">
-        <Form.Label>Time</Form.Label>
+        <FieldLabel icon={Clock}>Time</FieldLabel>
         {loading && <Loading />}
         <ErrorMessage message={day?.error} />
         {slots && slots.length === 0 ? (
@@ -148,9 +173,7 @@ export default function SlotPicker({
               </Form.Control.Feedback>
             )}
             <Form.Text id={timeHelpId} className="d-block">
-              {minNoticeHours
-                ? `Full slots and slots starting in less than ${minNoticeHours} hours cannot be chosen.`
-                : 'Full slots and slots starting in less than 2 hours cannot be chosen.'}
+              {timeHelp(minNoticeHours, untilStart)}
             </Form.Text>
           </>
         )}
@@ -159,6 +182,7 @@ export default function SlotPicker({
       <FormField
         id={ids.partySize}
         label="Number of people"
+        icon={Users}
         help="Everyone in your party, you included."
         type="number"
         inputMode="numeric"

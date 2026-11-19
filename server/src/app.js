@@ -11,6 +11,8 @@ import availabilityRouter from './routes/availability.js';
 import bookingsRouter from './routes/bookings.js';
 import publicSlotsRouter from './routes/publicSlots.js';
 import slotsRouter from './routes/slots.js';
+import staffBookingsRouter from './routes/staffBookings.js';
+import staffHikersRouter from './routes/staffHikers.js';
 import testSupportRouter from './routes/testSupport.js';
 import { createSessionMiddleware } from './session.js';
 
@@ -37,6 +39,8 @@ export function createApp({ sessionStore, clientDist = config.clientDist } = {})
   app.use('/api/bookings', bookingsRouter); //        MH-01
   app.use('/api/slots', slotsRouter); //              MH-02
   app.use('/api/public/slots/:id/availability', availabilityRouter); // MH-04
+  app.use('/api/staff/hikers', staffHikersRouter); // MH-07
+  app.use('/api/staff/bookings', staffBookingsRouter); // MH-07
   if (isTestEnv(config.env)) {
     app.use('/api/test', testSupportRouter); //       MH-03 (tests only)
   }

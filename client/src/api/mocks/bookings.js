@@ -19,7 +19,7 @@ const hasConfirmedBooking = (bookings, hikerId, slotId, exceptId) =>
   bookings.some((b) => b.id !== exceptId && b.hikerId === hikerId && b.slot.id === slotId && b.status === 'confirmed');
 
 /** Logged-in mock user (api/mocks/auth.js keeps it in sessionStorage). */
-function currentUser() {
+export function currentUser() {
   try {
     return JSON.parse(sessionStorage.getItem('mh-mock-user'));
   } catch {
@@ -28,7 +28,7 @@ function currentUser() {
 }
 
 /** Slot id → date (the mock ids are YYYYMMDD * 10 + turn). */
-function dateOfSlot(slotId) {
+export function dateOfSlot(slotId) {
   const day = Math.floor(slotId / 10);
   const text = String(day);
   return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
@@ -38,7 +38,7 @@ function dateOfSlot(slotId) {
  * Seat split for a party: one table if any fits (the smallest that fits), otherwise as few tables
  * as possible, largest first. Close enough to the real rule (planning 3.2) for a mock.
  */
-function allocate(free, partySize) {
+export function allocate(free, partySize) {
   const single = free.filter((t) => t.free >= partySize).sort((a, b) => a.free - b.free)[0];
   if (single) return [{ table: single, seats: partySize }];
   const result = [];
@@ -88,7 +88,7 @@ export async function createBooking({ slotId, partySize, requirements = [] }) {
   }
   const taken = (tableId) =>
     bookings
-      .filter((b) => b.slot.id === slotId)
+      .filter((b) => b.slot.id === slotId && b.status === 'confirmed') // cancelled seats are free (MH-08)
       .flatMap((b) => b.tables)
       .filter((t) => t.slotTableId === tableId)
       .reduce((sum, t) => sum + t.seats, 0);
@@ -217,5 +217,24 @@ export async function changeBooking(id, change = {}) {
   // Read again: the availability check waited, and the list may have changed meanwhile.
   saveBookings(loadBookings().map((b) => (b.id === changed.id ? changed : b)));
   const { hikerId: _hikerId, ...publicBooking } = changed;
+  return publicBooking;
+}
+
+// POST /api/bookings/:id/cancel (MH-08): owner only (404 otherwise), at any time (PO issue #8), 409 when already
+// cancelled. The booking is kept with status cancelled and no tables, so its seats are free again (contract,
+// Booking.tables "empty for a cancelled booking"). The mock sends no email.
+export async function cancelBooking(id) {
+  await wait();
+  const user = currentUser();
+  if (!user) throw new ApiError(401, 'You need to log in');
+  if (!/^[1-9]\d*$/.test(String(id))) throw new ApiError(400, 'id must be a positive integer');
+  const bookings = loadBookings();
+  const booking = bookings.find((b) => b.id === Number(id) && b.hikerId === user.id);
+  if (!booking) throw new ApiError(404, 'Booking not found'); // also someone else's, and staff
+  if (booking.status === 'cancelled') throw new ApiError(409, 'This booking is already cancelled');
+
+  const cancelled = { ...booking, status: 'cancelled', tables: [] };
+  saveBookings(bookings.map((b) => (b.id === cancelled.id ? cancelled : b)));
+  const { hikerId: _hikerId, ...publicBooking } = cancelled;
   return publicBooking;
 }
