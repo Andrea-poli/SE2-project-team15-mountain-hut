@@ -21,6 +21,13 @@ const BASE = `http://localhost:${PORT}`;
 
 /** Text from the server, printed on one line (no line breaks: Sonar log injection rule). */
 const oneLine = (value) => String(value).replace(/[\r\n]+/g, ' ');
+
+/** An id read from a server answer, as a positive integer (0 if it is not one): only numbers go into a URL path
+ *  (Sonar API traversal / request forgery rules). */
+const idFrom = (value) => {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : 0;
+};
 let passed = 0;
 let failed = 0;
 
@@ -89,12 +96,12 @@ async function main() {
   r = await guest('GET', `/api/public/slots?date=${day(3)}`);
   const dinnerIn3 = r.body?.find?.((s) => s.label.startsWith('Dinner – 1st'));
   check('demo data: the dinner in 3 days is full', dinnerIn3?.bookingState === 'full');
-  r = await guest('GET', `/api/public/slots/${lunch.id}/availability?partySize=1`);
+  r = await guest('GET', `/api/public/slots/${idFrom(lunch.id)}/availability?partySize=1`);
   check('availability: tomorrow\'s lunch for 1 → available (1 seat left)',
     r.status === 200 && r.body?.available === true);
-  r = await guest('GET', `/api/public/slots/${lunch.id}/availability?partySize=2`);
+  r = await guest('GET', `/api/public/slots/${idFrom(lunch.id)}/availability?partySize=2`);
   check('availability: tomorrow\'s lunch for 2 → not available', r.status === 200 && r.body?.available === false);
-  r = await guest('GET', `/api/public/slots/${dinner.id}/availability?partySize=12`);
+  r = await guest('GET', `/api/public/slots/${idFrom(dinner.id)}/availability?partySize=12`);
   check('availability: tomorrow\'s dinner for 12 → available, split', r.body?.available === true,
     r.body?.split?.map((t) => t.seats).join(' + '));
   r = await guest('GET', '/api/public/slots/999999/availability?partySize=2');
@@ -134,7 +141,7 @@ async function main() {
   r = await hiker('POST', '/api/bookings', { slotId: dinner.id, partySize: 4 });
   check('book tomorrow\'s dinner for 4 → 201 with Location',
     r.status === 201 && /^\/api\/bookings\/\d+$/.test(r.headers.get('location') || ''));
-  const bookingId = r.body?.id;
+  const bookingId = idFrom(r.body?.id);
   r = await hiker('GET', `/api/bookings/${bookingId}`);
   check('read your own booking → 200', r.status === 200 && r.body?.partySize === 4);
   r = await hiker('POST', '/api/bookings', { slotId: dinner.id, partySize: 1 });
