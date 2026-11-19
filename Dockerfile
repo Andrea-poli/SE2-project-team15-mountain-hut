@@ -14,7 +14,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
-RUN npm ci --workspace client --include-workspace-root=false
+# --ignore-scripts: no package runs its own install scripts (Sonar docker:S6505); the client build needs none.
+RUN npm ci --workspace client --include-workspace-root=false --ignore-scripts
 COPY client/ client/
 RUN npm run build --workspace client
 
@@ -31,7 +32,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
-RUN npm ci --workspace server --include-workspace-root=false --omit=dev --build-from-source=sqlite3
+# --ignore-scripts (Sonar docker:S6505): no install script runs, then only sqlite3 is compiled, on purpose.
+RUN npm ci --workspace server --include-workspace-root=false --omit=dev --ignore-scripts \
+ && npm rebuild sqlite3 --build-from-source=sqlite3
 
 # ---- 3. runtime ---------------------------------------------------------------------------------
 FROM node:22-bookworm-slim

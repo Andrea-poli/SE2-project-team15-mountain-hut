@@ -4,20 +4,30 @@
 // E2E tests: it answers "does this image, started with these variables, work?" in a few seconds.
 //
 //   docker compose down -v && docker compose up -d      (a FRESH start: the checks expect the seed)
-//   node docker/smoke-test.js                            (or: node docker/smoke-test.js http://host:port)
+//   node docker/smoke-test.js                            (or: node docker/smoke-test.js 8080, for another port)
 //
 // It writes to the database (a new hiker, a booking, a slot), so run it once per fresh start.
 // Exit code 0 = all passed, 1 = something failed (usable in a script or a CI job).
 // The confirmation email is not checked here: look at the mailbox (e.g. Ethereal → Messages).
 
-const BASE = (process.argv[2] || 'http://localhost:3001').replace(/\/$/, '');
+// Only a port number is read from the command line: the script always calls this machine (localhost), never an
+// address typed by the user (Sonar SSRF rules). Run it on the PC where the container runs, or inside it.
+const PORT = Number.parseInt(process.argv[2] || '3001', 10);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error('Usage: node docker/smoke-test.js [port]   (a number from 1 to 65535, default 3001)');
+  process.exit(2);
+}
+const BASE = `http://localhost:${PORT}`;
+
+/** Text from the server, printed on one line (no line breaks: Sonar log injection rule). */
+const oneLine = (value) => String(value).replace(/[\r\n]+/g, ' ');
 let passed = 0;
 let failed = 0;
 
 function check(name, ok, detail = '') {
   if (ok) passed += 1;
   else failed += 1;
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${oneLine(detail)})` : ''}`);
 }
 
 /** A browser-like client: keeps its own session cookie between calls. */
@@ -184,8 +194,11 @@ async function main() {
   check('a missing asset → 404, not the app page', r.status === 404);
 
   console.log(`\n${passed} passed, ${failed} failed`);
-  if (bookingId) console.log(`A confirmation email for booking ${bookingId} should be in the mailbox of ${email}.`);
+  if (bookingId) console.log(`A confirmation email for booking ${oneLine(bookingId)} should be in the mailbox of ${oneLine(email)}.`);
   process.exit(failed ? 1 : 0);
 }
 
-main();
+main().catch((err) => {
+  console.error(`FAIL  the smoke test stopped: ${oneLine(err.message)}`);
+  process.exit(1);
+});
