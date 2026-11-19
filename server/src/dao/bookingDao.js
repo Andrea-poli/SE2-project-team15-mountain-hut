@@ -1,4 +1,5 @@
-// Bookings and the tables they take: SQL only, no business rules (planning 4.4). Results are camelCase.
+// Bookings, the tables they take and their party requirements: SQL only, no business rules (planning 4.4).
+// Results are camelCase.
 
 /**
  * Values of bookings.status. No CHECK in schema.sql on purpose: a new state
@@ -8,6 +9,15 @@ export const BOOKING_STATUS = Object.freeze({
   CONFIRMED: 'confirmed',
   CANCELLED: 'cancelled',
 });
+
+/**
+ * True when `err` is the error SQLite throws for a second confirmed booking of the same hiker in the same slot
+ * (index bookings_one_per_hiker_slot, schema.sql), when create() or update() would break it.
+ * Used by the services to answer 409 instead of 500.
+ */
+export const isSecondBooking = (err) =>
+  err?.code === 'SQLITE_CONSTRAINT' &&
+  /UNIQUE constraint failed: bookings\.slot_id, bookings\.hiker_id/.test(err.message);
 
 /**
  * Seats already taken at each table of a slot, by confirmed bookings only
@@ -40,16 +50,37 @@ export async function hasConfirmedBooking(db, slotId, hikerId) {
 }
 
 /**
- * Inserts a booking and the seats it takes at each table, and returns it like findById.
+ * Cancels a confirmed booking (MH-08): only the status changes, the booking is kept.
+ * Its seats are free again at once, because allocationsForSlot() and hasConfirmedBooking() count only confirmed
+ * bookings; the rows of booking_tables stay as a record, but findById() no longer shows them.
+ * @returns {Promise<boolean>} true if it was cancelled now; false if it was not confirmed (e.g. already cancelled)
+ */
+export async function cancel(db, id) {
+  const { changes } = await db.run('UPDATE bookings SET status = ? WHERE id = ? AND status = ?', [
+    BOOKING_STATUS.CANCELLED,
+    id,
+    BOOKING_STATUS.CONFIRMED,
+  ]);
+  return changes > 0;
+}
+
+/**
+ * Inserts a booking, the seats it takes at each table and its party requirements (MH-05),
+ * and returns it like findById.
  * Call it inside withTransaction (transaction.js), after re-reading the seats with allocationsForSlot:
- * the booking and its tables are saved together or not at all.
+ * the booking, its tables and its requirements are saved together or not at all.
  * A second confirmed booking of the same hiker in the same slot makes SQLite throw
  * 'UNIQUE constraint failed: bookings.slot_id, bookings.hiker_id' (index bookings_one_per_hiker_slot).
  * @param {{ slotId: number, hikerId: number, partySize: number, status?: string, createdAt: string,
- *           tables: { slotTableId: number, seats: number }[] }} booking
+ *           tables: { slotTableId: number, seats: number }[],
+ *           requirements?: { hasAllergies: boolean, description: string }[] }} booking
  *        createdAt: ISO UTC, from now() of clock.js (never the real clock, so tests can fix it)
+ *        requirements: already checked by the service (see saveRequirements); none when absent
  */
-export async function create(db, { slotId, hikerId, partySize, status = BOOKING_STATUS.CONFIRMED, createdAt, tables }) {
+export async function create(
+  db,
+  { slotId, hikerId, partySize, status = BOOKING_STATUS.CONFIRMED, createdAt, tables, requirements = [] },
+) {
   const { lastID: bookingId } = await db.run(
     'INSERT INTO bookings (slot_id, hiker_id, party_size, status, created_at) VALUES (?, ?, ?, ?, ?)',
     [slotId, hikerId, partySize, status, createdAt],
@@ -61,14 +92,17 @@ export async function create(db, { slotId, hikerId, partySize, status = BOOKING_
       seats,
     ]);
   }
+  await saveRequirements(db, bookingId, requirements);
   return findById(db, bookingId);
 }
 
 /**
- * One booking with its slot and tables, or null:
+ * One booking with its slot, tables and party requirements, or null:
  *   { id, hikerId, slot: { id, date, startTime, endTime, label }, partySize,
- *     tables: [{ slotTableId, tableName, seats }], status, createdAt }
+ *     tables: [{ slotTableId, tableName, seats }], requirements: [{ hasAllergies, description }],
+ *     status, createdAt }
  * hikerId lets the route check the owner (404 for someone else's booking): it is not part of the API answer.
+ * A cancelled booking has `tables: []`: its seats are free again (openapi Booking, MH-08).
  */
 export async function findById(db, id) {
   const row = await db.get(
@@ -92,8 +126,82 @@ export async function findById(db, id) {
     hikerId: row.hiker_id,
     slot: { id: row.slot_id, date: row.date, startTime: row.start_time, endTime: row.end_time, label: row.label },
     partySize: row.party_size,
-    tables,
+    tables: row.status === BOOKING_STATUS.CANCELLED ? [] : tables,
+    requirements: await findRequirements(db, id),
     status: row.status,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Changes a booking (MH-06) and returns it like findById. Call it inside withTransaction (transaction.js), after
+ * the checks of the service: everything is saved together or not at all. `createdAt` and `status` never change.
+ * @param {{ slotId: number, partySize: number,
+ *           tables?: { slotTableId: number, seats: number }[],
+ *           requirements?: { hasAllergies: boolean, description: string }[] }} change
+ *        tables: the new seats, replacing the old ones (absent: the seats stay as they are);
+ *        requirements: the new list, replacing the old one (absent: they stay as they are)
+ */
+export async function update(db, id, { slotId, partySize, tables, requirements }) {
+  await db.run('UPDATE bookings SET slot_id = ?, party_size = ? WHERE id = ?', [slotId, partySize, id]);
+  if (tables) {
+    await db.run('DELETE FROM booking_tables WHERE booking_id = ?', [id]);
+    for (const { slotTableId, seats } of tables) {
+      await db.run('INSERT INTO booking_tables (booking_id, slot_table_id, seats) VALUES (?, ?, ?)', [
+        id,
+        slotTableId,
+        seats,
+      ]);
+    }
+  }
+  if (requirements) {
+    await db.run('DELETE FROM booking_requirements WHERE booking_id = ?', [id]);
+    await saveRequirements(db, id, requirements);
+  }
+  return findById(db, id);
+}
+
+/**
+ * Every booking of a hiker (MH-06 "My bookings"), confirmed and cancelled, each like findById,
+ * ordered by slot date and start time (the service puts the upcoming ones first).
+ */
+export async function findByHiker(db, hikerId) {
+  const rows = await db.all(
+    `SELECT b.id FROM bookings b JOIN slots s ON s.id = b.slot_id
+     WHERE b.hiker_id = ?
+     ORDER BY s.date, s.start_time, b.id`,
+    [hikerId],
+  );
+  const bookings = [];
+  for (const { id } of rows) bookings.push(await findById(db, id));
+  return bookings;
+}
+
+/**
+ * Saves the party requirements of a booking (MH-05), in the order of the list.
+ * Call it inside the transaction that saves the booking (withTransaction, transaction.js):
+ * the booking and its requirements are saved together or not at all.
+ * The service checks the values first: an empty description makes SQLite throw 'CHECK constraint failed'.
+ * @param {{ hasAllergies: boolean, description: string }[]} requirements  may be empty
+ */
+export async function saveRequirements(db, bookingId, requirements) {
+  for (const { hasAllergies, description } of requirements) {
+    await db.run('INSERT INTO booking_requirements (booking_id, has_allergies, description) VALUES (?, ?, ?)', [
+      bookingId,
+      hasAllergies ? 1 : 0,
+      description,
+    ]);
+  }
+}
+
+/**
+ * The party requirements of a booking, in the order they were entered (openapi Requirement); [] when none.
+ * @returns {Promise<{ hasAllergies: boolean, description: string }[]>}
+ */
+export async function findRequirements(db, bookingId) {
+  const rows = await db.all(
+    'SELECT has_allergies, description FROM booking_requirements WHERE booking_id = ? ORDER BY id',
+    [bookingId],
+  );
+  return rows.map((row) => ({ hasAllergies: row.has_allergies === 1, description: row.description }));
 }

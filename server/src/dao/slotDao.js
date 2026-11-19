@@ -1,4 +1,6 @@
 // Slots and their tables: SQL only, no business rules (planning 4.4). Results are camelCase.
+import { BOOKING_STATUS } from './bookingDao.js';
+
 // Every function returns slots with their tables, in the same shape:
 //   { id, date, startTime, endTime, label, status, tables: [{ id, name, seats }] }
 // Slots are ordered by date and start time, tables in the order they were entered (id).
@@ -75,4 +77,28 @@ export async function create(db, { date, startTime, endTime, label, status = 'op
     await db.run('INSERT INTO slot_tables (slot_id, name, seats) VALUES (?, ?, ?)', [slotId, name, seats]);
   }
   return findById(db, slotId);
+}
+
+/**
+ * Ids of the given slots that have at least one confirmed booking (cancelled ones do not count).
+ * @param {number[]} slotIds
+ * @returns {Promise<Set<number>>}
+ */
+export async function idsWithConfirmedBookings(db, slotIds) {
+  if (slotIds.length === 0) return new Set();
+  const rows = await db.all(
+    `SELECT DISTINCT slot_id FROM bookings WHERE status = ? AND slot_id IN (${slotIds.map(() => '?').join(', ')})`,
+    [BOOKING_STATUS.CONFIRMED, ...slotIds],
+  );
+  return new Set(rows.map((row) => row.slot_id));
+}
+
+/**
+ * Deletes a slot with its tables and its cancelled bookings (MH-09: a copy replaces a schedule).
+ * Call it inside withTransaction, only for a slot without confirmed bookings: with one, SQLite refuses
+ * the delete (bookings.slot_id ON DELETE RESTRICT), so a booked slot can never disappear by mistake.
+ */
+export async function remove(db, id) {
+  await db.run('DELETE FROM bookings WHERE slot_id = ? AND status <> ?', [id, BOOKING_STATUS.CONFIRMED]);
+  await db.run('DELETE FROM slots WHERE id = ?', [id]);
 }

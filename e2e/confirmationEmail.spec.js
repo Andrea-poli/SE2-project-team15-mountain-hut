@@ -84,7 +84,7 @@ test.describe('Booking confirmation email', () => {
     await confirm(page);
     const time = page.getByLabel('Time', { exact: true });
     await expect(time).toHaveAccessibleDescription(/^Not enough seats available for this party\. Choose another time\./);
-    await expect(page).toHaveURL('/book');
+    await expect(page).toHaveURL(/\/book\?/); // still the Book page, the choices kept in the address (MH-05 FE1)
     await expect(emailLine(page)).toHaveCount(0);
     expect(await emails(page.request, hiker.email)).toEqual([]);
   });

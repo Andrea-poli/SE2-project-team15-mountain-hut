@@ -86,6 +86,15 @@ export class SqliteSessionStore extends session.Store {
     this.#run('run', 'DELETE FROM sessions WHERE expires <= ?', [Date.now()], () => {});
   }
 
+  /** Removes every session of `userId` (MH-07: a password reset logs the user out everywhere). */
+  destroyAllOf(userId) {
+    return new Promise((resolve, reject) => {
+      this.#run('run', "DELETE FROM sessions WHERE json_extract(sess, '$.userId') = ?", [userId], (err) =>
+        err ? reject(err) : resolve(),
+      );
+    });
+  }
+
   /** Stops the cleanup timer and closes the file (tests, server shutdown). */
   close() {
     clearInterval(this.cleanup);

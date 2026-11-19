@@ -11,6 +11,13 @@
 //   split party "2 + 8 seats": tomorrow's dinner · almost full (1 seat left): tomorrow's lunch ·
 //   full: the dinner in 3 days · busy past days: 3, 2 and 1 days ago · cancelled booking: lunch in 3 days ·
 //   closing within 2 h: today's lunch, with FAKE_NOW=<today>T10:30 (README, Demo accounts).
+// Sprint 2 demo cases (U3), all on the lunch in 3 days (no E2E spec uses it):
+//   requirements with allergies (MH-05, the PO example): luca · without allergies: anna (she rebooked
+//   after cancelling, MH-08) · a temporary hiker booked by staff, no email, cannot log in (MH-07): giorgio.
+// MH-06 48 h (hiker@example.com): the dinner in 3 days can be changed, tomorrow's dinner cannot.
+// MH-09: copy this week onto the week after next, which has slots and never bookings, so its schedule is
+// replaced. A week with bookings still to come is refused (PO #45): next week too, when the data is loaded
+// Fri–Sun (the bookings of days 1–3 reach into it).
 // The E2E specs rely on some days: keep tomorrow's dinner at 12 free seats (MH-04), today's and day 2's
 // slots as they are (MH-02), and days 4–14 without bookings (MH-01). Run npm run test:e2e after any change.
 import * as bookingDao from './dao/bookingDao.js';
@@ -31,6 +38,8 @@ export const USERS = [
   { key: 'marco', firstName: 'Marco', lastName: 'Rossi', email: 'marco.rossi@example.com', password: 'hikerpass', phone: '+393401234567', role: 'hiker' },
   { key: 'anna', firstName: 'Anna', lastName: 'Bianchi', email: 'anna.bianchi@example.com', password: 'hikerpass', phone: '+393471234567', role: 'hiker' },
   { key: 'luca', firstName: 'Luca', lastName: 'Verdi', email: 'luca.verdi@example.com', password: 'hikerpass', phone: '+41791234567', role: 'hiker' },
+  // MH-07: temporary hiker (phone booking only, cannot log in: no email, no password).
+  { key: 'giorgio', firstName: 'Giorgio', lastName: 'Montano', phone: '+393405556789', role: 'hiker' },
 ];
 
 // Lunch and dinner have different tables on purpose: there is no fixed table set (MH-02).
@@ -90,6 +99,16 @@ export const BOOKINGS = [
   // C3 – busier past days.
   { day: -2, slot: 'lunch', hiker: 'anna', partySize: 6, tables: { T4: 6 }, createdDaysAgo: 4 },
   { day: -2, slot: 'dinner1', hiker: 'marco', partySize: 4, tables: { T2: 4 }, createdDaysAgo: 4 },
+  // U3 – sprint 2 demo cases, on the lunch in 3 days (anna's cancelled C3 booking and marco's T1 are there).
+  { day: 3, slot: 'lunch', hiker: 'luca', partySize: 4, tables: { T2: 4 }, createdDaysAgo: 2,
+    requirements: [ // the PO example (MH-05, issue #29)
+      { hasAllergies: true, description: '1 vegan, peanut allergy' },
+      { hasAllergies: true, description: '1 shellfish allergy' },
+      { hasAllergies: false, description: '2 vegetarians' },
+    ] },
+  { day: 3, slot: 'lunch', hiker: 'anna', partySize: 2, tables: { T3: 2 }, createdDaysAgo: 0,
+    requirements: [{ hasAllergies: false, description: '1 vegetarian' }] },
+  { day: 3, slot: 'lunch', hiker: 'giorgio', partySize: 3, tables: { T4: 3 }, createdDaysAgo: 0 },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -117,7 +136,7 @@ function demoSlots(today) {
 
 /** Deletes every row, in the order the foreign keys allow (RESTRICT: bookings before slots and users). */
 async function deleteAll(db) {
-  for (const table of ['booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
+  for (const table of ['booking_requirements', 'booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
     await db.run(`DELETE FROM ${table}`);
   }
 }
@@ -132,8 +151,9 @@ async function deleteAll(db) {
  */
 export async function seed(db, today) {
   // One hash per user, never shared: each has its own random salt, even with the same demo password.
+  // A temporary hiker (MH-07) has no password, so nothing to hash.
   const hashes = new Map();
-  for (const { key, password } of USERS) hashes.set(key, await hashPassword(password));
+  for (const { key, password } of USERS) if (password) hashes.set(key, await hashPassword(password));
 
   return withTransaction(db, async () => {
     await deleteAll(db);
@@ -151,7 +171,7 @@ export async function seed(db, today) {
     for (const booking of BOOKINGS) {
       const slot = slots.get(`${booking.day}/${booking.slot}`);
       const tableId = (name) => slot.tables.find((table) => table.name === name).id;
-      await bookingDao.create(db, {
+      const newBooking = await bookingDao.create(db, {
         slotId: slot.id,
         hikerId: users.get(booking.hiker).id,
         partySize: booking.partySize,
@@ -159,6 +179,7 @@ export async function seed(db, today) {
         createdAt: new Date(today.getTime() - booking.createdDaysAgo * DAY_MS).toISOString(),
         tables: Object.entries(booking.tables).map(([name, seats]) => ({ slotTableId: tableId(name), seats })),
       });
+      if (booking.requirements) await bookingDao.saveRequirements(db, newBooking.id, booking.requirements); // MH-05
     }
 
     return {
