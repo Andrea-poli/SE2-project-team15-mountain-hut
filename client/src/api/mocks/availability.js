@@ -1,20 +1,15 @@
 // Mock of GET /api/public/slots/:id/availability (VITE_USE_MOCKS=true): same answers and errors as the
 // contract, no server needed. Only loaded through a dynamic import in api/availability.js.
-// Slots come from the publicSlots mock and the seats taken from the bookings mock (sessionStorage),
+// Slots come from the publicSlots mock and the seats taken from bookingStore.js (shared with the bookings mock),
 // so the check, the time menu and a booking made in mock mode always agree.
 // TODO: remove when MH-04 BE1 is on dev, together with all mocks if the team drops mock mode.
 import { ApiError } from '../client.js';
+import { loadBookings, TABLES } from './bookingStore.js';
 import { listPublicSlots } from './publicSlots.js';
 
 const DELAY_MS = 300;
 const wait = () => new Promise((resolve) => setTimeout(resolve, DELAY_MS));
 
-// Same tables as the bookings mock: 4 + 4 + 6 = 14 seats in every mock slot.
-const TABLES = [
-  { id: 1, name: 'T1', seats: 4 },
-  { id: 2, name: 'T2', seats: 4 },
-  { id: 3, name: 'T3', seats: 6 },
-];
 const NOT_AVAILABLE = { available: false, split: [] };
 
 /** Mock slot id → date (the ids of the publicSlots mock are YYYYMMDD * 10 + turn). */
@@ -23,16 +18,10 @@ function dateOfSlot(slotId) {
   return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
 }
 
-/** Seats taken at a table of the slot by the bookings made in mock mode. */
-function taken(slotId, tableId) {
-  let bookings = [];
-  try {
-    bookings = JSON.parse(sessionStorage.getItem('mh-mock-bookings')) ?? [];
-  } catch {
-    // storage unavailable: no bookings
-  }
-  return bookings
-    .filter((b) => b.slot.id === slotId)
+/** Seats taken at a table of the slot by the bookings of mock mode, except `ignoreBookingId`'s. */
+function taken(slotId, tableId, ignoreBookingId) {
+  return loadBookings()
+    .filter((b) => b.slot.id === slotId && b.id !== ignoreBookingId && b.status === 'confirmed') // MH-08: cancelled = free
     .flatMap((b) => b.tables)
     .filter((t) => t.slotTableId === tableId)
     .reduce((sum, t) => sum + t.seats, 0);
@@ -54,7 +43,9 @@ function allocate(free, partySize) {
   return left === 0 ? split : null;
 }
 
-export async function checkAvailability(slotId, partySize) {
+// ignoreBookingId (mock only, not in the API): the bookings mock passes it when a booking is changed (MH-06),
+// so that booking's own seats count as free.
+export async function checkAvailability(slotId, partySize, { ignoreBookingId } = {}) {
   await wait();
   if (!Number.isInteger(slotId) || slotId < 1) throw new ApiError(400, 'id must be a positive integer');
   if (!Number.isInteger(partySize) || partySize < 1) throw new ApiError(400, 'partySize must be a positive integer');
@@ -69,7 +60,7 @@ export async function checkAvailability(slotId, partySize) {
   if (!slot) throw new ApiError(404, 'Slot not found');
   if (slot.bookingState !== 'bookable') return NOT_AVAILABLE; // full, or less than 2 h before the start
 
-  const free = TABLES.map((t) => ({ ...t, free: t.seats - taken(slotId, t.id) }));
+  const free = TABLES.map((t) => ({ ...t, free: t.seats - taken(slotId, t.id, ignoreBookingId) }));
   const split = allocate(free, partySize);
   if (!split) return NOT_AVAILABLE;
   return {

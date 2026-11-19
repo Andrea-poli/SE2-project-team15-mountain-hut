@@ -8,6 +8,8 @@ export const routes = {
   register: '/register',
   book: '/book',
   bookingConfirmed: '/bookings/:id',
+  myBookings: '/my-bookings', // MH-06
+  changeBooking: '/my-bookings/:id/change', // MH-06 FE2
   staffSlots: '/staff/slots',
   newSlot: '/staff/slots/new',
 };
@@ -18,6 +20,8 @@ export const routes = {
 export const pageRoles = {
   [routes.book]: ['hiker'],
   [routes.bookingConfirmed]: ['hiker'], // MH-01 booking confirmation
+  [routes.myBookings]: ['hiker'], // MH-06
+  [routes.changeBooking]: ['hiker'], // MH-06
   [routes.staffSlots]: ['employee'],
   [routes.newSlot]: ['employee'],
 };

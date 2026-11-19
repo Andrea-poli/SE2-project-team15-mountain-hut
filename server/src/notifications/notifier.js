@@ -1,46 +1,56 @@
-// Hook called by MH-01 (booking service) after a booking is committed.
-// MH-03 BE1: sends the confirmation email to the hiker.
-// It must never throw: if the email fails, the booking stays valid (planning 4.3 B).
+// Hooks called by the booking services after a change is committed: one email to the hiker for each booking
+// event (PO issue #41). MH-03 BE1: confirmation (MH-01); MH-06 BE2: change; MH-08 BE1: cancellation.
+// They must never throw: if the email fails, the booking (or its change, or its cancellation) stays valid
+// (planning 4.3 B).
 import { sendMail } from './mailer.js';
 import { bookingCancelledEmail } from './templates/bookingCancelled.js';
-import { bookingConfirmedEmail } from './templates/bookingConfirmed.js';
+import { bookingChangedEmail, bookingConfirmedEmail } from './templates/bookingConfirmed.js';
 
 /**
- * @param {object} booking the created booking, as returned by GET /api/bookings/:id
- * @param {object} hiker   { id, firstName, lastName, email }
+ * Sends the email built by `makeEmail` to the hiker. Never throws: errors are logged for the staff (never shown
+ * to the hiker) and give false. Temporary hikers (MH-07, phone bookings) have no email: nothing is sent.
+ * @param {(booking: object, hiker: object) => { subject: string, text: string }} makeEmail
+ * @param {string} kind name of the email in the log, e.g. 'Confirmation'
  * @returns {Promise<boolean>} true if the email was sent, false if it could not be sent
  */
-export async function bookingConfirmed(booking, hiker) {
+async function sendBookingEmail(makeEmail, kind, booking, hiker) {
   try {
-    if (!hiker?.email) {
-      // Temporary hikers (MH-07, phone bookings) have no email: nothing to send.
-      return false;
-    }
-    const { subject, text } = bookingConfirmedEmail(booking, hiker);
+    if (!hiker?.email) return false;
+    const { subject, text } = makeEmail(booking, hiker);
     await sendMail({ to: hiker.email, subject, text });
     return true;
   } catch (err) {
-    // Logged for the staff, never shown to the hiker and never rethrown: the booking is already saved.
-    console.error(`Confirmation email for booking ${booking?.id} not sent:`, err);
+    console.error(`${kind} email for booking ${booking?.id} not sent:`, err);
     return false;
   }
 }
 
 /**
- * MH-08: hook called after a cancellation is committed; tells the hiker the booking is cancelled (PO issue #41).
- * Like bookingConfirmed, it never throws: if the email fails, the booking stays cancelled.
+ * MH-03: after a booking is created.
+ * @param {object} booking the created booking, as returned by GET /api/bookings/:id
+ * @param {object} hiker   { id, firstName, lastName, email }
+ * @returns {Promise<boolean>} true if the email was sent, false if it could not be sent
+ */
+export async function bookingConfirmed(booking, hiker) {
+  return sendBookingEmail(bookingConfirmedEmail, 'Confirmation', booking, hiker);
+}
+
+/**
+ * MH-06: after a change of a booking, with the new details.
+ * @param {object} booking the changed booking, as returned by GET /api/bookings/:id
+ * @param {object} hiker   { id, firstName, lastName, email }
+ * @returns {Promise<boolean>} true if the email was sent, false if it could not be sent
+ */
+export async function bookingChanged(booking, hiker) {
+  return sendBookingEmail(bookingChangedEmail, 'Change', booking, hiker);
+}
+
+/**
+ * MH-08: after a booking is cancelled.
  * @param {object} booking the cancelled booking, as returned by GET /api/bookings/:id
  * @param {object} hiker   { id, firstName, lastName, email }
  * @returns {Promise<boolean>} true if the email was sent, false if it could not be sent
  */
 export async function bookingCancelled(booking, hiker) {
-  try {
-    if (!hiker?.email) return false; // temporary hikers (MH-07) have no email
-    const { subject, text } = bookingCancelledEmail(booking, hiker);
-    await sendMail({ to: hiker.email, subject, text });
-    return true;
-  } catch (err) {
-    console.error(`Cancellation email for booking ${booking?.id} not sent:`, err);
-    return false;
-  }
+  return sendBookingEmail(bookingCancelledEmail, 'Cancellation', booking, hiker);
 }

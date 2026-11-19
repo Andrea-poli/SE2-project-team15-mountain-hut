@@ -383,3 +383,33 @@ describe('booking requirements DAO', () => {
     await expect(db.get('SELECT COUNT(*) AS count FROM booking_requirements')).resolves.toEqual({ count: 0 });
   });
 });
+
+// MH-06 BT1 – bookingDao.update(): what is not given stays as it is.
+describe('booking DAO – update', () => {
+  it('changes slot and party size, and keeps the tables and requirements when they are not given', async () => {
+    const slotId = await insertSlot(db);
+    const otherSlotId = await insertSlot(db, { date: '2026-12-03' });
+    const hikerId = await insertUser(db, { email: 'booking-update@example.com' });
+    const slotTableId = await insertTable(db, slotId, 'A', 4);
+    const requirements = [{ hasAllergies: true, description: '1 peanut allergy' }];
+    const booking = await bookingDao.create(db, {
+      slotId,
+      hikerId,
+      partySize: 2,
+      createdAt: '2026-11-01T10:00:00.000Z',
+      tables: [{ slotTableId, seats: 2 }],
+      requirements,
+    });
+
+    const updated = await bookingDao.update(db, booking.id, { slotId: otherSlotId, partySize: 3 });
+
+    expect(updated).toMatchObject({
+      slot: { id: otherSlotId },
+      partySize: 3,
+      tables: [{ slotTableId, tableName: 'A', seats: 2 }],
+      requirements,
+      status: 'confirmed',
+      createdAt: '2026-11-01T10:00:00.000Z',
+    });
+  });
+});
