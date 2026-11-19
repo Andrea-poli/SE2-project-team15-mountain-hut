@@ -1,6 +1,7 @@
 // MH-05 BT1 – migration seen from the bookings: a database left by sprint 1 (schema version 1) is upgraded to
-// version 2 when the server opens it, and its bookings are still read as before, now with an empty list of
-// party requirements; new bookings on it can have requirements. (The table-by-table checks are in db.test.js.)
+// the current schema version when the server opens it, and its bookings are still read as before, now with an
+// empty list of party requirements; new bookings on it can have requirements. (The table-by-table checks are
+// in db.test.js.)
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sqlite3 from 'sqlite3';

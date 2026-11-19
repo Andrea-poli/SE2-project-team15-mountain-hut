@@ -67,11 +67,14 @@ function normalisePhone(value) {
 }
 
 // Optional free text: missing or blank → null; anything that is not text → 400.
-function optionalText(value) {
+function formatOptionalText(value) {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') throw new BadRequest(MESSAGES.invalidOptional);
   return value.trim() || null;
 }
+
+const isOptionalText = (value) =>
+  value === undefined || value === null || typeof value === 'string';
 
 /**
  * Checks the registration body (NewUser in openapi.yaml) and returns the values to save:
@@ -90,8 +93,8 @@ export function validateRegistration(body) {
     email: email.trim(),
     password,
     phone: normalisePhone(phone),
-    notes: optionalText(notes),
-    emergencyContact: optionalText(emergencyContact),
+    notes: formatOptionalText(notes),
+    emergencyContact: formatOptionalText(emergencyContact),
   };
 }
 
@@ -107,8 +110,8 @@ export function validateStaffHiker(body) {
     lastName: lastName.trim(),
     email: email.trim(),
     phone: normalisePhone(phone),
-    notes: optionalText(notes),
-    emergencyContact: optionalText(emergencyContact),
+    notes: formatOptionalText(notes),
+    emergencyContact: formatOptionalText(emergencyContact),
   };
 }
 
@@ -116,12 +119,9 @@ export function validateStaffHiker(body) {
 export function validateTemporaryHiker(body) {
   const { firstName, lastName, phone } = body ?? {};
   if (!isText(firstName)) throw new BadRequest(MESSAGES.temporaryHikerNameRequired);
-  if (lastName !== undefined && lastName !== null && typeof lastName !== 'string') {
-    throw new BadRequest('lastName must be text');
-  }
-  if (phone !== undefined && phone !== null && typeof phone !== 'string') {
-    throw new BadRequest(MESSAGES.invalidPhone);
-  }
+  if (!isOptionalText(lastName)) throw new BadRequest('lastName must be text');
+  if (!isOptionalText(phone)) throw new BadRequest(MESSAGES.invalidPhone);
+
   const phoneText = typeof phone === 'string' ? phone.trim() : '';
   return {
     firstName: firstName.trim(),
