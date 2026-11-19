@@ -11,7 +11,7 @@ import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
 import Row from 'react-bootstrap/Row';
-import { CalendarCheck, KeyRound } from 'lucide-react';
+import { CalendarCheck, Clock, KeyRound } from 'lucide-react';
 import { Link } from 'react-router';
 import { createStaffBooking } from '../../api/staff.js';
 import BookingDetails from '../../components/BookingDetails.jsx';
@@ -113,7 +113,10 @@ export default function StaffReservationPage() {
             <title>New reservation – Mountain Hut</title>
             <Card.Body className="p-4">
               <h1 className="mb-2">New reservation</h1>
-              <p className="mb-4">For bookings by phone or at the hut. Staff can book a slot until it starts.</p>
+              <p className="d-flex align-items-start gap-2 mb-4">
+                <Clock aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+                For bookings by phone or at the hut. Staff can book a slot until it starts.
+              </p>
               <ErrorMessage message={generalError} ref={generalRef} />
               <Form noValidate onSubmit={handleSubmit}>
                 <HikerPanel
@@ -140,7 +143,12 @@ export default function StaffReservationPage() {
                   onChange={setRequirements}
                   submitAttempt={requirementSubmitAttempt}
                 />
-                <Button type="submit" className="w-100 mt-2" disabled={submitting}>
+                <Button
+                  type="submit"
+                  className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
+                  disabled={submitting}
+                >
+                  <CalendarCheck aria-hidden="true" size={18} />
                   {submitting ? 'Booking…' : 'Confirm reservation'}
                 </Button>
               </Form>

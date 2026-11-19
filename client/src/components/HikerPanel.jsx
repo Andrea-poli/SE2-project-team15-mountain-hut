@@ -5,6 +5,18 @@
 //
 //   const [hiker, setHiker] = useState(EMPTY_HIKER);
 //   <HikerPanel idPrefix="staff-book" value={hiker} onChange={setHiker} errors={errors} onBlurField={…} />
+import {
+  CircleCheck,
+  Mail,
+  NotebookPen,
+  PhoneCall,
+  Search,
+  Smartphone,
+  UserPlus,
+  UserRound,
+  UserRoundCheck,
+  Zap,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import PhoneInput from 'react-phone-number-input';
@@ -23,9 +35,9 @@ const MIN_QUERY = 2;
 const DEBOUNCE_MS = 300;
 const DEFAULT_PHONE_COUNTRY = 'IT';
 const MODES = [
-  { mode: 'existing', label: 'Existing hiker' },
-  { mode: 'new', label: 'New hiker' },
-  { mode: 'quick', label: 'Quick entry' },
+  { mode: 'existing', label: 'Existing hiker', icon: UserRoundCheck },
+  { mode: 'new', label: 'New hiker', icon: UserPlus },
+  { mode: 'quick', label: 'Quick entry', icon: Zap },
 ];
 
 /** Hikers matching `query` (after a pause in typing): short | loading | done with { hikers, error }. */
@@ -60,6 +72,7 @@ function PhoneField({ id, label, help, value, onChange, onBlur, error, required 
       id={id}
       as={PhoneInput}
       label={label}
+      icon={Smartphone}
       help={help}
       defaultCountry={DEFAULT_PHONE_COUNTRY}
       addInternationalOption={false}
@@ -81,6 +94,44 @@ function PhoneField({ id, label, help, value, onChange, onBlur, error, required 
   );
 }
 
+/**
+ * One search result: a radio in a bordered card (primary border when chosen). The label holds, in this order,
+ * the name (bold) with the "temporary hiker" badge, then "email · phone" on a muted line, so the radio's
+ * accessible name starts with the name. The icon is decorative.
+ */
+function HikerResult({ idPrefix, hiker, checked, onChoose }) {
+  const name = [hiker.firstName, hiker.lastName].filter(Boolean).join(' ');
+  const contact = [hiker.email, hiker.phone].filter(Boolean).join(' · ');
+  return (
+    <div className={`border rounded-3 px-3 py-2 mb-2${checked ? ' border-primary' : ''}`}>
+      <Form.Check
+        type="radio"
+        id={`${idPrefix}-hiker-${hiker.id}`}
+        name={`${idPrefix}-hiker`}
+        className="mb-0"
+        label={
+          <span className="d-flex align-items-start gap-2">
+            <UserRound aria-hidden="true" size={18} className="flex-shrink-0 mt-1" />
+            <span className="text-break">
+              <span className="d-block">
+                <strong>{name}</strong>
+                {hiker.temporary && (
+                  <span className="badge rounded-pill bg-secondary-subtle text-body fw-normal ms-2">
+                    temporary hiker
+                  </span>
+                )}
+              </span>
+              {contact && <span className="d-block small text-body-secondary">{contact}</span>}
+            </span>
+          </span>
+        }
+        checked={checked}
+        onChange={onChoose}
+      />
+    </div>
+  );
+}
+
 function SearchMode({ idPrefix, ids, value, onChange, errors, onBlurField }) {
   const [query, setQuery] = useState('');
   const search = useHikerSearch(query);
@@ -92,6 +143,7 @@ function SearchMode({ idPrefix, ids, value, onChange, errors, onBlurField }) {
       <FormField
         id={ids.hikerId}
         label="Search"
+        icon={Search}
         help="Name, email or phone, at least 2 characters."
         type="search"
         autoComplete="off"
@@ -109,22 +161,22 @@ function SearchMode({ idPrefix, ids, value, onChange, errors, onBlurField }) {
         <fieldset className="mb-3">
           <legend className="visually-hidden">Search results</legend>
           {search.hikers.map((hiker) => (
-            <Form.Check
+            <HikerResult
               key={hiker.id}
-              type="radio"
-              id={`${idPrefix}-hiker-${hiker.id}`}
-              name={`${idPrefix}-hiker`}
-              label={hikerSummaryText(hiker)}
+              idPrefix={idPrefix}
+              hiker={hiker}
               checked={value.hikerId === hiker.id}
-              onChange={() => onChange({ ...value, hikerId: hiker.id, chosen: hiker })}
-              className="mb-2"
+              onChoose={() => onChange({ ...value, hikerId: hiker.id, chosen: hiker })}
             />
           ))}
         </fieldset>
       )}
       {value.chosen && (
-        <p className="mb-3">
-          Booking for: <strong>{hikerSummaryText(value.chosen)}</strong>
+        <p className="d-flex align-items-start gap-2 mb-3 p-2 rounded-3 border border-success-subtle bg-success-subtle">
+          <CircleCheck aria-hidden="true" size={18} className="flex-shrink-0 mt-1 text-success" />
+          <span className="text-break">
+            Booking for: <strong>{hikerSummaryText(value.chosen)}</strong>
+          </span>
         </p>
       )}
     </>
@@ -142,19 +194,20 @@ function NewHikerMode({ ids, value, onChange, errors, onBlurField }) {
         A hiker profile is created; the system generates a password, shown once after the booking, for you to give
         to the hiker.
       </p>
-      <FormField id={ids.firstName} label="First name" autoComplete="off" value={v.firstName}
+      <FormField id={ids.firstName} label="First name" icon={UserRound} autoComplete="off" value={v.firstName}
         onChange={set('firstName')} onBlur={blur('firstName')} required error={errors.firstName} />
-      <FormField id={ids.lastName} label="Last name" autoComplete="off" value={v.lastName}
+      <FormField id={ids.lastName} label="Last name" icon={UserRound} autoComplete="off" value={v.lastName}
         onChange={set('lastName')} onBlur={blur('lastName')} required error={errors.lastName} />
-      <FormField id={ids.email} label="Email" type="email" autoComplete="off" value={v.email}
+      <FormField id={ids.email} label="Email" icon={Mail} type="email" autoComplete="off" value={v.email}
         onChange={set('email')} onBlur={blur('email')} required error={errors.email} />
       <PhoneField id={ids.phone} label="Mobile number" help="Choose the country, then type the number."
         value={v.phone} onChange={set('phone')} onBlur={blur('phone')} required error={errors.phone} />
-      <FormField id={ids.notes} label="Notes (optional)" as="textarea" rows={2} characterLimit={MAX_LENGTH.notes}
-        value={v.notes} onChange={set('notes')} onBlur={blur('notes')} error={errors.notes} />
-      <FormField id={ids.emergencyContact} label="Emergency contact (optional)" help="Name and phone number"
-        characterLimit={MAX_LENGTH.emergencyContact} value={v.emergencyContact} onChange={set('emergencyContact')}
-        onBlur={blur('emergencyContact')} error={errors.emergencyContact} />
+      <FormField id={ids.notes} label="Notes (optional)" icon={NotebookPen} as="textarea" rows={2}
+        characterLimit={MAX_LENGTH.notes} value={v.notes} onChange={set('notes')} onBlur={blur('notes')}
+        error={errors.notes} />
+      <FormField id={ids.emergencyContact} label="Emergency contact (optional)" icon={PhoneCall}
+        help="Name and phone number" characterLimit={MAX_LENGTH.emergencyContact} value={v.emergencyContact}
+        onChange={set('emergencyContact')} onBlur={blur('emergencyContact')} error={errors.emergencyContact} />
     </>
   );
 }
@@ -170,9 +223,9 @@ function QuickEntryMode({ ids, value, onChange, errors, onBlurField }) {
   return (
     <>
       <p className="small">For a quick booking: a temporary hiker, with no email, who cannot log in.</p>
-      <FormField id={ids.firstName} label="First name" autoComplete="off" value={v.firstName}
+      <FormField id={ids.firstName} label="First name" icon={UserRound} autoComplete="off" value={v.firstName}
         onChange={set('firstName')} onBlur={blur('firstName')} required error={errors.firstName} />
-      <FormField id={ids.lastName} label="Last name (optional)" autoComplete="off" value={v.lastName}
+      <FormField id={ids.lastName} label="Last name (optional)" icon={UserRound} autoComplete="off" value={v.lastName}
         onChange={set('lastName')} onBlur={blur('lastName')} error={errors.lastName} />
       <PhoneField id={ids.phone} label="Mobile number (optional)" value={v.phone} onChange={set('phone')}
         onBlur={blur('phone')} error={errors.phone} />
@@ -196,14 +249,20 @@ export default function HikerPanel({ idPrefix, value, onChange, errors = {}, onB
       <legend className="h5">Hiker</legend>
       <fieldset className="mb-3">
         <legend className="form-label mb-1">Who is the booking for?</legend>
-        {MODES.map(({ mode, label }) => (
+        {MODES.map(({ mode, label, icon: Icon }) => (
           <Form.Check
             key={mode}
             inline
             type="radio"
             id={`${idPrefix}-mode-${mode}`}
             name={`${idPrefix}-mode`}
-            label={label}
+            label={
+              // Decorative icon in the label (aria-hidden): the radio's accessible name stays the text.
+              <span className="d-inline-flex align-items-center gap-2">
+                <Icon aria-hidden="true" size={18} />
+                {label}
+              </span>
+            }
             checked={value.mode === mode}
             onChange={() => onChange({ ...value, mode })}
           />

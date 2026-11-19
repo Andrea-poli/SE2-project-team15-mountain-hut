@@ -1,6 +1,7 @@
 // Register a hiker (U8). After success (already logged in), or when already logged in,
 // the page sends the user to nextFor(user, ?next=).
 import { useRef, useState } from 'react';
+import { LockKeyhole, Mail, NotebookPen, PhoneCall, Smartphone, UserPlus, UserRound } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
@@ -164,6 +165,7 @@ export default function RegisterPage() {
               <FormField
                 id={FIELD_IDS.firstName}
                 label="First name"
+                icon={UserRound}
                 autoComplete="given-name"
                 value={values.firstName}
                 onChange={change('firstName')}
@@ -174,6 +176,7 @@ export default function RegisterPage() {
               <FormField
                 id={FIELD_IDS.lastName}
                 label="Last name"
+                icon={UserRound}
                 autoComplete="family-name"
                 value={values.lastName}
                 onChange={change('lastName')}
@@ -184,6 +187,7 @@ export default function RegisterPage() {
               <FormField
                 id={FIELD_IDS.email}
                 label="Email"
+                icon={Mail}
                 type="email"
                 autoComplete="email"
                 value={values.email}
@@ -195,6 +199,7 @@ export default function RegisterPage() {
               <PasswordField
                 id={FIELD_IDS.password}
                 label="Password"
+                icon={LockKeyhole}
                 toggleLabel="Show password"
                 autoComplete="new-password"
                 help={`At least ${MIN_PASSWORD_LENGTH} characters`}
@@ -207,6 +212,7 @@ export default function RegisterPage() {
               <PasswordField
                 id={FIELD_IDS.confirmPassword}
                 label="Confirm password"
+                icon={LockKeyhole}
                 toggleLabel="Show confirmed password"
                 autoComplete="new-password"
                 value={values.confirmPassword}
@@ -224,6 +230,7 @@ export default function RegisterPage() {
                 id={FIELD_IDS.phone}
                 as={PhoneInput}
                 label="Mobile number"
+                icon={Smartphone}
                 help="Choose the country, then type your mobile number."
                 defaultCountry={DEFAULT_PHONE_COUNTRY}
                 addInternationalOption={false}
@@ -250,6 +257,7 @@ export default function RegisterPage() {
               <FormField
                 id={FIELD_IDS.notes}
                 label="Notes (optional)"
+                icon={NotebookPen}
                 as="textarea"
                 rows={3}
                 help='e.g. "registered mountain guide"'
@@ -262,6 +270,7 @@ export default function RegisterPage() {
               <FormField
                 id={FIELD_IDS.emergencyContact}
                 label="Emergency contact (optional)"
+                icon={PhoneCall}
                 autoComplete="off"
                 help="Name and phone number"
                 characterLimit={MAX_LENGTH.emergencyContact}
@@ -274,10 +283,11 @@ export default function RegisterPage() {
                   an error above the button and move the button away before the click ends. */}
               <Button
                 type="submit"
-                className="w-100 mt-2"
+                className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
                 disabled={submitting}
                 onMouseDown={(e) => e.preventDefault()}
               >
+                <UserPlus aria-hidden="true" size={18} />
                 {submitting ? 'Creating account…' : 'Create account'}
               </Button>
             </Form>

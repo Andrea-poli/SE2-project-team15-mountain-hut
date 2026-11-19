@@ -4,10 +4,13 @@
 // Other props go to the control: `required` becomes the HTML attribute, so screen readers say
 // "required" (the form has noValidate, so the browser shows no bubbles).
 // characterLimit (optional): a character count under the help text (CharacterCount), also linked to the control.
+// icon (optional): a lucide-react icon before the label text, decorative (aria-hidden): the label's accessible
+// name stays the text (I2, issue #39).
 import Form from 'react-bootstrap/Form';
 import CharacterCount from './CharacterCount.jsx';
+import FieldLabel from './FieldLabel.jsx';
 
-export default function FormField({ id, label, help, error, characterLimit, ...controlProps }) {
+export default function FormField({ id, label, help, error, characterLimit, icon, ...controlProps }) {
   const helpId = help ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const countId = characterLimit ? `${id}-count` : undefined;
@@ -15,7 +18,7 @@ export default function FormField({ id, label, help, error, characterLimit, ...c
 
   return (
     <Form.Group controlId={id} className="mb-3">
-      <Form.Label>{label}</Form.Label>
+      <FieldLabel icon={icon}>{label}</FieldLabel>
       <Form.Control
         isInvalid={Boolean(error)}
         aria-invalid={error ? true : undefined}

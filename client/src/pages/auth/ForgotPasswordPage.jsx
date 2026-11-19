@@ -1,5 +1,6 @@
 // MH-07 – Forgot password: ask for a reset link by email (PO #36). The page says the same thing whether the
 // email has an account or not (the server answers 202 in both cases), so it never reveals who is registered.
+import { Mail, Send } from 'lucide-react';
 import { useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
@@ -62,6 +63,7 @@ export default function ForgotPasswordPage() {
             <FormField
               id={FIELD_IDS.email}
               label="Email"
+              icon={Mail}
               type="email"
               autoComplete="email"
               value={email}
@@ -72,10 +74,11 @@ export default function ForgotPasswordPage() {
             />
             <Button
               type="submit"
-              className="w-100 mt-2"
+              className="w-100 mt-2 d-inline-flex align-items-center justify-content-center gap-2"
               disabled={submitting}
               onMouseDown={(e) => e.preventDefault()} // as in Log in: no blur, so a hidden error cannot move the button
             >
+              <Send aria-hidden="true" size={18} />
               {submitting ? 'Sending…' : 'Send the link'}
             </Button>
           </Form>
