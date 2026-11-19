@@ -46,15 +46,14 @@ function validateStaffBooking(body) {
       requirements,
     };
   }
-  if (choice === 'newHiker' || choice === 'temporaryHiker') {
-    return {
-      choice,
-      hikerBody: body[choice],
-      slotId,
-      partySize,
-      requirements,
-    };
-  }
+  // newHiker or temporaryHiker
+  return {
+    choice,
+    hikerBody: body[choice],
+    slotId,
+    partySize,
+    requirements,
+  };
 }
 
 /**
