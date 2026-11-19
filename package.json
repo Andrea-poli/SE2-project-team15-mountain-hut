@@ -12,6 +12,8 @@
     "node": ">=22.9"
   },
   "scripts": {
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
     "dev": "concurrently --names server,client --prefix-colors blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
     "test": "npm run test --workspaces --if-present",
     "coverage": "npm run coverage --workspaces --if-present",

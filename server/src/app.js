@@ -5,6 +5,7 @@ import { config, isTestEnv } from './config.js';
 import { loadUser } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
+import { clientRouter } from './clientApp.js';
 import authRouter from './routes/auth.js';
 import availabilityRouter from './routes/availability.js';
 import bookingsRouter from './routes/bookings.js';
@@ -15,11 +16,18 @@ import staffHikersRouter from './routes/staffHikers.js';
 import testSupportRouter from './routes/testSupport.js';
 import { createSessionMiddleware } from './session.js';
 
-/** @param {{ sessionStore?: object }} options a test can pass its own session store, to close it */
-export function createApp({ sessionStore } = {}) {
+/**
+ * @param {{ sessionStore?: object, clientDist?: string | null }} options a test can pass its own session store,
+ *   to close it, and a client build folder (by default the one of config: client/dist in production, none otherwise)
+ */
+export function createApp({ sessionStore, clientDist = config.clientDist } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json());
+
+  // Health check (Docker HEALTHCHECK, monitoring): before the session middleware, so a probe every few
+  // seconds creates no session and touches no database. GET only; other methods fall through to the 404.
+  app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
   // U5: session cookie (httpOnly, sameSite=lax, store in sessions.db), then req.user for every request.
   app.use('/api', createSessionMiddleware(sessionStore));
@@ -38,6 +46,7 @@ export function createApp({ sessionStore } = {}) {
   }
 
   app.use('/api', notFound);
+  if (clientDist) app.use(clientRouter(clientDist)); // D1: the built client, production only
   app.use(errorHandler);
   return app;
 }

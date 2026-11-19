@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import express from 'express';
+import session from 'express-session';
 import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
@@ -13,6 +15,36 @@ import testSupportRouter from '../../src/routes/testSupport.js';
 
 describe('app skeleton', () => {
   const app = createApp();
+
+  it('answers GET /api/health with 200 { status: "ok" }, without login and without the session store', async () => {
+    // Docker HEALTHCHECK (D2) and monitoring probe it every few seconds: it must stay public and cheap.
+    // The app runs on a store that records its calls; a logged-in browser (real session cookie) probes it.
+    const calls = [];
+    const spyStore = new (class extends session.MemoryStore {
+      get(sid, cb) { calls.push('get'); super.get(sid, cb); }
+      set(sid, data, cb) { calls.push('set'); super.set(sid, data, cb); }
+      touch(sid, data, cb) { calls.push('touch'); super.touch(sid, data, cb); }
+    })();
+    const browser = request.agent(createApp({ sessionStore: spyStore }));
+    const registered = await browser.post('/api/auth/register').send({
+      firstName: 'Health', lastName: 'Probe', email: `health-${randomUUID()}@example.com`,
+      password: 'health-probe-pass', phone: '+393331234567',
+    });
+    expect(registered.status).toBe(201); // the agent now holds a valid session cookie
+    calls.length = 0;
+
+    const res = await browser.get('/api/health');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: 'ok' });
+    expect(res.headers['set-cookie']).toBeUndefined();
+    expect(calls).toEqual([]);
+  });
+
+  it('answers only GET on /api/health: another method is an unknown endpoint', async () => {
+    const res = await request(app).post('/api/health');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: expect.any(String) });
+  });
 
   it('answers unknown API endpoints with 404 and { error }', async () => {
     const res = await request(app).get('/api/nothing-here');

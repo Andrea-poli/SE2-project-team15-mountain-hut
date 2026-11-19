@@ -1,0 +1,30 @@
+# Mountain Hut – run the whole app with Docker (D2, sprint 2).
+#
+#   1. Put SESSION_SECRET (and the SMTP_* lines, for real emails) in a file .env next to this one:
+#      cp .env.example .env   and fill it in. The variables come from there, never from the image.
+#   2. docker compose up --build        →  http://localhost:3001
+#   3. Demo data is loaded on the first start; the data is kept in the volume mountain-hut-data.
+#      Start again from the demo data:  docker compose down -v && docker compose up
+services:
+  mountain-hut:
+    build: .
+    image: mountain-hut:local
+    ports:
+      - "${HOST_PORT:-3001}:3001"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env (see .env.example)}
+      # Required like SESSION_SECRET: in production the server refuses to start without it (config.js, MH-03).
+      # If that rule changes, change this line too.
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in .env, e.g. a free test mailbox from https://ethereal.email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    volumes:
+      - mountain-hut-data:/data
+    restart: unless-stopped
+
+volumes:
+  mountain-hut-data:
