@@ -21,7 +21,7 @@ function dateOfSlot(slotId) {
 /** Seats taken at a table of the slot by the bookings of mock mode, except `ignoreBookingId`'s. */
 function taken(slotId, tableId, ignoreBookingId) {
   return loadBookings()
-    .filter((b) => b.slot.id === slotId && b.id !== ignoreBookingId)
+    .filter((b) => b.slot.id === slotId && b.id !== ignoreBookingId && b.status === 'confirmed') // MH-08: cancelled = free
     .flatMap((b) => b.tables)
     .filter((t) => t.slotTableId === tableId)
     .reduce((sum, t) => sum + t.seats, 0);
