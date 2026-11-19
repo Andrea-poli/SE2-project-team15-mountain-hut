@@ -220,13 +220,21 @@ describe('CopyWeekDialog', () => {
     expect(slotsApi.copyWeek).toHaveBeenCalledTimes(1);
   });
 
-  it('Cancel and Escape close it without copying', async () => {
+  it('Cancel closes the dialog without copying', async () => {
     const { onHide } = renderDialog();
 
     await user.click(button('Cancel'));
+
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(slotsApi.copyWeek).not.toHaveBeenCalled();
+  });
+
+  it('Escape closes the dialog without copying', async () => {
+    const { onHide } = renderDialog();
+
     await user.keyboard('{Escape}');
 
-    expect(onHide).toHaveBeenCalledTimes(2);
+    expect(onHide).toHaveBeenCalledTimes(1);
     expect(slotsApi.copyWeek).not.toHaveBeenCalled();
   });
 });
