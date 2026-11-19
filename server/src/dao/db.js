@@ -13,8 +13,19 @@ const schemaUrl = new URL('./schema.sql', import.meta.url);
 // Schema changes after schema.sql (version 1): append one SQL step here; never edit schema.sql or an old step,
 // databases already in use would not get the change. Step i brings a database from version i + 1 to i + 2.
 // A new database gets schema.sql and then every step, so it ends with the same tables as an old one.
-// Example (MH-05): 'ALTER TABLE bookings ADD COLUMN requirements TEXT',
-const MIGRATIONS = [];
+const MIGRATIONS = [
+  // Version 2 (U2, for MH-05): the party requirements of a booking, in the order the hiker entered them (id).
+  // has_allergies is the checkbox (0 or 1); the service trims the description before saving it.
+  // No length limits here: they are pending PO (planning question 6) and are checked in the code,
+  // so a later answer never needs a rebuild of the table. CASCADE: they go with their booking.
+  `CREATE TABLE booking_requirements (
+     id            INTEGER PRIMARY KEY,
+     booking_id    INTEGER NOT NULL REFERENCES bookings (id) ON DELETE CASCADE,
+     has_allergies INTEGER NOT NULL CHECK (has_allergies IN (0, 1)),
+     description   TEXT NOT NULL CHECK (trim(description) <> '')
+   );
+   CREATE INDEX booking_requirements_by_booking ON booking_requirements (booking_id, id);`,
+];
 
 export const SCHEMA_VERSION = 1 + MIGRATIONS.length;
 
@@ -66,12 +77,9 @@ async function migrate(db) {
       );
     }
     if (version === SCHEMA_VERSION) return;
-    // Here version is 0 while MIGRATIONS is empty, so an old database and the loop body cannot be reached yet:
-    // remove this ignore with the first migration step and test it by opening a version-1 database.
-    /* v8 ignore start */
+    // Version 0 is a new, empty file: schema.sql first (version 1), then every step.
     if (version === 0) await db.exec(schema);
     for (const step of MIGRATIONS.slice(Math.max(version - 1, 0))) await db.exec(step);
-    /* v8 ignore stop */
     await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   });
 }

@@ -5,7 +5,7 @@
 // - 409 (seats taken meanwhile, or already booked this slot) and 400 (closed / less than 2 h):
 //   on the time field, so the hiker picks another time;
 // - 404 (slot removed) and network errors: one general message above the form.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Col from 'react-bootstrap/Col';
@@ -14,29 +14,52 @@ import Row from 'react-bootstrap/Row';
 import { generatePath, useNavigate, useSearchParams } from 'react-router';
 import { createBooking } from '../../api/bookings.js';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
+import PartyRequirements from '../../components/PartyRequirements.jsx';
 import SlotPicker from '../../components/SlotPicker.jsx';
 import { useFormErrors } from '../../hooks/useFormErrors.js';
 import { routes } from '../../routes.js';
-import { slotPickerFieldIds, slotPickerValueFromParams, validateSlotPicker } from '../../utils/slotPicker.js';
+import {
+  slotPickerFieldIds,
+  slotPickerValueFromParams,
+  slotPickerValueToParams,
+  validateSlotPicker,
+} from '../../utils/slotPicker.js';
+import { areRequirementsValid } from '../../utils/validation.js';
 
 const ID_PREFIX = 'book';
 const FIELD_IDS = slotPickerFieldIds(ID_PREFIX);
 
 export default function BookPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [value, setValue] = useState(() => slotPickerValueFromParams(params));
+  const [requirements, setRequirements] = useState([]);
+  const [requirementSubmitAttempt, setRequirementSubmitAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const requirementsRef = useRef(null);
   const { errors, setErrors, generalError, generalRef, checkOnSubmit, recheck, focusField, showGeneralError } =
     useFormErrors(validateSlotPicker, FIELD_IDS);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (submitting || !checkOnSubmit(value)) return;
+    if (submitting) return;
+    const slotPickerValid = checkOnSubmit(value);
+    const requirementsValid = areRequirementsValid(requirements);
+    setRequirementSubmitAttempt((attempt) => attempt + 1);
+    if (!slotPickerValid || !requirementsValid) {
+      if (slotPickerValid && !requirementsValid) requirementsRef.current?.focusFirstEmptyDescription();
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const booking = await createBooking({ slotId: value.slotId, partySize: Number(value.partySize) });
+      const booking = await createBooking({
+        slotId: value.slotId,
+        partySize: Number(value.partySize),
+        ...(requirements.length > 0 && {
+          requirements: requirements.map(({ hasAllergies, description }) => ({ hasAllergies, description })),
+        }),
+      });
       // replace: Back from the confirmation does not reopen the filled form (no double booking).
       navigate(generatePath(routes.bookingConfirmed, { id: booking.id }), { replace: true });
     } catch (err) {
@@ -64,9 +87,18 @@ export default function BookPage() {
               <SlotPicker
                 idPrefix={ID_PREFIX}
                 value={value}
-                onChange={setValue}
+                onChange={(next) => {
+                  setValue(next);
+                  setParams(slotPickerValueToParams(next), { replace: true });
+                }}
                 errors={errors}
                 onBlurField={(name) => recheck(name, value)}
+              />
+              <PartyRequirements
+                ref={requirementsRef}
+                value={requirements}
+                onChange={setRequirements}
+                submitAttempt={requirementSubmitAttempt}
               />
               <Button type="submit" className="w-100 mt-2" disabled={submitting}>
                 {submitting ? 'Booking…' : 'Confirm booking'}

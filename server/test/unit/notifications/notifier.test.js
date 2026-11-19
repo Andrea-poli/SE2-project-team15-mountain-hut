@@ -2,7 +2,7 @@
 // It sends the confirmation email to the hiker and never throws: a failed email must not undo the booking.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { capturedEmails, clearCapturedEmails, setTransport } from '../../../src/notifications/mailer.js';
-import { bookingConfirmed } from '../../../src/notifications/notifier.js';
+import { bookingChanged, bookingConfirmed } from '../../../src/notifications/notifier.js';
 
 const hiker = { id: 3, firstName: 'Hannah', lastName: 'Hiker', email: 'hannah@example.com' };
 const booking = {
@@ -46,5 +46,35 @@ describe('notifier.bookingConfirmed', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(bookingConfirmed({ id: 8 }, hiker)).resolves.toBe(false);
     expect(capturedEmails()).toEqual([]);
+  });
+});
+
+// MH-06 BT1 – notifier.bookingChanged(): the same contract for the email after a change (PO issue #41).
+describe('notifier.bookingChanged', () => {
+  beforeEach(() => clearCapturedEmails());
+  afterEach(() => {
+    setTransport(null);
+    vi.restoreAllMocks();
+  });
+
+  it('sends one email to the hiker with the new details and returns true', async () => {
+    await expect(bookingChanged({ ...booking, partySize: 3 }, hiker)).resolves.toBe(true);
+    const emails = capturedEmails();
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({ to: 'hannah@example.com', subject: 'Your booking at the mountain hut has been changed' });
+    expect(emails[0].text).toContain('Booking reference: MH-000007');
+    expect(emails[0].text).toContain('Party size: 3 people');
+  });
+
+  it('sends nothing to a hiker without an email and returns false', async () => {
+    await expect(bookingChanged(booking, { ...hiker, email: null })).resolves.toBe(false);
+    expect(capturedEmails()).toEqual([]);
+  });
+
+  it('does not throw when the email fails: it logs the error and returns false', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setTransport({ sendMail: vi.fn().mockRejectedValue(new Error('SMTP down')) });
+    await expect(bookingChanged(booking, hiker)).resolves.toBe(false);
+    expect(logged).toHaveBeenCalledWith('Change email for booking 7 not sent:', expect.any(Error));
   });
 });

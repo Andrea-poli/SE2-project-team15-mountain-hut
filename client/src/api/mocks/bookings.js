@@ -1,36 +1,22 @@
 // Mock of the bookings endpoints (VITE_USE_MOCKS=true): same answers and errors as the contract,
 // no server needed. Only loaded through a dynamic import in api/bookings.js.
-// Slots come from the publicSlots mock, so the two always agree.
+// Slots come from the publicSlots mock, so the two always agree; the bookings are in bookingStore.js
+// (shared with the availability mock).
 // TODO: remove when MH-01 BE2 (POST/GET /api/bookings) is on dev, together with all mocks if the team drops mock mode.
 import { ApiError } from '../client.js';
+import { areRequirementsValid } from '../../utils/validation.js';
+import { checkAvailability } from './availability.js';
+import { loadBookings, saveBookings, TABLES } from './bookingStore.js';
 import { listPublicSlots } from './publicSlots.js';
 
 const DELAY_MS = 300;
 const wait = () => new Promise((resolve) => setTimeout(resolve, DELAY_MS));
 
-// Every mock slot has these tables (like the seed of U10): 4 + 4 + 6 = 14 seats.
-const TABLES = [
-  { id: 1, name: 'T1', seats: 4 },
-  { id: 2, name: 'T2', seats: 4 },
-  { id: 3, name: 'T3', seats: 6 },
-];
-const STORAGE_KEY = 'mh-mock-bookings';
+const CHANGE_WINDOW_MS = 48 * 60 * 60 * 1000; // changes close 48 h before the slot starts (MH-06, PO issue #43)
 
-// Kept in sessionStorage, so the confirmation page still finds the booking after a reload.
-function load() {
-  try {
-    return JSON.parse(sessionStorage.getItem(STORAGE_KEY)) ?? [];
-  } catch {
-    return [];
-  }
-}
-function save(list) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // private mode: the bookings last until reload
-  }
-}
+/** True when the hiker already has a confirmed booking for the slot, except `exceptId` (like the server). */
+const hasConfirmedBooking = (bookings, hikerId, slotId, exceptId) =>
+  bookings.some((b) => b.id !== exceptId && b.hikerId === hikerId && b.slot.id === slotId && b.status === 'confirmed');
 
 /** Logged-in mock user (api/mocks/auth.js keeps it in sessionStorage). */
 function currentUser() {
@@ -67,7 +53,7 @@ function allocate(free, partySize) {
   return left === 0 ? result : null;
 }
 
-export async function createBooking({ slotId, partySize }) {
+export async function createBooking({ slotId, partySize, requirements = [] }) {
   await wait();
   const user = currentUser();
   if (!user) throw new ApiError(401, 'You need to log in');
@@ -75,6 +61,13 @@ export async function createBooking({ slotId, partySize }) {
   if (!Number.isInteger(slotId) || slotId < 1 || !Number.isInteger(partySize) || partySize < 1) {
     throw new ApiError(400, 'slotId and partySize must be positive integers');
   }
+  if (!areRequirementsValid(requirements)) {
+    throw new ApiError(400, 'Each requirement needs hasAllergies (true or false) and a description');
+  }
+  const savedRequirements = requirements.map(({ hasAllergies, description }) => ({
+    hasAllergies,
+    description: description.trim(),
+  }));
 
   const date = dateOfSlot(slotId);
   let slots;
@@ -89,8 +82,8 @@ export async function createBooking({ slotId, partySize }) {
     throw new ApiError(400, 'Bookings are accepted up to 2 hours before the slot starts');
   }
 
-  const bookings = load();
-  if (bookings.some((b) => b.slot.id === slotId && b.hikerId === user.id)) {
+  const bookings = loadBookings();
+  if (hasConfirmedBooking(bookings, user.id, slotId)) {
     throw new ApiError(409, 'You already have a booking for this slot');
   }
   const taken = (tableId) =>
@@ -105,15 +98,16 @@ export async function createBooking({ slotId, partySize }) {
   if (!split) throw new ApiError(409, 'Not enough seats available for this party');
 
   const booking = {
-    id: bookings.length + 1,
+    id: bookings.reduce((max, b) => Math.max(max, b.id), 0) + 1,
     hikerId: user.id,
     slot: { id: slot.id, date, startTime: slot.startTime, endTime: slot.endTime, label: slot.label },
     partySize,
     tables: split.map(({ table, seats }) => ({ slotTableId: table.id, tableName: table.name, seats })),
+    requirements: savedRequirements,
     status: 'confirmed',
     createdAt: new Date().toISOString(),
   };
-  save([...bookings, booking]);
+  saveBookings([...bookings, booking]);
   const { hikerId: _hikerId, ...publicBooking } = booking;
   return publicBooking;
 }
@@ -123,9 +117,105 @@ export async function getBooking(id) {
   const user = currentUser();
   if (!user) throw new ApiError(401, 'You need to log in');
   if (!/^[1-9]\d*$/.test(String(id))) throw new ApiError(400, 'id must be a positive integer');
-  const found = load().find((b) => b.id === Number(id) && b.hikerId === user.id);
+  const found = loadBookings().find((b) => b.id === Number(id) && b.hikerId === user.id);
   // Someone else's booking is "not found" too: its existence is not revealed (contract).
   if (!found) throw new ApiError(404, 'Booking not found');
   const { hikerId: _hikerId, ...publicBooking } = found;
+  return publicBooking;
+}
+
+/** Start of a slot ({date, startTime}) in local time, as a timestamp. */
+function slotStart({ date, startTime }) {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hours, minutes] = startTime.split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes).getTime();
+}
+
+/** At least 48 h before `slot` starts, exactly 48 h included (PO, issue #43). */
+const inChangeWindow = (slot, now) => slotStart(slot) - now >= CHANGE_WINDOW_MS;
+
+// GET /api/bookings: upcoming bookings first (soonest first), then past ones (most recent first);
+// a slot is past once its start is at or before now (contract, slot time rules).
+export async function listMyBookings() {
+  await wait();
+  const user = currentUser();
+  if (!user) throw new ApiError(401, 'You need to log in');
+  if (user.role !== 'hiker') throw new ApiError(403, 'Only hikers have bookings');
+  const now = Date.now();
+  const mine = loadBookings().filter((b) => b.hikerId === user.id);
+  const isUpcoming = (b) => slotStart(b.slot) > now;
+  const byStart = (a, b) => slotStart(a.slot) - slotStart(b.slot) || a.id - b.id;
+  const upcoming = mine.filter(isUpcoming).sort(byStart);
+  const past = mine.filter((b) => !isUpcoming(b)).sort((a, b) => byStart(b, a));
+  return [...upcoming, ...past].map(({ hikerId: _hikerId, ...booking }) => ({
+    ...booking,
+    changeable: booking.status === 'confirmed' && inChangeWindow(booking.slot, now),
+  }));
+}
+
+// PATCH /api/bookings/:id: same checks and messages as the contract. The change is a new booking in the
+// (new) slot: this booking's own seats are free, the tables are assigned again, and on any error nothing changes.
+export async function changeBooking(id, change = {}) {
+  await wait();
+  const user = currentUser();
+  if (!user) throw new ApiError(401, 'You need to log in');
+  if (!/^[1-9]\d*$/.test(String(id))) throw new ApiError(400, 'id must be a positive integer');
+  const bookings = loadBookings();
+  const booking = bookings.find((b) => b.id === Number(id) && b.hikerId === user.id);
+  if (!booking) throw new ApiError(404, 'Booking not found'); // also someone else's, and staff
+
+  const { slotId, partySize, requirements } = change;
+  if (slotId === undefined && partySize === undefined && requirements === undefined) {
+    throw new ApiError(400, 'Nothing to change');
+  }
+  if (slotId !== undefined && (!Number.isInteger(slotId) || slotId < 1)) {
+    throw new ApiError(400, 'slotId must be a positive integer');
+  }
+  if (partySize !== undefined && (!Number.isInteger(partySize) || partySize < 1)) {
+    throw new ApiError(400, 'partySize must be a positive integer');
+  }
+  if (requirements !== undefined && !areRequirementsValid(requirements)) {
+    throw new ApiError(400, 'Each requirement needs hasAllergies (true or false) and a description');
+  }
+  if (booking.status === 'cancelled') throw new ApiError(400, 'A cancelled booking cannot be changed');
+  const now = Date.now();
+  if (!inChangeWindow(booking.slot, now)) {
+    throw new ApiError(400, 'Bookings can be changed up to 48 hours before the slot starts');
+  }
+
+  let slot = booking.slot;
+  if (slotId !== undefined && slotId !== booking.slot.id) {
+    const date = dateOfSlot(slotId);
+    let found;
+    try {
+      found = (await listPublicSlots(date)).find((s) => s.id === slotId);
+    } catch {
+      // not a mock date: unknown slot
+    }
+    if (!found) throw new ApiError(404, 'Slot not found');
+    slot = { id: found.id, date, startTime: found.startTime, endTime: found.endTime, label: found.label };
+    if (!inChangeWindow(slot, now)) throw new ApiError(400, 'The new slot must start at least 48 hours from now');
+    if (hasConfirmedBooking(bookings, user.id, slotId, booking.id)) {
+      throw new ApiError(409, 'You already have a booking for this slot');
+    }
+  }
+
+  const newPartySize = partySize ?? booking.partySize;
+  const seats = await checkAvailability(slot.id, newPartySize, { ignoreBookingId: booking.id });
+  if (!seats.available) throw new ApiError(409, 'Not enough seats available for this party');
+
+  const changed = {
+    ...booking,
+    slot,
+    partySize: newPartySize,
+    tables: seats.split,
+    requirements:
+      requirements === undefined
+        ? booking.requirements
+        : requirements.map(({ hasAllergies, description }) => ({ hasAllergies, description: description.trim() })),
+  };
+  // Read again: the availability check waited, and the list may have changed meanwhile.
+  saveBookings(loadBookings().map((b) => (b.id === changed.id ? changed : b)));
+  const { hikerId: _hikerId, ...publicBooking } = changed;
   return publicBooking;
 }

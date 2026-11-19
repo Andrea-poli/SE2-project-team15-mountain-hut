@@ -47,6 +47,11 @@ Demo cases, ready to show:
 | Full (listed, cannot be chosen) | the dinner in 3 days |
 | Past days, greyed out with "Past" (their bookings are only in the data: no page lists bookings yet) | 3, 2 and 1 days ago in the staff week view |
 | Booking closing within 2 hours | today's lunch: set `FAKE_NOW=<today>T10:30` in `.env` and restart, it shows "booking closed" |
+| Party requirements with allergies, without allergies | the lunch in 3 days: Luca Verdi (the PO example), Anna Bianchi (1 vegetarian) |
+| A temporary hiker booked by staff (no email, cannot log in) | the lunch in 3 days: Giorgio Montano |
+| A cancelled booking, then booked again | the lunch in 3 days: Anna Bianchi |
+| Change allowed / not allowed (48 h before the meal) | `hiker@example.com`: the dinner in 3 days / tomorrow's dinner |
+| Copy a week (MH-09) | this week onto the week after next (it has slots and no bookings: its schedule is replaced); onto a week with bookings still to come it is refused, e.g. next week when the data is loaded Fri–Sun |
 
 | Role | Email | Password |
 |---|---|---|
