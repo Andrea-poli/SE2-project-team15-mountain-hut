@@ -2,11 +2,12 @@
 import { BOOKING_STATUS } from './bookingDao.js';
 
 // Every function returns slots with their tables, in the same shape:
-//   { id, date, startTime, endTime, label, status, tables: [{ id, name, seats }] }
+//   { id, date, startTime, endTime, label, status, menu, tables: [{ id, name, seats }] }
+// menu is the text written by the staff (MH-10), or null when the slot has none.
 // Slots are ordered by date and start time, tables in the order they were entered (id).
 // Rules such as "open slots only", the 2 h deadline, `past` or the overlap check belong to the services.
 
-const SLOT_COLUMNS = 's.id, s.date, s.start_time, s.end_time, s.label, s.status';
+const SLOT_COLUMNS = 's.id, s.date, s.start_time, s.end_time, s.label, s.status, s.menu';
 
 function slotFromRow(row, tables) {
   return {
@@ -16,6 +17,7 @@ function slotFromRow(row, tables) {
     endTime: row.end_time,
     label: row.label,
     status: row.status,
+    menu: row.menu,
     tables,
   };
 }
@@ -101,4 +103,44 @@ export async function idsWithConfirmedBookings(db, slotIds) {
 export async function remove(db, id) {
   await db.run('DELETE FROM bookings WHERE slot_id = ? AND status <> ?', [id, BOOKING_STATUS.CONFIRMED]);
   await db.run('DELETE FROM slots WHERE id = ?', [id]);
+}
+
+/**
+ * Replaces the menu of a slot (MH-10); null clears it. The text is saved as given: trimming, the empty-text
+ * rule and the length limit belong to the service (an empty text is refused by the schema).
+ * @param {string | null} menu
+ * @returns {Promise<object | null>} the slot like findById, or null when there is no slot with this id
+ */
+export async function setMenu(db, id, menu) {
+  const { changes } = await db.run('UPDATE slots SET menu = ? WHERE id = ?', [menu, id]);
+  return changes > 0 ? findById(db, id) : null;
+}
+
+/**
+ * Menus already written, to reuse (MH-10, GET /api/slots/menus): each different text once, with the most
+ * recent slot that has it (date, start time, then id), the most recent first, at most `limit`.
+ * `q` keeps only the texts that contain it, ignoring case (lower() of SQLite: A-Z only, not accented letters);
+ * an empty `q` keeps them all.
+ * @returns {Promise<{ menu: string, slotId: number, date: string, startTime: string, label: string }[]>}
+ */
+export async function findPreviousMenus(db, { q = '', limit = 20 } = {}) {
+  const rows = await db.all(
+    `SELECT menu, id, date, start_time, label FROM (
+       SELECT s.menu, s.id, s.date, s.start_time, s.label,
+              ROW_NUMBER() OVER (PARTITION BY s.menu ORDER BY s.date DESC, s.start_time DESC, s.id DESC) AS n
+       FROM slots s
+       WHERE s.menu IS NOT NULL AND instr(lower(s.menu), lower(?)) > 0
+     )
+     WHERE n = 1
+     ORDER BY date DESC, start_time DESC, id DESC
+     LIMIT ?`,
+    [q, limit],
+  );
+  return rows.map((row) => ({
+    menu: row.menu,
+    slotId: row.id,
+    date: row.date,
+    startTime: row.start_time,
+    label: row.label,
+  }));
 }

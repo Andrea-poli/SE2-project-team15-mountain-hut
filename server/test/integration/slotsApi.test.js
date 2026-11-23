@@ -105,6 +105,7 @@ describe('POST /api/slots', () => {
       label: 'Dinner - 1st turn',
       status: 'open',
       past: false,
+      menu: null,
       tables: [
         { id: expect.any(Number), name: 'T1', seats: 4 },
         { id: expect.any(Number), name: 'T2', seats: 4 },
@@ -285,6 +286,7 @@ describe('GET /api/slots', () => {
       label: 'Lunch',
       status: 'open',
       past: false,
+      menu: null,
       tables: [
         { id: expect.any(Number), name: 'T1', seats: 4 },
         { id: expect.any(Number), name: 'T2', seats: 6 },

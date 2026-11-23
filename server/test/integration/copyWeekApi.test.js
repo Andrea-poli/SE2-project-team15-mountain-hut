@@ -103,6 +103,7 @@ describe('POST /api/slots/copy-week – 201', () => {
         label: 'Lunch',
         status: 'open',
         past: false,
+        menu: null,
         tables: [
           { id: expect.any(Number), name: 'T1', seats: 4 },
           { id: expect.any(Number), name: 'T2', seats: 6 },
