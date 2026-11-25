@@ -97,10 +97,10 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
     }
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     if (saving || !checkOnSubmit({ menu, hadMenu })) return;
-    save(menu.trim());
+    await save(menu.trim());
   }
 
   return (
