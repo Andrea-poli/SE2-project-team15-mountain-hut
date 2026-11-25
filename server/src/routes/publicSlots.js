@@ -4,18 +4,12 @@ import { Router } from 'express';
 import { now } from '../clock.js';
 import * as bookingDao from '../dao/bookingDao.js';
 import { getDb } from '../dao/db.js';
+import { isValidDate } from '../dateRange.js';
 import * as slotDao from '../dao/slotDao.js';
 import { BadRequest } from '../errors.js';
 import { bookingClosed, freeSeats } from '../services/availability.js';
 
 const router = Router();
-
-/** 'YYYY-MM-DD' that exists on the calendar (2026-02-30 does not). */
-function isValidDate(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
 
 /** tooLate (started or less than 2 h before the start) wins over full: the slot cannot be booked anyway. */
 async function bookingState(db, slot, at) {
