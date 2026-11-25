@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mountain Hut API
-  version: 0.2.1
+  version: 0.3.0
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -21,10 +21,13 @@ info:
       `sessionCookie` security.
     * **Dates and times** - dates are valid calendar dates in `YYYY-MM-DD`
       format, and times are `HH:MM` (24 h), both in hut local time (`TZ`,
-      default Europe/Rome); `createdAt` is ISO 8601 UTC. Dates that do not
-      exist on the calendar are invalid and date-taking endpoints return `400`.
+      default Europe/Rome); `createdAt` and `completedAt` are ISO 8601 UTC.
+      Dates that do not exist on the calendar are invalid and date-taking
+      endpoints return `400`.
       A client may display 12-hour times locally, but it must convert back to
-      `HH:MM` before calling the API.
+      `HH:MM` before calling the API. A date and time together (hikes) is
+      `YYYY-MM-DDTHH:MM` in hut local time, without seconds or time zone (the
+      value of an HTML `datetime-local` field).
     * **Slot time rules** - a new slot must start strictly after the current
       hut-local time. A slot is `past` once its start time is at or before the
       current hut-local time.
@@ -70,6 +73,38 @@ info:
       can recover it by email (PO issue #36, MH-07 clarification).
     * **Health** - `GET /api/health` answers when the server is up, for the
       Docker health check and monitoring (no login, no database work).
+    * **Menus (MH-10, MH-11)** - a slot has at most one menu (`null` = no
+      menu). A menu is free text with a little formatting (PO issue #39 and
+      the MH-10 clarification: free text, bold, italic, item lists and
+      sub-items, previous menus can be reused and changed). The marks are a
+      small Markdown subset: `**bold**`, `*italic*`, a line starting with
+      `- ` is a list item, a line starting with `  - ` (two spaces before) is
+      a sub-item of the item above; any other line is text, and an empty line
+      starts a new paragraph. Nothing else is interpreted: the server stores
+      the text as written (only trimmed) and the client renders it **without
+      HTML**, so `<b>` or `<script>` in a menu is shown as plain text. At most
+      2000 characters (team choice).
+    * **Hikes (MH-20, MH-21, MH-22)** - a hiker registers a planned hike
+      before departure (MH-20): destination, route, optional passage points
+      (the hike information of the MH-21 notes), departure and expected
+      return. The server gives each hike a `state` from the clock: `planned`
+      before the departure, `inProgress` from the departure until the hiker
+      confirms the safe arrival (MH-22), then `completed`. An **active** hike
+      (MH-21) is one `inProgress`, also after its expected return: alerts for
+      overdue hikers are MH-24, a later story. Party members are MH-23, a
+      later story too.
+
+    Version 0.3.0 (Sprint 3, U1) adds the endpoints of MH-10, MH-11, MH-20,
+    MH-21 and MH-22. Settled: menus are free text with bold, italic, lists and
+    sub-items, and previous menus can be reused (PO issue #39); the meals are
+    public, because MH-11 is for any "user" (context.md: any person accessing
+    the public web pages). Still **pending PO** (planning section 7), with the
+    choice written here for now: one menu per slot (Q1); previous menus from
+    any slot, not only the same meal (Q2); no limit on how far ahead meals are
+    shown, apart from the 31-day range (Q3); hikes do not need a booking and a
+    hiker may register more than one (Q4); active = departed and not
+    completed, staff see the hiker's contact details (Q5); only the hiker
+    confirms the safe arrival (Q6).
 
     Version 0.2.0 (Sprint 2, U1) adds the endpoints of MH-05 → MH-09, updated
     with the PO answers of 9-12 Nov (issues #35-#45 and the story
@@ -94,13 +129,17 @@ tags:
   - name: public
     description: >
       Anonymous endpoints (no login), grouped under /api/public so they never
-      pass through the staff router. SlotPicker data.
+      pass through the staff router. SlotPicker data and the meals page.
   - name: bookings
     description: Table bookings
   - name: slots
-    description: Slot and table management, staff only
+    description: Slot, table and menu management, staff only
+  - name: hikes
+    description: Hikes registered by hikers (MH-20, MH-22), hikers only
   - name: staff
-    description: Bookings entered by staff for hikers (MH-07), staff only
+    description: >
+      Staff-only work on hikers: bookings entered for hikers (MH-07), active
+      hikes (MH-21)
   - name: test-utils
     description: Only available when NODE_ENV is test/e2e
 
@@ -540,6 +579,72 @@ paths:
               example:
                 error: 'Slot not found'
 
+  /api/public/meals:
+    get:
+      tags: [public]
+      summary: Meal times and menus of a date range (MH-11)
+      description: >
+        Public: MH-11 is for any user, logged in or not (context.md: a "user"
+        is any person accessing the public web pages). Every open slot of the
+        range with its times, label and menu (`null` when the staff has not
+        written one yet), so the meals page can show the days, the meal times
+        and the menus, with a link to book. No seat counts: the booking page
+        shows whether a slot can still be booked. Past slots of the range are
+        included with `past: true`. Same range rules as `GET /api/slots`.
+      operationId: listMeals
+      security: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First valid calendar date, YYYY-MM-DD (inclusive)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-11-30'
+        - name: to
+          in: query
+          required: true
+          description: Last valid calendar date, YYYY-MM-DD (inclusive)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-12-06'
+      responses:
+        '200':
+          description: Open slots ordered by date, then start time (possibly none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Meal'
+              example:
+                - id: 31
+                  date: '2026-11-30'
+                  startTime: '12:00'
+                  endTime: '14:00'
+                  label: Lunch
+                  past: false
+                  menu: "**Polenta** with mushrooms\n- Soup of the day\n- Apple strudel"
+                - id: 32
+                  date: '2026-11-30'
+                  startTime: '19:00'
+                  endTime: '20:30'
+                  label: Dinner - 1st turn
+                  past: false
+                  menu: null
+        '400':
+          description: >
+            Missing or invalid calendar dates, `to` before `from`, or a range
+            longer than 31 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'The range cannot exceed 31 days'
+
   /api/bookings:
     get:
       tags: [bookings]
@@ -872,7 +977,8 @@ paths:
         "copy tables from" menu of the new-slot form. Slots can have different
         table layouts; staff may reuse a previous slot's table configuration,
         and there is no single fixed table set. No slot detail endpoint exists for
-        the moment: the tables are read from this list.
+        the moment: the tables are read from this list. Each slot has its
+        `menu` (MH-10), `null` when it has none.
       operationId: listSlots
       security:
         - sessionCookie: []
@@ -1025,7 +1131,9 @@ paths:
         started (`reason: overlap`: started slots are never replaced, so the
         copy is skipped to avoid overlapping slots). Everything happens in one
         transaction.
-        Adjusting a copied slot afterwards is MH-19, a later story.
+        Menus (MH-10) are not copied: the copied slots have no menu, which the
+        staff can write or reuse afterwards. Adjusting a copied slot afterwards
+        is MH-19, a later story.
       operationId: copyWeek
       security:
         - sessionCookie: []
@@ -1083,6 +1191,140 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: 'The target week has bookings: its schedule cannot be replaced'
+
+  /api/slots/menus:
+    get:
+      tags: [slots]
+      summary: Previous menus to reuse (MH-10)
+      description: >
+        Employee and warden only; hikers receive 403. The menus already written
+        for any slot (PO issue #39: "the option to reuse (and change) previous
+        menus"), so the menu editor can start from one and change it before
+        saving. Each different text appears once, with the most recent slot that
+        has it (by date and start time, future slots included); the list starts
+        from the most recent one and has at most 20 menus. `q`, if given, keeps
+        only the menus whose text contains it, ignoring upper and lower case.
+        Pending PO (planning question 2): any slot for now, not only the same
+        meal; the label of the slot helps to choose.
+      operationId: listPreviousMenus
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: >
+            Text to look for in the menus (trimmed; empty or missing = no
+            filter). At most 100 characters.
+          schema:
+            type: string
+            maxLength: 100
+            example: polenta
+      responses:
+        '200':
+          description: Previous menus, most recent first (possibly none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreviousMenu'
+        '400':
+          description: '`q` longer than 100 characters'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'q cannot exceed 100 characters'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+
+  /api/slots/{id}/menu:
+    put:
+      tags: [slots]
+      summary: Set, change or clear the menu of a slot (MH-10)
+      description: >
+        Employee and warden only; hikers receive 403. `menu` replaces the menu
+        of the slot; `null`, an empty text or only spaces clear it. The text is
+        stored trimmed and as written: the formatting marks of the "Menus"
+        convention are interpreted only by the client, without HTML. Any slot
+        can get a menu, also one that has started (e.g. to fix a typo) or that
+        is closed. The answer is the slot as in `GET /api/slots`.
+        Pending PO (planning question 1): one menu per slot.
+      operationId: setSlotMenu
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuUpdate'
+            examples:
+              set:
+                value:
+                  menu: "**Polenta** with mushrooms\n- Soup of the day\n  - vegetarian on request\n- *Apple strudel*"
+              clear:
+                value:
+                  menu: null
+      responses:
+        '200':
+          description: 'The slot with its new menu (`menu: null` when cleared)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Slot'
+        '400':
+          description: >
+            `id` in the path is not a positive integer, `menu` is missing or is
+            neither a text nor `null`, or the text is longer than 2000 characters
+            (after trimming).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                tooLong:
+                  value: { error: 'The menu cannot exceed 2000 characters' }
+                notText:
+                  value: { error: 'menu must be a text or null' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+        '404':
+          description: Unknown slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Slot not found'
 
   /api/staff/hikers:
     get:
@@ -1264,6 +1506,213 @@ paths:
                 email:
                   value: { error: 'Email already in use' }
 
+  /api/hikes:
+    get:
+      tags: [hikes]
+      summary: The logged-in hiker's own hikes (MH-20)
+      description: >
+        Hikers only; staff receive 403 (they have no hikes of their own). Every
+        hike of the logged-in hiker, each with its `state`, for the "My hikes"
+        page: first the planned and in-progress ones (soonest departure first),
+        then the completed ones (most recent departure first).
+      operationId: listMyHikes
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The hiker's hikes (possibly none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Hike'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not a hiker (employee or warden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Only hikers have hikes'
+
+    post:
+      tags: [hikes]
+      summary: Register a planned hike before departure (MH-20)
+      description: >
+        Hikers only; staff receive 403. The texts are trimmed; an empty
+        `passagePoints` is saved as `null`. The departure must not be in the
+        past (it can be the current minute) and the expected return must be
+        after the departure. The new hike is `planned`, or already
+        `inProgress` when it leaves this very minute. Pending PO (planning
+        question 4): no booking at the hut is needed, and a hiker may have more
+        than one hike registered.
+      operationId: registerHike
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewHike'
+            example:
+              destination: Rifugio Quintino Sella
+              route: via the Chiaretto lake
+              passagePoints: Lago Chiaretto, Colle del Viso
+              departureAt: '2026-11-28T08:30'
+              expectedReturnAt: '2026-11-28T16:00'
+      responses:
+        '201':
+          description: Hike registered (the hike is in the body; no Location header)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hike'
+        '400':
+          description: >
+            Invalid body: missing or empty destination or route, a text longer
+            than its limit, a departure or expected return that is not a valid
+            `YYYY-MM-DDTHH:MM` date and time, a departure in the past, or an
+            expected return not after the departure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                noDestination:
+                  value: { error: 'destination is required' }
+                badDate:
+                  value: { error: 'departureAt must be YYYY-MM-DDTHH:MM' }
+                pastDeparture:
+                  value: { error: 'The departure cannot be in the past' }
+                returnBeforeDeparture:
+                  value: { error: 'expectedReturnAt must be after departureAt' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not a hiker (employee or warden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Only hikers can register a hike'
+
+  /api/hikes/{id}/complete:
+    post:
+      tags: [hikes]
+      summary: Confirm the safe arrival at the end of a hike (MH-22)
+      description: >
+        Hikers only, and only the hiker who registered the hike: another
+        hiker's hike answers 404, as an unknown one. The hike must have started
+        (`inProgress`); it becomes `completed`, `completedAt` is set and it
+        leaves the active hikes of the staff (MH-21). A hike not started yet or
+        already completed answers 409: the request is valid, the state of the
+        hike does not allow it. Pending PO (planning question 6): staff cannot
+        complete a hike for the hiker for now.
+      operationId: completeHike
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The hike, now completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hike'
+        '400':
+          description: '`id` in the path is not a positive integer'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'id must be a positive integer'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not a hiker (employee or warden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Only hikers can complete a hike'
+        '404':
+          description: Unknown hike, or a hike of another hiker
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Hike not found'
+        '409':
+          description: The hike has not started yet, or is already completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notStarted:
+                  value: { error: 'The hike has not started yet' }
+                alreadyCompleted:
+                  value: { error: 'The hike is already completed' }
+
+  /api/staff/hikes/active:
+    get:
+      tags: [staff]
+      summary: Hikers currently on a hike (MH-21)
+      description: >
+        Employee and warden only; hikers receive 403. Every hike that has
+        started and is not completed (`inProgress`), also after its expected
+        return, with the hiker's contact details (the hiker information of
+        context.md), so the staff can monitor the expected returns. Ordered by
+        expected return (earliest first), then departure, then id. Pending PO
+        (planning question 5): hikes not started yet are not included.
+      operationId: listActiveHikes
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active hikes (possibly none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActiveHike'
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Logged in but not staff (hiker)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'Staff only'
+
   /api/test/emails:
     get:
       tags: [test-utils]
@@ -1338,9 +1787,10 @@ components:
       in: path
       required: true
       description: >
-        Numeric resource id: a slot under /api/public/slots, a booking under
-        /api/bookings (also /api/bookings/{id}/cancel). The path segment before
-        it names the resource type.
+        Numeric resource id: a slot under /api/public/slots and
+        /api/slots/{id}/menu, a booking under /api/bookings (also
+        /api/bookings/{id}/cancel), a hike under /api/hikes/{id}/complete. The
+        path segment before it names the resource type.
       schema:
         type: integer
         minimum: 1
@@ -1668,8 +2118,14 @@ components:
 
     Slot:
       type: object
-      description: A slot with its tables, as shown in the weekly view card.
-      required: [id, date, startTime, endTime, label, status, past, tables]
+      description: >
+        A slot with its tables, as shown in the weekly view card. `menu` (MH-10)
+        is always in the answer, `null` when the slot has none, in every
+        endpoint that returns a Slot: the weekly view (`GET /api/slots`), a new
+        slot (`POST /api/slots`), copy week (`created`, `replaced`) and
+        `PUT /api/slots/{id}/menu`. The public slot list of the booking page
+        (`GET /api/public/slots`) is not a Slot and has no menu.
+      required: [id, date, startTime, endTime, label, status, past, menu, tables]
       properties:
         id:
           type: integer
@@ -1700,10 +2156,90 @@ components:
           type: boolean
           description: True when the slot start is at or before the current hut-local time.
           example: false
+        menu:
+          type: string
+          nullable: true
+          description: >
+            The menu of the slot (MH-10), as written by the staff with the
+            formatting marks of the "Menus" convention; `null` when the slot has
+            no menu (a new or copied slot has none).
+          example: "**Polenta** with mushrooms\n- Soup of the day"
         tables:
           type: array
           items:
             $ref: '#/components/schemas/SlotTable'
+
+    MenuUpdate:
+      type: object
+      description: >
+        The new menu of a slot (MH-10). `null`, an empty text or only spaces
+        clear it.
+      required: [menu]
+      properties:
+        menu:
+          type: string
+          nullable: true
+          description: At most 2000 characters after trimming.
+          example: "**Polenta** with mushrooms\n- Soup of the day\n- *Apple strudel*"
+
+    PreviousMenu:
+      type: object
+      description: >
+        A menu already written, to reuse (MH-10), with the most recent slot that
+        has it, so the staff can tell the menus apart.
+      required: [menu, slotId, date, startTime, label]
+      properties:
+        menu:
+          type: string
+          example: "**Polenta** with mushrooms\n- Soup of the day"
+        slotId:
+          type: integer
+          example: 28
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-23'
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '12:00'
+        label:
+          type: string
+          example: Lunch
+
+    Meal:
+      type: object
+      description: An open slot as shown on the public meals page (MH-11).
+      required: [id, date, startTime, endTime, label, past, menu]
+      properties:
+        id:
+          type: integer
+          description: The slot id, e.g. to open the booking page on this slot.
+          example: 31
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-30'
+        startTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '12:00'
+        endTime:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '14:00'
+        label:
+          type: string
+          example: Lunch
+        past:
+          type: boolean
+          description: True when the slot start is at or before the current hut-local time.
+          example: false
+        menu:
+          type: string
+          nullable: true
+          description: The menu (see `Slot.menu`); `null` when there is none yet.
+          example: "**Polenta** with mushrooms\n- Soup of the day"
 
     NewSlotTable:
       type: object
@@ -1981,6 +2517,128 @@ components:
                 account, returned this once for the staff member to give to the
                 hiker (PO issue #36). Stored only hashed, never returned again.
               example: k7Qp2xWm9aTz
+
+    NewHike:
+      type: object
+      description: >
+        A planned hike (MH-20) with the hike information of the MH-21 notes.
+        Texts are trimmed; the limits apply after trimming (team choice).
+      required: [destination, route, departureAt, expectedReturnAt]
+      properties:
+        destination:
+          type: string
+          minLength: 1
+          description: Name of the destination, at most 100 characters.
+          example: Rifugio Quintino Sella
+        route:
+          type: string
+          minLength: 1
+          description: Text description of the route, at most 500 characters.
+          example: via the Chiaretto lake
+        passagePoints:
+          type: string
+          nullable: true
+          description: >
+            Optional intermediate passage points, as free text (e.g. names
+            separated by commas), at most 500 characters; empty = `null`.
+          example: Lago Chiaretto, Colle del Viso
+        departureAt:
+          type: string
+          description: >
+            Hut-local date and time of the departure, not in the past (the
+            current minute is accepted).
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$'
+          example: '2026-11-28T08:30'
+        expectedReturnAt:
+          type: string
+          description: Hut-local date and time of the expected return, after the departure.
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$'
+          example: '2026-11-28T16:00'
+
+    Hike:
+      type: object
+      description: >
+        A registered hike as the hiker sees it (MH-20, MH-22). `state` is
+        computed by the server from the clock: `planned` before `departureAt`,
+        `inProgress` from `departureAt` (included) until the safe arrival,
+        `completed` once the hiker has confirmed it.
+      required: [id, destination, route, passagePoints, departureAt, expectedReturnAt, state, completedAt, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 12
+        destination:
+          type: string
+          example: Rifugio Quintino Sella
+        route:
+          type: string
+          example: via the Chiaretto lake
+        passagePoints:
+          type: string
+          nullable: true
+          example: Lago Chiaretto, Colle del Viso
+        departureAt:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$'
+          example: '2026-11-28T08:30'
+        expectedReturnAt:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$'
+          example: '2026-11-28T16:00'
+        state:
+          type: string
+          enum: [planned, inProgress, completed]
+          example: planned
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the hiker confirmed the safe arrival (MH-22); `null` until then.
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-11-27T18:05:12Z'
+
+    ActiveHike:
+      description: >
+        A hike in the staff's active list (MH-21): the Hike (always
+        `inProgress`) plus who is on it, with the hiker information of
+        context.md, so the staff can call the hiker or the emergency contact.
+      allOf:
+        - $ref: '#/components/schemas/Hike'
+        - type: object
+          required: [hiker]
+          properties:
+            hiker:
+              type: object
+              required: [id, firstName, lastName, email, phone, notes, emergencyContact]
+              properties:
+                id:
+                  type: integer
+                  example: 3
+                firstName:
+                  type: string
+                  example: Luca
+                lastName:
+                  type: string
+                  example: Verdi
+                email:
+                  type: string
+                  format: email
+                  example: luca.verdi@example.com
+                phone:
+                  type: string
+                  nullable: true
+                  example: '+39 333 1234567'
+                notes:
+                  type: string
+                  nullable: true
+                  example: registered mountain guide
+                emergencyContact:
+                  type: string
+                  nullable: true
+                  example: 'Maria Verdi, +39 347 7654321'
 
     CapturedEmail:
       type: object
