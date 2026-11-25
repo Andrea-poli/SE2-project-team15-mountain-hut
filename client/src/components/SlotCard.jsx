@@ -1,11 +1,14 @@
 // Slot details card and table layout; used in the weekly schedule view.
+// MH-10 FE1: the open card has "View menu" when the slot has a menu (onViewMenu(slot): the page shows it in a
+// dialog), otherwise "No menu yet" and "Add menu" (onEditMenu(slot): the page opens the menu editor).
 import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import ListGroup from 'react-bootstrap/ListGroup';
 import { formatTimeRange } from '../utils/format.js';
 
-// A compact slot summary that expands its tables within the same day section.
-export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
+// A compact slot summary that expands its tables and menu within the same day section.
+export default function SlotCard({ slot, isPastDay, expanded, onSelect, onViewMenu, onEditMenu }) {
   const seatCount = slot.tables.reduce((total, table) => total + table.seats, 0);
   const tableCount = slot.tables.length;
   const detailsId = `slot-details-${slot.id}`;
@@ -47,6 +50,25 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
               </ListGroup.Item>
             ))}
           </ListGroup>
+          <div className="border-top mt-2 pt-2 px-2">
+            {slot.menu ? (
+              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onViewMenu(slot)}>
+                View menu
+              </Button>
+            ) : (
+              <>
+                <p className="small text-body-secondary mb-2">No menu yet</p>
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  className="w-100 text-nowrap"
+                  onClick={() => onEditMenu(slot)}
+                >
+                  Add menu
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </Card>

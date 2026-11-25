@@ -1,0 +1,21 @@
+/* MH-10 FE1 – a rendered menu (MenuText): compact paragraphs and lists, long words wrap. */
+.mh-menu {
+  overflow-wrap: break-word;
+}
+
+.mh-menu > :last-child {
+  margin-bottom: 0;
+}
+
+.mh-menu p,
+.mh-menu ul {
+  margin-bottom: 0.5rem;
+}
+
+.mh-menu ul {
+  padding-left: 1.25rem;
+}
+
+.mh-menu ul ul {
+  margin-bottom: 0;
+}
