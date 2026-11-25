@@ -37,6 +37,30 @@ const MIGRATIONS = [
      used_at    TEXT
    );
    CREATE INDEX password_resets_by_user ON password_resets (user_id);`,
+  // Version 5 (U2, for MH-10, MH-20, MH-21, MH-22).
+  // slots.menu: one menu per slot, the formatted text as the staff wrote it; NULL = no menu (never an empty
+  // text, so "no menu" has one meaning; a menu has several lines, so tabs and line breaks count as empty too,
+  // trim() alone removes only spaces). Previous menus are reused from here. Length limit in the code.
+  // hikes: departure_at and expected_return_at are hut-local 'YYYY-MM-DDTHH:MM' (contract), so they compare
+  // as text; strftime() normalises an impossible value (2026-02-30T08:00 → 2026-03-02T08:00) and accepts 24:30,
+  // as in the slots table. completed_at and created_at are ISO strings of now() (clock.js). No CASCADE on the
+  // hiker, as for bookings: who went on a hike is safety data and must not disappear with a user.
+  `ALTER TABLE slots ADD COLUMN menu TEXT CHECK (trim(menu, char(32, 9, 10, 13)) <> '');
+   CREATE TABLE hikes (
+     id                 INTEGER PRIMARY KEY,
+     hiker_id           INTEGER NOT NULL REFERENCES users (id),
+     destination        TEXT NOT NULL CHECK (trim(destination) <> ''),
+     route              TEXT NOT NULL CHECK (trim(route) <> ''),
+     passage_points     TEXT CHECK (trim(passage_points) <> ''),
+     departure_at       TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M', departure_at) IS departure_at
+                                             AND substr(departure_at, 12) < '24:00'),
+     expected_return_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M', expected_return_at) IS expected_return_at
+                                             AND substr(expected_return_at, 12) < '24:00'),
+     completed_at       TEXT,
+     created_at         TEXT NOT NULL,
+     CHECK (expected_return_at > departure_at)
+   );
+   CREATE INDEX hikes_by_hiker ON hikes (hiker_id);`,
 ];
 
 export const SCHEMA_VERSION = 1 + MIGRATIONS.length;

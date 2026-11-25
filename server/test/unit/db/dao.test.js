@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../../src/dao/db.js';
 import * as bookingDao from '../../../src/dao/bookingDao.js';
+import * as hikeDao from '../../../src/dao/hikeDao.js';
 import * as slotDao from '../../../src/dao/slotDao.js';
 import { withTransaction } from '../../../src/dao/transaction.js';
 import * as userDao from '../../../src/dao/userDao.js';
@@ -46,6 +47,7 @@ beforeEach(async () => {
     DELETE FROM booking_requirements;
     DELETE FROM booking_tables;
     DELETE FROM bookings;
+    DELETE FROM hikes;
     DELETE FROM slot_tables;
     DELETE FROM slots;
     DELETE FROM users;
@@ -140,6 +142,7 @@ describe('slot DAO', () => {
       endTime: '14:00',
       label: 'Lunch',
       status: 'open',
+      menu: null,
       tables: [
         { id: expect.any(Number), name: 'I01', seats: 4 },
         { id: expect.any(Number), name: 'E02', seats: 2 },
@@ -162,6 +165,7 @@ describe('slot DAO', () => {
         endTime: '14:00',
         label: 'Lunch',
         status: 'open',
+        menu: null,
         tables: [{ id: tableId, name: 'A', seats: 4 }],
       },
       {
@@ -171,6 +175,7 @@ describe('slot DAO', () => {
         endTime: '20:00',
         label: 'Dinner',
         status: 'open',
+        menu: null,
         tables: [],
       },
     ]);
@@ -411,5 +416,150 @@ describe('booking DAO – update', () => {
       status: 'confirmed',
       createdAt: '2026-11-01T10:00:00.000Z',
     });
+  });
+});
+
+// U2 (sprint 3) – the menu of a slot (MH-10).
+describe('slot DAO – menus', () => {
+  const POLENTA = '**Polenta** with mushrooms\n- Soup of the day';
+
+  async function slotWithMenu(date, startTime, menu, label = 'Lunch') {
+    const id = await insertSlot(db, { date, startTime, endTime: '23:00', label });
+    await db.run('UPDATE slots SET menu = ? WHERE id = ?', [menu, id]);
+    return id;
+  }
+
+  it('setMenu saves, changes and clears the menu and returns the slot; null for an unknown slot', async () => {
+    const slotId = await insertSlot(db);
+    await insertTable(db, slotId, 'A', 4);
+
+    const saved = await slotDao.setMenu(db, slotId, POLENTA);
+    expect(saved).toMatchObject({ id: slotId, menu: POLENTA, tables: [{ name: 'A', seats: 4 }] });
+    await expect(slotDao.findById(db, slotId)).resolves.toEqual(saved);
+    await expect(slotDao.setMenu(db, slotId, 'Risotto')).resolves.toMatchObject({ menu: 'Risotto' });
+    await expect(slotDao.setMenu(db, slotId, null)).resolves.toMatchObject({ id: slotId, menu: null });
+    await expect(slotDao.setMenu(db, -1, POLENTA)).resolves.toBeNull();
+  });
+
+  it('findPreviousMenus gives each text once with its most recent slot, the most recent first', async () => {
+    await slotWithMenu('2026-11-20', '12:00', POLENTA);
+    const latestPolenta = await slotWithMenu('2026-11-21', '12:00', POLENTA);
+    const soup = await slotWithMenu('2026-11-21', '19:00', 'Barley soup', 'Dinner');
+    const older = await slotWithMenu('2026-11-19', '12:00', 'Risotto');
+    await insertSlot(db, { date: '2026-11-22', label: 'No menu' });
+
+    await expect(slotDao.findPreviousMenus(db)).resolves.toEqual([
+      { menu: 'Barley soup', slotId: soup, date: '2026-11-21', startTime: '19:00', label: 'Dinner' },
+      { menu: POLENTA, slotId: latestPolenta, date: '2026-11-21', startTime: '12:00', label: 'Lunch' },
+      { menu: 'Risotto', slotId: older, date: '2026-11-19', startTime: '12:00', label: 'Lunch' },
+    ]);
+  });
+
+  it('findPreviousMenus keeps the texts containing q, ignoring case, and stops at the limit', async () => {
+    await slotWithMenu('2026-11-20', '12:00', POLENTA);
+    await slotWithMenu('2026-11-21', '12:00', 'Polenta e spezzatino');
+    await slotWithMenu('2026-11-22', '12:00', 'Risotto');
+
+    const menus = async (options) => (await slotDao.findPreviousMenus(db, options)).map(({ menu }) => menu);
+    await expect(menus({ q: 'POLENTA' })).resolves.toEqual(['Polenta e spezzatino', POLENTA]);
+    await expect(menus({ q: 'soup of THE' })).resolves.toEqual([POLENTA]);
+    await expect(menus({ q: 'lasagne' })).resolves.toEqual([]);
+    await expect(menus({ q: '' })).resolves.toHaveLength(3);
+    await expect(menus({ limit: 2 })).resolves.toEqual(['Risotto', 'Polenta e spezzatino']);
+  });
+});
+
+// U2 (sprint 3) – hikes (MH-20, MH-21, MH-22).
+describe('hike DAO', () => {
+  const CREATED_AT = '2026-11-27T18:00:00.000Z';
+  const hike = (hikerId, departureAt, expectedReturnAt, more = {}) =>
+    hikeDao.create(db, {
+      hikerId,
+      destination: 'Rifugio Sella',
+      route: 'via the lake',
+      departureAt,
+      expectedReturnAt,
+      createdAt: CREATED_AT,
+      ...more,
+    });
+
+  it('create saves a hike and returns it, passage points optional; findById gives null when absent', async () => {
+    const hikerId = await insertUser(db, { email: 'hike-create@example.com' });
+
+    const created = await hike(hikerId, '2026-11-28T08:30', '2026-11-28T16:00', { passagePoints: 'Lago Chiaretto' });
+
+    expect(created).toEqual({
+      id: expect.any(Number),
+      hikerId,
+      destination: 'Rifugio Sella',
+      route: 'via the lake',
+      passagePoints: 'Lago Chiaretto',
+      departureAt: '2026-11-28T08:30',
+      expectedReturnAt: '2026-11-28T16:00',
+      completedAt: null,
+      createdAt: CREATED_AT,
+    });
+    await expect(hikeDao.findById(db, created.id)).resolves.toEqual(created);
+    await expect(hike(hikerId, '2026-11-29T08:30', '2026-11-29T16:00')).resolves.toMatchObject({ passagePoints: null });
+    await expect(hikeDao.findById(db, -1)).resolves.toBeNull();
+  });
+
+  it('findByHiker lists one hiker: not completed (soonest departure first), then completed (latest)', async () => {
+    const hikerId = await insertUser(db, { email: 'hike-mine@example.com' });
+    const otherId = await insertUser(db, { email: 'hike-other@example.com' });
+    const later = await hike(hikerId, '2026-12-05T08:00', '2026-12-05T16:00');
+    const sooner = await hike(hikerId, '2026-11-28T08:00', '2026-11-28T16:00');
+    const doneOld = await hike(hikerId, '2026-11-20T08:00', '2026-11-20T16:00');
+    const doneRecent = await hike(hikerId, '2026-11-25T08:00', '2026-11-25T16:00');
+    await hikeDao.complete(db, doneOld.id, '2026-11-20T15:00:00.000Z');
+    await hikeDao.complete(db, doneRecent.id, '2026-11-25T15:00:00.000Z');
+    await hike(otherId, '2026-11-28T09:00', '2026-11-28T17:00');
+
+    const ids = (await hikeDao.findByHiker(db, hikerId)).map(({ id }) => id);
+    expect(ids).toEqual([sooner.id, later.id, doneRecent.id, doneOld.id]);
+    await expect(hikeDao.findByHiker(db, -1)).resolves.toEqual([]);
+  });
+
+  it('findActive lists the started, not completed hikes with the hiker, earliest expected return first', async () => {
+    const hikerId = await insertUser(db, { email: 'hike-active@example.com', firstName: 'Luca' });
+    await db.run('UPDATE users SET phone = ?, notes = ?, emergency_contact = ? WHERE id = ?', [
+      '+39 333 1234567',
+      'Guide',
+      'Maria Verdi',
+      hikerId,
+    ]);
+    const now = '2026-11-28T10:00';
+    const onTheWay = await hike(hikerId, '2026-11-28T08:00', '2026-11-28T16:00');
+    const overdue = await hike(hikerId, '2026-11-27T08:00', '2026-11-27T16:00'); // still active after its return
+    const leavingNow = await hike(hikerId, now, '2026-11-28T18:00'); // the departure minute counts
+    await hike(hikerId, '2026-11-28T10:01', '2026-11-28T18:00'); // not started yet
+    const done = await hike(hikerId, '2026-11-28T07:00', '2026-11-28T09:00');
+    await hikeDao.complete(db, done.id, '2026-11-28T08:55:00.000Z');
+
+    const active = await hikeDao.findActive(db, now);
+
+    expect(active.map(({ id }) => id)).toEqual([overdue.id, onTheWay.id, leavingNow.id]);
+    expect(active[1]).toEqual({
+      ...onTheWay,
+      hiker: {
+        id: hikerId,
+        firstName: 'Luca',
+        lastName: 'Jornet',
+        email: 'hike-active@example.com',
+        phone: '+39 333 1234567',
+        notes: 'Guide',
+        emergencyContact: 'Maria Verdi',
+      },
+    });
+  });
+
+  it('complete sets completedAt only the first time; false for a completed or unknown hike', async () => {
+    const hikerId = await insertUser(db, { email: 'hike-complete@example.com' });
+    const { id } = await hike(hikerId, '2026-11-28T08:00', '2026-11-28T16:00');
+
+    await expect(hikeDao.complete(db, id, '2026-11-28T15:00:00.000Z')).resolves.toBe(true);
+    await expect(hikeDao.complete(db, id, '2026-11-28T17:00:00.000Z')).resolves.toBe(false);
+    await expect(hikeDao.complete(db, -1, '2026-11-28T17:00:00.000Z')).resolves.toBe(false);
+    await expect(hikeDao.findById(db, id)).resolves.toMatchObject({ completedAt: '2026-11-28T15:00:00.000Z' });
   });
 });

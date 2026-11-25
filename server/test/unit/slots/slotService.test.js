@@ -83,6 +83,7 @@ describe('createSlot', () => {
       endTime: '20:30',
       label: 'Dinner',
       status: 'open',
+      menu: null,
       tables: [
         { id: expect.any(Number), name: 'T1', seats: 4 },
         { id: expect.any(Number), name: 'T2', seats: 6 },

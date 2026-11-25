@@ -31,6 +31,7 @@ describe('database', () => {
       { name: 'booking_requirements' },
       { name: 'booking_tables' },
       { name: 'bookings' },
+      { name: 'hikes' },
       { name: 'password_resets' },
       { name: 'slot_tables' },
       { name: 'slots' },
@@ -206,14 +207,16 @@ describe('schema migrations', () => {
 
     upgraded = await openDatabase(versionOnePath);
 
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: SCHEMA_VERSION });
     const after = await rowsOfVersionOne((sql) => upgraded.all(sql));
     after.users = after.users.map(({ must_change_password: _mustChangePassword, ...user }) => user);
+    after.slots = after.slots.map(({ menu: _menu, ...slot }) => slot);
     expect(after).toEqual(before);
     await expect(upgraded.all('SELECT must_change_password FROM users')).resolves.toEqual([
       { must_change_password: 0 },
     ]);
+    await expect(upgraded.all('SELECT menu FROM slots')).resolves.toEqual([{ menu: null }]);
     expect(before.bookings).toHaveLength(2);
     await expect(upgraded.all('SELECT * FROM booking_requirements')).resolves.toEqual([]);
   });
@@ -224,6 +227,7 @@ describe('schema migrations', () => {
 
     const newSchema = await schemaOf((sql) => db.all(sql));
     expect(newSchema).toContainEqual(expect.objectContaining({ type: 'index', name: 'booking_requirements_by_booking' }));
+    expect(newSchema).toContainEqual(expect.objectContaining({ type: 'index', name: 'hikes_by_hiker' }));
     await expect(schemaOf((sql) => upgraded.all(sql))).resolves.toEqual(newSchema);
   });
 
@@ -254,6 +258,60 @@ describe('schema migrations', () => {
     await expect(rowsOfVersionOne((sql) => allOnFile(versionOnePath, sql))).resolves.toEqual(before);
     await expect(allOnFile(versionOnePath, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'booking_requirements%'"))
       .resolves.toEqual([]);
+  });
+
+  // U2 (sprint 3): a database left by sprint 2 is at version 4. Steps 2 to 4 as sprint 2 applied them (db.js
+  // MIGRATIONS), copied on purpose: a later change in db.js must not change the old file of this test.
+  const SPRINT_TWO_STEPS = `
+    CREATE TABLE booking_requirements (
+      id            INTEGER PRIMARY KEY,
+      booking_id    INTEGER NOT NULL REFERENCES bookings (id) ON DELETE CASCADE,
+      has_allergies INTEGER NOT NULL CHECK (has_allergies IN (0, 1)),
+      description   TEXT NOT NULL CHECK (trim(description) <> '')
+    );
+    CREATE INDEX booking_requirements_by_booking ON booking_requirements (booking_id, id);
+    ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0
+      CHECK (must_change_password IN (0, 1));
+    CREATE TABLE password_resets (
+      token_hash TEXT PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      used_at    TEXT
+    );
+    CREATE INDEX password_resets_by_user ON password_resets (user_id);`;
+  const sprintTwoData = `
+    UPDATE users SET must_change_password = 1 WHERE id = 1;
+    INSERT INTO booking_requirements (booking_id, has_allergies, description) VALUES (1, 1, '1 shellfish allergy');
+    INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ('hash-1', 1, '2026-11-20T10:00:00.000Z');`;
+  const tablesOfVersionFour = [...tablesOfVersionOne, 'booking_requirements', 'password_resets'];
+
+  it('upgrades a version-4 database (sprint 2) to version 5: same rows, slots without a menu, no hikes', async () => {
+    const schema = await readFile(new URL('../../../src/dao/schema.sql', import.meta.url), 'utf8');
+    // Same file as the version-1 tests, so the hooks above delete it.
+    const versionFour = `${schema} ${SPRINT_TWO_STEPS} PRAGMA user_version = 4; ${sprintOneData} ${sprintTwoData}`;
+    await execOnFile(versionOnePath, versionFour);
+    const rowsOfVersionFour = async (query) => {
+      const rows = {};
+      for (const table of tablesOfVersionFour) rows[table] = await query(`SELECT * FROM ${table} ORDER BY rowid`);
+      return rows;
+    };
+    const before = await rowsOfVersionFour((sql) => allOnFile(versionOnePath, sql));
+
+    upgraded = await openDatabase(versionOnePath);
+
+    await expect(upgraded.get('PRAGMA user_version')).resolves.toEqual({ user_version: 5 });
+    const after = await rowsOfVersionFour((sql) => upgraded.all(sql));
+    expect(after.slots.map(({ menu }) => menu)).toEqual([null]);
+    after.slots = after.slots.map(({ menu: _menu, ...slot }) => slot);
+    expect(after).toEqual(before);
+    expect([before.booking_requirements.length, before.password_resets.length]).toEqual([1, 1]);
+    await expect(upgraded.all('SELECT * FROM hikes')).resolves.toEqual([]);
+
+    // The new column and table work on the old rows: a menu for the old slot, a hike for the old hiker.
+    await upgraded.run("UPDATE slots SET menu = 'Polenta' WHERE id = 1");
+    await upgraded.run(`INSERT INTO hikes (hiker_id, destination, route, departure_at, expected_return_at, created_at)
+      VALUES (1, 'Rifugio Sella', 'via the lake', '2026-11-28T08:30', '2026-11-28T16:00', '2026-11-27T18:00:00.000Z')`);
+    await expect(upgraded.all('SELECT hiker_id FROM hikes')).resolves.toEqual([{ hiker_id: 1 }]);
   });
 });
 
@@ -383,6 +441,63 @@ describe('database schema constraints', () => {
 
     await db.run('DELETE FROM bookings WHERE id = ?', [bookingId]);
     await expect(db.get('SELECT COUNT(*) AS count FROM booking_requirements')).resolves.toEqual({ count: 0 });
+  });
+
+  it('keeps a slot menu as a text or null, never an empty text', async () => {
+    const { lastID: slotId } = await db.run(
+      'INSERT INTO slots (date, start_time, end_time, label) VALUES (?, ?, ?, ?)',
+      ['2026-11-02', '12:00', '13:00', 'Lunch'],
+    );
+    const setMenu = (menu) => db.run('UPDATE slots SET menu = ? WHERE id = ?', [menu, slotId]);
+
+    await expect(db.get('SELECT menu FROM slots WHERE id = ?', [slotId])).resolves.toEqual({ menu: null });
+    await setMenu('**Polenta**\n- Soup');
+    await expect(setMenu('')).rejects.toThrow(/CHECK constraint failed/);
+    await expect(setMenu(' \n\t\r\n ')).rejects.toThrow(/CHECK constraint failed/);
+    await setMenu(null);
+    await expect(db.get('SELECT menu FROM slots WHERE id = ?', [slotId])).resolves.toEqual({ menu: null });
+  });
+
+  it('checks hikes: real date-times, return after departure, no empty texts, an existing hiker kept', async () => {
+    const { lastID: hikerId } = await db.run('INSERT INTO users (first_name, role) VALUES (?, ?)', ['Kilian', 'hiker']);
+    const insertHike = (changes = {}) => {
+      const hike = {
+        hikerId,
+        destination: 'Rifugio Sella',
+        route: 'via the lake',
+        passagePoints: null,
+        departureAt: '2026-11-28T08:30',
+        expectedReturnAt: '2026-11-28T16:00',
+        ...changes,
+      };
+      return db.run(
+        `INSERT INTO hikes (hiker_id, destination, route, passage_points, departure_at, expected_return_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, '2026-11-27T18:00:00.000Z')`,
+        [hike.hikerId, hike.destination, hike.route, hike.passagePoints, hike.departureAt, hike.expectedReturnAt],
+      );
+    };
+
+    await insertHike();
+    await insertHike({ passagePoints: 'Lago', departureAt: '2026-11-28T23:59', expectedReturnAt: '2026-11-29T00:00' });
+    // Each wrong value would still come before (or after) the other one as text: only the format check refuses it.
+    const wrongDepartures = ['2026-02-30T08:30', '2026-11-28T08:60', '2026-11-28 08:30', '2026-11-28T08:30:00'];
+    for (const departureAt of [...wrongDepartures, '2026-11-28']) {
+      await expect(insertHike({ departureAt })).rejects.toThrow(/CHECK constraint failed/);
+    }
+    for (const expectedReturnAt of ['2026-11-28T24:30', '2026-11-31T10:00', '2026-11-28T16:00Z']) {
+      await expect(insertHike({ expectedReturnAt })).rejects.toThrow(/CHECK constraint failed/);
+    }
+    await expect(insertHike({ expectedReturnAt: '2026-11-28T08:30' })).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertHike({ expectedReturnAt: '2026-11-28T08:29' })).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertHike({ destination: '   ' })).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertHike({ route: '' })).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertHike({ passagePoints: '  ' })).rejects.toThrow(/CHECK constraint failed/);
+    await expect(insertHike({ destination: null })).rejects.toThrow(/NOT NULL constraint failed/);
+    await expect(insertHike({ hikerId: 999 })).rejects.toThrow(/FOREIGN KEY constraint failed/);
+
+    // Who went on a hike is safety data: a hiker with hikes cannot be deleted.
+    await expect(db.run('DELETE FROM users WHERE id = ?', [hikerId])).rejects.toThrow(/FOREIGN KEY constraint failed/);
+    await expect(db.get('SELECT COUNT(*) AS count FROM hikes')).resolves.toEqual({ count: 2 });
   });
 });
 
