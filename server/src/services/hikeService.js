@@ -1,4 +1,4 @@
-// Hikes registered by hikers (MH-20 BE1): validation, the hut-local clock, the state of a hike.
+// Hikes registered by hikers (MH-20 BE1 register, BE2 "My hikes"): validation, the hut-local clock, the state of a hike.
 // Messages and status codes follow openapi.yaml (POST /api/hikes). The SQL is in hikeDao.js.
 // departureAt and expectedReturnAt are hut-local 'YYYY-MM-DDTHH:MM', so they compare as text (like the DAO).
 import { now } from '../clock.js';
@@ -112,4 +112,15 @@ export async function registerHike(hiker, body) {
     createdAt: current.toISOString(),
   });
   return toHike(saved, nowLocal);
+}
+
+/**
+ * Every hike of `hiker` for "My hikes" (MH-20 BE2), each with its state at this minute: first the planned and
+ * in-progress ones (soonest departure first), then the completed ones (most recent departure first; order of the DAO).
+ * @param {{ id: number }} hiker the logged-in hiker
+ */
+export async function listMyHikes(hiker) {
+  const nowLocal = localDateTime(now());
+  const hikes = await hikeDao.findByHiker(await getDb(), hiker.id);
+  return hikes.map((hike) => toHike(hike, nowLocal));
 }
