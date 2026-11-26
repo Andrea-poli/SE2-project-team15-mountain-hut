@@ -18,6 +18,7 @@ const MESSAGES = {
   invalidMenu: 'menu must be a text or null',
   menuTooLong: 'The menu cannot exceed 2000 characters',
   slotNotFound: 'Slot not found',
+  previousMenuQueryTooLong: 'q must be a string and cannot exceed 100 characters',
 };
 
 /**
@@ -176,4 +177,16 @@ export async function setSlotMenu(slotId, menu) {
   const slot = await slotDao.setMenu(db, slotId, normalized);
   if (!slot) throw new NotFound(MESSAGES.slotNotFound);
   return slot;
+}
+
+/** Lists previous menus for reuse, with the optional trimmed text filter. */
+export async function listPreviousMenus(query) {
+  if (query !== undefined && typeof query !== 'string') {
+    throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
+  }
+  const trimmed = typeof query === 'string' ? query.trim() : '';
+  if (Array.from(trimmed).length > 100) {
+    throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
+  }
+  return slotDao.findPreviousMenus(await getDb(), { q: trimmed, limit: 20 });
 }

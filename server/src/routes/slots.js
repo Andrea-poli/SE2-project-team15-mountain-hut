@@ -4,7 +4,7 @@ import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
 import { requireRole } from '../middleware/auth.js';
 import { BadRequest } from '../errors.js';
-import { copyWeek, createSlot, hasStarted, setSlotMenu } from '../services/slotService.js';
+import { copyWeek, createSlot, hasStarted, listPreviousMenus, setSlotMenu } from '../services/slotService.js';
 
 const router = Router();
 
@@ -99,6 +99,12 @@ router.put('/:id/menu', requireRole(['employee'], 'Staff only'), async (req, res
 
   const slot = await setSlotMenu(Number(req.params.id), req.body?.menu);
   return res.json(slotResponse(slot));
+});
+
+// GET /api/slots/menus?q=... → 200 [PreviousMenu] | 400 | 401 | 403
+// Employee/warden only; menus are unique, latest slot first, at most 20.
+router.get('/menus', requireRole(['employee'], 'Staff only'), async (req, res) => {
+  return res.json(await listPreviousMenus(req.query.q));
 });
 
 export default router;
