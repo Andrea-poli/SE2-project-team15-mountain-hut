@@ -3,7 +3,7 @@ import { now } from '../clock.js';
 import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
 import { withTransaction } from '../dao/transaction.js';
-import { BadRequest, Conflict } from '../errors.js';
+import { BadRequest, Conflict, NotFound } from '../errors.js';
 
 const MESSAGES = {
   invalidSlot: 'Slot details are required',
@@ -15,6 +15,9 @@ const MESSAGES = {
   overlap: 'Overlaps an existing slot',
   sameWeek: 'Choose a different week to copy into',
   targetHasBookings: 'The target week has bookings: its schedule cannot be replaced',
+  invalidMenu: 'menu must be a text or null',
+  menuTooLong: 'The menu cannot exceed 2000 characters',
+  slotNotFound: 'Slot not found',
 };
 
 /**
@@ -152,4 +155,25 @@ export async function copyWeek(sourceWeek, targetWeek) {
     }
     return { created, replaced, skipped };
   });
+}
+
+// ---------------------------------------------------------------- MH-10: set or clear a slot menu
+
+/**
+ * Replaces or clears the menu of one slot. Menu length is checked after trimming;
+ * null and blank text are stored as null.
+ */
+export async function setSlotMenu(slotId, menu) {
+  if (menu !== null && typeof menu !== 'string') throw new BadRequest(MESSAGES.invalidMenu);
+
+  const trimmed = menu === null ? null : menu.trim();
+  const normalized = trimmed === '' ? null : trimmed;
+  if (normalized !== null && Array.from(normalized).length > 2000) {
+    throw new BadRequest(MESSAGES.menuTooLong);
+  }
+
+  const db = await getDb();
+  const slot = await slotDao.setMenu(db, slotId, normalized);
+  if (!slot) throw new NotFound(MESSAGES.slotNotFound);
+  return slot;
 }
