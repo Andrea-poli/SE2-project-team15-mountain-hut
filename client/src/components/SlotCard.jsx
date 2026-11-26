@@ -1,7 +1,8 @@
 // Slot details card and table layout; used in the weekly schedule view.
-// MH-10 FE1: the open card has "View menu" when the slot has a menu (onViewMenu(slot): the page shows it in a
-// dialog), otherwise "No menu yet" and "Add menu" (onEditMenu(slot): the page opens the menu editor).
-import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
+// MH-10 FE1: the closed card says whether the slot has a menu ("Menu set" / "No menu"), so a day can be checked at a
+// glance; the open card has "View menu" (onViewMenu(slot): the page shows it in a dialog) or "Add menu"
+// (onEditMenu(slot): the page opens the menu editor).
+import { ChevronDown, ChevronUp, Clock, Utensils, UtensilsCrossed } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import ListGroup from 'react-bootstrap/ListGroup';
@@ -33,6 +34,17 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect, onViewMe
             </span>
           )}
         </span>
+        {slot.menu ? (
+          <span className="mh-slot-card-line mh-slot-card-menu mh-slot-card-menu-set">
+            <Utensils aria-hidden="true" size={14} className="flex-shrink-0" />
+            Menu set
+          </span>
+        ) : (
+          <span className="mh-slot-card-line mh-slot-card-menu mh-slot-card-menu-none">
+            <UtensilsCrossed aria-hidden="true" size={14} className="flex-shrink-0" />
+            No menu
+          </span>
+        )}
         <span className="mh-slot-card-line">{tableCount} {tableCount === 1 ? 'table' : 'tables'}</span>
         <span className="mh-slot-card-line mh-slot-card-last-line">{seatCount} {seatCount === 1 ? 'seat' : 'seats'}</span>
         {expanded ? (
@@ -56,17 +68,9 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect, onViewMe
                 View menu
               </Button>
             ) : (
-              <>
-                <p className="small text-body-secondary mb-2">No menu yet</p>
-                <Button
-                  variant="outline-primary"
-                  size="sm"
-                  className="w-100 text-nowrap"
-                  onClick={() => onEditMenu(slot)}
-                >
-                  Add menu
-                </Button>
-              </>
+              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onEditMenu(slot)}>
+                Add menu
+              </Button>
             )}
           </div>
         </div>
