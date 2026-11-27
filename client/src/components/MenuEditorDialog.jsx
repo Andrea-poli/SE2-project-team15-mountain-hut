@@ -3,7 +3,9 @@
 // The menu is free text with a little formatting (utils/menuFormat.js): the toolbar adds the marks around the
 // selection (bold, italic) or at the start of the selected lines (list item, sub-item), the preview shows the
 // result with the same safe renderer as the meals page (MenuText). "Save menu" sends PUT /api/slots/{id}/menu,
-// "Remove menu" sends null. Any slot can get a menu, also one that has started or is closed (openapi).
+// "Remove menu" sends null. Only a slot that has not started can get, change or lose its menu (PO, MH-10 issue #59):
+// the page opens the editor only for those; if the slot starts while the editor is open, the server answers 409 and
+// its message is shown above the form.
 // MH-10 FE2 – "Reuse a previous menu" (PreviousMenus) copies an earlier menu into the editor, to change it before saving.
 // The page mounts the dialog only while it is open, so it starts from the saved menu each time. Only Cancel and
 // the close button close it (no backdrop click), so a long text is not lost by a click outside.

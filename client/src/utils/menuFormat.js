@@ -130,16 +130,20 @@ function toggleAtCaret(value, caret, mark) {
   const before = value.slice(0, caret);
   const after = value.slice(caret);
   const size = mark.length;
-  // Pressed again right after the button: the empty pair goes away (the mark before the caret is an opening one:
-  // at the start, after a space or after other marks; "*a*|*b*" is not an empty pair).
-  const beforeMark = before.slice(0, -size).at(-1);
-  const opening = beforeMark === undefined || beforeMark === '*' || /\s/.test(beforeMark);
-  if (before.endsWith(mark) && after.startsWith(mark) && opening) {
+  const line = before.slice(before.lastIndexOf('\n') + 1);
+  const open = openMarks(line);
+  // Pressed again right after the button: the empty pair goes away. The mark before the caret must be the one that
+  // opened it (without it, one mark less is open), also inside a word ("a**|**b"); "*a*|*b*" is not an empty pair.
+  if (
+    before.endsWith(mark) &&
+    after.startsWith(mark) &&
+    open.at(-1) === size &&
+    openMarks(line.slice(0, -size)).length < open.length
+  ) {
     return { value: before.slice(0, -size) + after.slice(size), start: caret - size, end: caret - size };
   }
   // The caret is just before the closing mark of the same type: only move after it.
-  const line = before.slice(before.lastIndexOf('\n') + 1);
-  if (openMarks(line).at(-1) === size && after.startsWith(mark)) {
+  if (open.at(-1) === size && after.startsWith(mark)) {
     return { value, start: caret + size, end: caret + size };
   }
   return { value: before + mark + mark + after, start: caret + size, end: caret + size };
