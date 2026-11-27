@@ -12,10 +12,11 @@ import { hashPassword } from '../../src/services/authService.js';
 
 export const PASSWORD = 'mountain-pass-123';
 
-/** Empties every table of bookings, slots and users (children first). */
+/** Empties every table of bookings, slots, hikes and users (children first: hikes keep their hiker, no cascade). */
 export async function clearDb() {
   const db = await getDb();
-  for (const table of ['booking_requirements', 'booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
+  const tables = ['booking_requirements', 'booking_tables', 'bookings', 'slot_tables', 'slots', 'hikes', 'users'];
+  for (const table of tables) {
     await db.run(`DELETE FROM ${table}`);
   }
 }
