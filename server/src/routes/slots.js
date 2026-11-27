@@ -90,7 +90,7 @@ router.post('/copy-week', requireRole(['employee'], 'Staff only'), async (req, r
   return res.status(201).json({ created: created.map(slotResponse), replaced: replaced.map(slotResponse), skipped });
 });
 
-// PUT /api/slots/:id/menu { menu } → 200 Slot | 400 | 401 | 403 | 404
+// PUT /api/slots/:id/menu { menu } → 200 Slot | 400 | 401 | 403 | 404 | 409
 // Employee/warden only; null or blank text clears the menu.
 router.put('/:id/menu', requireRole(['employee'], 'Staff only'), async (req, res) => {
   if (!/^[1-9]\d*$/.test(req.params.id) || !Number.isSafeInteger(Number(req.params.id))) {
