@@ -19,6 +19,7 @@ const MESSAGES = {
   menuTooLong: 'The menu cannot exceed 2000 characters',
   slotNotFound: 'Slot not found',
   previousMenuQueryTooLong: 'q cannot exceed 100 characters',
+  menuOfStartedSlot: 'The menu of a slot that has started cannot be changed',
 };
 
 /**
@@ -178,6 +179,10 @@ export async function setSlotMenu(slotId, menu) {
   }
 
   const db = await getDb();
+  const existing = await slotDao.findById(db, slotId);
+  if (!existing) throw new NotFound(MESSAGES.slotNotFound);
+  if (hasStarted(existing)) throw new Conflict(MESSAGES.menuOfStartedSlot);
+
   const slot = await slotDao.setMenu(db, slotId, normalized);
   if (!slot) throw new NotFound(MESSAGES.slotNotFound);
   return slot;
