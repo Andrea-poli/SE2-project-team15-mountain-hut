@@ -5,7 +5,8 @@
 //  "Searching…" and the empty message is not shown; an answer for a text already changed is ignored.
 //  The saved menu of the slot being edited is left out only while it equals the editor text (trimmed).
 //  "No menus have been written yet." / "No previous menus contain this text."; an error is shown in an alert;
-//  Enter in the search box does not submit the form; "Use the menu of …" calls onUse(menu, previous); disabled.
+//  Enter in the search box does not submit the form; "Use this menu" calls onUse(menu, previous), and its accessible name starts with that visible text, then the
+//  slot ("Use this menu: Lunch, Tue 3 Nov 12:00"); disabled.
 // The timing tests use fake timers and fireEvent (user-event waits on a real timeout, which fake timers never run).
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -193,7 +194,7 @@ describe('PreviousMenus', () => {
 
     expect(await screen.findByText('Barley soup')).toBeInTheDocument();
     expect(screen.queryByText(/This slot/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^Use the menu of/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Use this menu: / })).toHaveLength(1);
   });
 
   it('shows the saved menu of the slot being edited once the editor text is different', async () => {
@@ -201,15 +202,15 @@ describe('PreviousMenus', () => {
     renderList({ slotId: 1, editorText: 'Venison stew with polenta' });
 
     expect(await screen.findByText('Venison stew')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Use the menu of This slot, Thu 5 Nov 19:00' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^Use the menu of/ })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Use this menu: This slot, Thu 5 Nov 19:00' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Use this menu: / })).toHaveLength(2);
   });
 
   it('the same text on another slot is not left out', async () => {
     vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous({ slotId: 2, label: 'Lunch', menu: 'Venison stew' })]);
     renderList({ slotId: 1, editorText: 'Venison stew' });
 
-    expect(await screen.findByRole('button', { name: 'Use the menu of Lunch, Thu 5 Nov 19:00' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Use this menu: Lunch, Thu 5 Nov 19:00' })).toBeInTheDocument();
   });
 
   it('"No menus have been written yet." without a search, also when the only menu is the one in the editor', async () => {
@@ -249,13 +250,32 @@ describe('PreviousMenus', () => {
     expect(searchBox()).toHaveValue('pol');
   });
 
-  it('"Use the menu of …" calls onUse with the text and the previous menu', async () => {
+  it('the name of each "Use this menu" button starts with its visible text and says which slot it is', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([
+      previous(),
+      previous({ slotId: 2, label: 'Lunch', date: '2026-11-03', startTime: '12:00', menu: 'Barley soup' }),
+    ]);
+    renderList();
+
+    const buttons = await screen.findAllByRole('button', { name: /Use this menu/ });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(button).toHaveTextContent('Use this menu');
+      expect(button).toHaveAccessibleName(expect.stringMatching(/^Use this menu/));
+    }
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Use this menu: Dinner, Thu 5 Nov 19:00',
+      'Use this menu: Lunch, Tue 3 Nov 12:00',
+    ]);
+  });
+
+  it('"Use this menu" calls onUse with the text and the previous menu', async () => {
     const user = userEvent.setup();
     const lunch = previous({ slotId: 2, label: 'Lunch', date: '2026-11-03', startTime: '12:00', menu: 'Barley soup' });
     vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous(), lunch]);
     const { onUse } = renderList();
 
-    const button = await screen.findByRole('button', { name: 'Use the menu of Lunch, Tue 3 Nov 12:00' });
+    const button = await screen.findByRole('button', { name: 'Use this menu: Lunch, Tue 3 Nov 12:00' });
     expect(button).toHaveTextContent('Use this menu');
     await user.click(button);
 
@@ -266,6 +286,6 @@ describe('PreviousMenus', () => {
     vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous()]);
     renderList({ disabled: true });
 
-    expect(await screen.findByRole('button', { name: 'Use the menu of Dinner, Thu 5 Nov 19:00' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Use this menu: Dinner, Thu 5 Nov 19:00' })).toBeDisabled();
   });
 });

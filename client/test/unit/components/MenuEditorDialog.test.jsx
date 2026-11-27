@@ -445,7 +445,7 @@ describe('MenuEditorDialog – reuse a previous menu', () => {
     renderEditor({ menu: 'Soup' });
     await user.click(button('Reuse a previous menu'));
 
-    await user.click(await within(dialog()).findByRole('button', { name: 'Use the menu of Lunch, Tue 3 Nov 12:00' }));
+    await user.click(await within(dialog()).findByRole('button', { name: 'Use this menu: Lunch, Tue 3 Nov 12:00' }));
 
     expect(menuField()).toHaveValue('Barley soup\n- Tart');
     expect(within(preview()).getByRole('listitem')).toHaveTextContent('Tart');
@@ -462,7 +462,7 @@ describe('MenuEditorDialog – reuse a previous menu', () => {
     vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([lunch]);
     renderEditor();
     await user.click(button('Reuse a previous menu'));
-    await user.click(await within(dialog()).findByRole('button', { name: /^Use the menu of Lunch/ }));
+    await user.click(await within(dialog()).findByRole('button', { name: /^Use this menu: Lunch/ }));
     expect(within(dialog()).getByText(/^Menu of Lunch/)).toBeInTheDocument();
 
     await user.click(button('Bold'));
