@@ -36,7 +36,7 @@ Open http://localhost:5173. In development the client calls `/api/...` on its ow
 
 ## Demo accounts
 
-`npm run seed` fills the development database with demo data: slots from 7 days ago to 14 days ahead (lunch, dinner, and a second dinner turn on Saturdays, tables T1–T5) and a few bookings. Dates are relative to today, so the data never gets old: run it again whenever you want a fresh start. It **replaces** every user, slot and booking and logs everybody out; it refuses to run when `NODE_ENV=production`. Unit and integration tests never use it; E2E tests start from it (the E2E server loads it at start, on the fixed E2E day): if you change the demo data, run `npm run test:e2e`.
+`npm run seed` fills the development database with demo data: slots from 7 days ago to 14 days ahead (lunch, dinner, and a second dinner turn on Saturdays, tables T1–T5), a few bookings, menus and hikes. Dates are relative to today, so the data never gets old: run it again whenever you want a fresh start. It **replaces** every user, slot, menu, booking and hike and logs everybody out; it refuses to run when `NODE_ENV=production`. Unit and integration tests never use it; E2E tests start from it (the E2E server loads it at start, on the fixed E2E day): if you change the demo data, run `npm run test:e2e`.
 
 Demo cases, ready to show:
 
@@ -52,6 +52,11 @@ Demo cases, ready to show:
 | A cancelled booking, then booked again | the lunch in 3 days: Anna Bianchi |
 | Change allowed / not allowed (48 h before the meal) | `hiker@example.com`: the dinner in 3 days / tomorrow's dinner |
 | Copy a week (MH-09) | this week onto the week after next (it has slots and no bookings: its schedule is replaced); onto a week with bookings still to come it is refused, e.g. next week when the data is loaded Fri–Sun |
+| Menus with bold, italic, lists and sub-items (MH-10) | 3, 2 and 1 days ago, today's lunch, lunch and dinner in 2 days, the dinner in 3 days; past menus stay fixed (PO #59) |
+| Reuse a previous menu (MH-10) | any slot without a menu, e.g. tomorrow or from day 4: "previous menus" lists each text once (the fondue is on two past dinners) |
+| Meal times and menus, also as a guest (MH-11) | the meals page: this week has slots with and without a menu |
+| Active hikes, earliest return first, one overdue (MH-21) | staff: Luca Verdi (back 1 h ago), Hannah Hiker (back in 4 h), Anna Bianchi (back tomorrow) |
+| My hikes: in progress, planned, cancelled, completed (MH-20, MH-22) | `hiker@example.com`: back safely on the hike in progress, or complete the planned one tomorrow to cancel it |
 
 | Role | Email | Password |
 |---|---|---|

@@ -38,7 +38,8 @@ try {
   await deleteSessions(config.sessionsDbPath);
   console.log(
     `Demo data ready in ${config.dbPath}: ${summary.users} users, ${summary.slots} slots ` +
-      `(${summary.from} → ${summary.to}), ${summary.bookings} bookings. Everybody has been logged out.`,
+      `(${summary.from} → ${summary.to}), ${summary.menus} menus, ${summary.bookings} bookings, ` +
+      `${summary.hikes} hikes. Everybody has been logged out.`,
   );
 } catch (err) {
   console.error('Seed failed, the database is unchanged:', err);

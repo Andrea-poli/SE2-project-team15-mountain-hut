@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BOOKING_STATUS } from '../../src/dao/bookingDao.js';
 import { getDb } from '../../src/dao/db.js';
-import { seed, FIRST_DAY, LAST_DAY, USERS, BOOKINGS } from '../../src/seed.js';
-import { now } from '../../src/clock.js';
+import * as hikeDao from '../../src/dao/hikeDao.js';
+import * as slotDao from '../../src/dao/slotDao.js';
+import { seed, FIRST_DAY, LAST_DAY, USERS, BOOKINGS, MENUS, HIKES } from '../../src/seed.js';
+import { now, setNow } from '../../src/clock.js';
 import { useFixedClock } from '../helpers/fixedClock.js';
 
 useFixedClock('2026-11-02T10:00');
@@ -148,5 +150,110 @@ describe('demo data seed', () => {
     expect(saved).toEqual(expected);
     expect(saved.some(({ hasAllergies }) => hasAllergies)).toBe(true);
     expect(saved.some(({ hasAllergies }) => !hasAllergies)).toBe(true);
+  });
+});
+
+// U3 (sprint 3) – menus (MH-10, MH-11) and hikes (MH-20, MH-21, MH-22) of the demo data.
+describe('demo data seed – menus and hikes', () => {
+  /** 'YYYY-MM-DD' in hut local time, `days` from the fixed day (same counting as the seed). */
+  const dayFrom = (today, days) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  it('puts the menus on their slots only, with past and future menus, and none tomorrow and from day 4', async () => {
+    const db = await getDb();
+    const today = now();
+    const result = await seed(db, today);
+
+    const withMenu = await db.all(
+      "SELECT date, start_time AS startTime, menu FROM slots WHERE menu IS NOT NULL ORDER BY date, start_time",
+    );
+    expect(result.menus).toBe(Object.keys(MENUS).length);
+    expect(withMenu).toHaveLength(Object.keys(MENUS).length);
+    const startOf = { lunch: '12:00', dinner1: '19:00' };
+    const expected = Object.entries(MENUS)
+      .map(([key, menu]) => {
+        const [day, slot] = key.split('/');
+        return { date: dayFrom(today, Number(day)), startTime: startOf[slot], menu };
+      })
+      .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+    expect(withMenu).toEqual(expected);
+
+    // Past menus (fixed, PO #59) and future ones; tomorrow and days 4–14 are left without a menu.
+    const dates = withMenu.map(({ date }) => date);
+    expect(dates.some((date) => date < dayFrom(today, 0))).toBe(true);
+    expect(dates.some((date) => date > dayFrom(today, 0))).toBe(true);
+    expect(dates).not.toContain(dayFrom(today, 1));
+    expect(dates.every((date) => date < dayFrom(today, 4))).toBe(true);
+    // Every menu uses the formatting of the contract, and "previous menus" lists each text once.
+    expect(withMenu.every(({ menu }) => menu.includes('**') && menu.includes('\n- '))).toBe(true);
+    expect(withMenu.some(({ menu }) => menu.includes('\n  - '))).toBe(true);
+    const previous = await slotDao.findPreviousMenus(db);
+    expect(previous.map(({ menu }) => menu).sort()).toEqual([...new Set(Object.values(MENUS))].sort());
+  });
+
+  it('saves the hikes with active, overdue, planned, cancelled and completed cases for the demo', async () => {
+    const db = await getDb();
+    const today = now(); // 2026-11-02T10:00, a quarter hour: the hike times are exact hours from it
+    const result = await seed(db, today);
+
+    const hikes = await db.all(
+      `SELECT h.id, u.email, u.role, h.destination, h.route, h.passage_points AS passagePoints,
+              h.departure_at AS departureAt, h.expected_return_at AS expectedReturnAt,
+              h.completed_at AS completedAt, h.created_at AS createdAt
+       FROM hikes h JOIN users u ON u.id = h.hiker_id ORDER BY h.id`,
+    );
+    expect(result.hikes).toBe(HIKES.length);
+    expect(hikes).toHaveLength(HIKES.length);
+    const local = (value) => new Date(value).getTime(); // 'YYYY-MM-DDTHH:MM' is read in local time
+    for (const hike of hikes) {
+      expect(hike.role).toBe('hiker');
+      expect(hike.email).toBeTruthy(); // a hiker who can log in to see and complete the hike
+      expect(local(hike.expectedReturnAt)).toBeGreaterThan(local(hike.departureAt));
+      const registered = new Date(hike.createdAt).getTime();
+      expect(registered).toBeLessThanOrEqual(Math.min(today.getTime(), local(hike.departureAt)));
+      if (hike.completedAt) expect(new Date(hike.completedAt).getTime()).toBeLessThanOrEqual(today.getTime());
+    }
+
+    const nowLocal = '2026-11-02T10:00';
+    const active = await hikeDao.findActive(db, nowLocal);
+    expect(active.map(({ hiker, expectedReturnAt }) => [hiker.email, expectedReturnAt])).toEqual([
+      ['luca.verdi@example.com', '2026-11-02T09:00'], // overdue: back 1 h ago, still active
+      ['hiker@example.com', '2026-11-02T14:00'],
+      ['anna.bianchi@example.com', '2026-11-03T17:00'], // back tomorrow
+    ]);
+    expect(active.find(({ hiker }) => hiker.email === 'hiker@example.com').hiker).toMatchObject({
+      notes: expect.any(String),
+      emergencyContact: expect.any(String),
+    });
+
+    // Hannah (hiker@example.com) has every case of "My hikes": planned, in progress, cancelled, completed.
+    const kind = (hike) => {
+      if (!hike.completedAt) return hike.departureAt <= nowLocal ? 'inProgress' : 'planned';
+      return local(hike.departureAt) > new Date(hike.completedAt).getTime() ? 'cancelled' : 'completed';
+    };
+    const hannah = hikes.filter(({ email }) => email === 'hiker@example.com').map(kind).sort();
+    expect(hannah).toEqual(['cancelled', 'completed', 'inProgress', 'planned']);
+    expect(hikes.some(({ passagePoints }) => passagePoints === null)).toBe(true);
+    expect(hikes.some(({ passagePoints }) => passagePoints !== null)).toBe(true);
+  });
+
+  it('rounds the hike times to the quarter hour: seeding at 23:52 gives the same cases across midnight', async () => {
+    setNow('2026-11-02T23:52');
+    const db = await getDb();
+    await seed(db, now());
+
+    const active = await hikeDao.findActive(db, '2026-11-02T23:52');
+    expect(active.map(({ departureAt, expectedReturnAt }) => [departureAt, expectedReturnAt])).toEqual([
+      ['2026-11-02T17:45', '2026-11-02T22:45'],
+      ['2026-11-02T21:45', '2026-11-03T03:45'],
+      ['2026-11-02T20:45', '2026-11-04T06:45'],
+    ]);
+    const planned = await db.all(
+      "SELECT departure_at AS d FROM hikes WHERE completed_at IS NULL AND departure_at > '2026-11-02T23:52'",
+    );
+    expect(planned).toEqual([{ d: '2026-11-03T21:45' }]);
   });
 });
