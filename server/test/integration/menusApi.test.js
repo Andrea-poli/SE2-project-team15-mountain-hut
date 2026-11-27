@@ -10,14 +10,12 @@
 // Checked through GET /api/slots: only the slot written changes (a menu reused on two slots is changed on one only),
 // a refused change leaves the menu as it was, and copying a week does not copy the menus.
 // The validation rules themselves are in test/unit/slots/menus.test.js.
-import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { getDb } from '../../src/dao/db.js';
 import * as slotDao from '../../src/dao/slotDao.js';
-import * as userDao from '../../src/dao/userDao.js';
-import { hashPassword } from '../../src/services/authService.js';
+import { clearDb, createSlot, loggedIn } from '../helpers/bookingApi.js';
 import { useFixedClock } from '../helpers/fixedClock.js';
 
 // "Now": Wednesday 4 Nov 2026, 10:00 in the hut. This week: Mon 2 – Sun 8 Nov; next week: Mon 9 – Sun 15 Nov.
@@ -27,69 +25,47 @@ const AFTER_NEXT = '2026-11-16';
 useFixedClock('2026-11-04T10:00');
 
 const app = createApp();
-const PASSWORD = 'mountain-pass-123';
 const STARTED_MESSAGE = 'The menu of a slot that has started cannot be changed';
 
-// ---------- data helpers (through the DAOs: tests never depend on the demo seed) ----------
+// ---------- data helpers (shared ones in helpers/bookingApi.js: tests never depend on the demo seed) ----------
 
-async function clearDb() {
-  const db = await getDb();
-  for (const table of ['booking_tables', 'bookings', 'slot_tables', 'slots', 'users']) {
-    await db.run(`DELETE FROM ${table}`);
-  }
-}
+/** The session agent of a new logged-in user of `role`. */
+const staffAgent = async (role) => (await loggedIn(app, role)).agent;
 
-/** A logged-in agent (keeps the session cookie) for a new user of `role`. */
-async function loggedIn(role) {
-  const db = await getDb();
-  const email = `${role}-${randomUUID()}@example.com`;
-  await userDao.create(db, {
-    email,
-    passwordHash: await hashPassword(PASSWORD),
-    firstName: 'Test',
-    lastName: role,
-    role,
-  });
-  const agent = request.agent(app);
-  const res = await agent.post('/api/auth/login').send({ email, password: PASSWORD });
-  expect(res.status, 'login of the test user').toBe(200);
-  return agent;
-}
-
-async function insertSlot({ date = '2026-11-10', startTime = '12:00', endTime = '14:00', label = 'Lunch', menu = null } = {}) {
-  const db = await getDb();
-  const slot = await slotDao.create(db, { date, startTime, endTime, label, tables: [{ name: 'T1', seats: 4 }, { name: 'T2', seats: 6 }] });
-  return menu === null ? slot : slotDao.setMenu(db, slot.id, menu);
+/** A lunch of Tue 10 Nov with tables T1 (4) and T2 (6) unless told otherwise; `menu` is then written by the DAO. */
+async function insertSlot({ menu = null, ...slot } = {}) {
+  const created = await createSlot({ date: '2026-11-10', startTime: '12:00', endTime: '14:00', label: 'Lunch', seats: [4, 6], ...slot });
+  return menu === null ? created : slotDao.setMenu(await getDb(), created.id, menu);
 }
 
 const putMenu = (agent, id, body) => agent.put(`/api/slots/${id}/menu`).send(body);
 const listMenus = (agent, query = '') => agent.get(`/api/slots/menus${query}`);
-const listWeek = async (agent, monday) => {
-  const sunday = new Date(Date.parse(`${monday}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
-  const res = await agent.get(`/api/slots?from=${monday}&to=${sunday}`);
-  expect(res.status).toBe(200);
-  return res.body;
-};
+
+/** The slots of the week of `monday` (Mon–Sun), as GET /api/slots answers them. */
+async function listWeek(agent, monday) {
+  const [year, month, day] = monday.split('-').map(Number);
+  const sunday = new Date(Date.UTC(year, month - 1, day + 6)).toISOString().slice(0, 10);
+  const { status, body } = await agent.get('/api/slots').query({ from: monday, to: sunday });
+  expect(status).toBe(200);
+  return body;
+}
 const menuOf = async (agent, monday, id) => (await listWeek(agent, monday)).find((slot) => slot.id === id).menu;
 
-/** Error answers are always { error: "…" } (openapi Error). */
-function expectError(res, status, message) {
-  expect(res.status).toBe(status);
-  expect(res.body).toEqual({ error: message ?? expect.any(String) });
-  if (!message) expect(res.body.error.length).toBeGreaterThan(0);
-}
+/** An error answer: the status and the openapi Error body { error: "…" }, with `message` when given. */
+const expectError = (res, status, message) =>
+  expect({ status: res.status, body: res.body }).toEqual({ status, body: { error: message ?? expect.stringMatching(/\S/) } });
 
 let employee;
 beforeEach(async () => {
   await clearDb();
-  employee = await loggedIn('employee');
+  employee = await staffAgent('employee');
 });
 
 // ---------- PUT /api/slots/{id}/menu ----------
 
 describe('PUT /api/slots/{id}/menu – 200', () => {
   it.each(['employee', 'warden'])('the %s saves a menu and gets the whole Slot, as GET /api/slots shows it', async (role) => {
-    const agent = role === 'employee' ? employee : await loggedIn(role);
+    const agent = role === 'employee' ? employee : await staffAgent(role);
     const slot = await insertSlot();
 
     const res = await putMenu(agent, slot.id, { menu: '  **Polenta** with mushrooms\n- Apple strudel  ' });
@@ -179,7 +155,7 @@ describe('PUT /api/slots/{id}/menu – errors', () => {
 
   it('403 "Staff only" for a hiker', async () => {
     const slot = await insertSlot();
-    expectError(await putMenu(await loggedIn('hiker'), slot.id, { menu: 'Soup' }), 403, 'Staff only');
+    expectError(await putMenu(await staffAgent('hiker'), slot.id, { menu: 'Soup' }), 403, 'Staff only');
     expect(await menuOf(employee, NEXT_WEEK, slot.id)).toBeNull();
   });
 
@@ -246,7 +222,7 @@ describe('PUT /api/slots/{id}/menu – 409 on a slot that has started (PO rule)'
 
 describe('GET /api/slots/menus', () => {
   it.each(['employee', 'warden'])('the %s gets the PreviousMenu list: each text once with its most recent slot, the most recent first', async (role) => {
-    const agent = role === 'employee' ? employee : await loggedIn(role);
+    const agent = role === 'employee' ? employee : await staffAgent(role);
     await insertSlot({ date: '2026-11-10', menu: 'Barley soup' });
     const newer = await insertSlot({ date: '2026-11-12', menu: 'Barley soup' });
     const dinner = await insertSlot({ date: '2026-11-10', startTime: '19:00', endTime: '20:30', label: 'Dinner', menu: 'Venison stew' });
@@ -271,9 +247,9 @@ describe('GET /api/slots/menus', () => {
   });
 
   it('at most 20 texts, the most recent ones', async () => {
-    for (let day = 1; day <= 22; day++) {
-      await insertSlot({ date: `2026-12-${String(day).padStart(2, '0')}`, menu: `Menu of day ${day}` });
-    }
+    // 22 lunches with a menu each, 1–22 Dec.
+    const dates = Array.from({ length: 22 }, (_, index) => new Date(Date.UTC(2026, 11, index + 1)).toISOString().slice(0, 10));
+    for (const [index, date] of dates.entries()) await insertSlot({ date, menu: `Menu of day ${index + 1}` });
 
     const res = await listMenus(employee);
 
@@ -321,7 +297,7 @@ describe('GET /api/slots/menus', () => {
   });
 
   it('403 "Staff only" for a hiker', async () => {
-    expectError(await listMenus(await loggedIn('hiker')), 403, 'Staff only');
+    expectError(await listMenus(await staffAgent('hiker')), 403, 'Staff only');
   });
 
   it('"menus" is not taken as a slot id', async () => {
