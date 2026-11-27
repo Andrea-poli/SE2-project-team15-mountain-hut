@@ -1,0 +1,11 @@
+/* UnavailableButton: looks like a disabled Bootstrap button, but keeps its events for the tooltip. */
+.mh-btn-unavailable,
+.mh-btn-unavailable:hover,
+.mh-btn-unavailable:active,
+.mh-btn-unavailable:focus-visible {
+  color: var(--bs-btn-color);
+  background-color: var(--bs-btn-bg);
+  border-color: var(--bs-btn-border-color);
+  opacity: var(--bs-btn-disabled-opacity);
+  cursor: not-allowed;
+}

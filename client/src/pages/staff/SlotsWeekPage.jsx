@@ -7,6 +7,7 @@
 // or overlapping a slot already under way).
 // MH-10 FE1 – on the open slot card, "View menu" shows the menu in a dialog in the middle of the page
 // (MenuViewDialog), whose "Edit menu" opens the editor (MenuEditorDialog); "Add menu" opens the editor directly.
+// Only slots not started yet can get or change a menu (PO, issue #59): past ones show it read-only.
 // The saved slot replaces the old one in the week, and a message says which slot changed.
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -259,7 +260,14 @@ export default function SlotsWeekPage() {
       {copyOpen && (
         <CopyWeekDialog weekStart={weekStart} onHide={() => setCopyOpen(false)} onCopied={handleCopied} />
       )}
-      {viewedSlot && <MenuViewDialog slot={viewedSlot} onHide={() => setViewedSlot(null)} onEdit={editMenu} />}
+      {viewedSlot && (
+        <MenuViewDialog
+          slot={viewedSlot}
+          canEdit={!viewedSlot.past && viewedSlot.date >= todayDate}
+          onHide={() => setViewedSlot(null)}
+          onEdit={editMenu}
+        />
+      )}
       {menuSlot && (
         <MenuEditorDialog slot={menuSlot} onHide={() => setMenuSlot(null)} onSaved={handleMenuSaved} />
       )}

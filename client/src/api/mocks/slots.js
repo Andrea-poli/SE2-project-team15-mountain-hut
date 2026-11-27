@@ -262,7 +262,7 @@ export async function copyWeek(sourceWeek, targetWeek) {
 }
 
 // Mock of PUT /api/slots/{id}/menu: same rules as the server (trimmed; empty or null clears it, at most 2000;
-// 409 when a menu is added to a slot that has started).
+// 409 for a slot that has started: PO, issue #59, its menu stays fixed).
 export async function setSlotMenu(id, menu) {
   if (menu !== null && typeof menu !== 'string') {
     const error = new Error('menu must be a text or null');
@@ -281,9 +281,9 @@ export async function setSlotMenu(id, menu) {
     error.status = 400;
     throw error;
   }
-  // Team decision (26 Nov): a menu cannot be added to a slot that has started; an existing one can be changed.
-  if (text && !slot.menu && slot.past) {
-    const error = new Error('A menu cannot be added to a slot that has started');
+  // PO (MH-10, issue #59): a menu can be set, changed or removed only before its slot starts.
+  if (slot.past) {
+    const error = new Error('The menu of a slot that has started cannot be changed');
     error.status = 409;
     throw error;
   }
