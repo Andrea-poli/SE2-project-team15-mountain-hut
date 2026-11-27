@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mountain Hut API
-  version: 0.3.0
+  version: 0.3.1
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -83,16 +83,32 @@ info:
       starts a new paragraph. Nothing else is interpreted: the server stores
       the text as written (only trimmed) and the client renders it **without
       HTML**, so `<b>` or `<script>` in a menu is shown as plain text. At most
-      2000 characters (team choice).
+      2000 characters (team choice). A menu can be added, changed or removed
+      only **before its slot starts**; once the slot has started its menu stays
+      as it is (PO issue #59, MH-10 clarification). Each slot keeps its own
+      text: a menu reused on more slots is changed only on the slot being
+      edited.
     * **Hikes (MH-20, MH-21, MH-22)** - a hiker registers a planned hike
       before departure (MH-20): destination, route, optional passage points
       (the hike information of the MH-21 notes), departure and expected
       return. The server gives each hike a `state` from the clock: `planned`
-      before the departure, `inProgress` from the departure until the hiker
-      confirms the safe arrival (MH-22), then `completed`. An **active** hike
-      (MH-21) is one `inProgress`, also after its expected return: alerts for
-      overdue hikers are MH-24, a later story. Party members are MH-23, a
-      later story too.
+      before the departure, `inProgress` from the departure (PO issue #53:
+      the hike is started at the planned departure time) until the hiker
+      declares it completed (MH-22), then `completed`. A hike can also be
+      completed **before it starts**: for the PO this means it has been
+      cancelled (MH-22 clarification, PO issue #53). It is `completed` too,
+      with `completedAt` before `departureAt`, so a client can show it as
+      cancelled. An **active** hike (MH-21) is one `inProgress`, also after its
+      expected return: alerts for overdue hikers are MH-24, a later story.
+      Party members are MH-23, a later story too.
+
+    Version 0.3.1 (U4) applies PO issue #59 (a menu can be added, changed or
+    removed only before its slot starts: 409 after) and the MH-22
+    clarification of PO issue #53 (a planned hike can be completed, which
+    means cancelled; 409 only for a hike already completed). Planning
+    questions 1 (one menu per slot) and 5 (active from the departure time)
+    are settled by these answers; PO issue #55 confirms that copy week does
+    not copy menus.
 
     Version 0.3.0 (Sprint 3, U1) adds the endpoints of MH-10, MH-11, MH-20,
     MH-21 and MH-22. Settled: menus are free text with bold, italic, lists and
@@ -1131,9 +1147,10 @@ paths:
         started (`reason: overlap`: started slots are never replaced, so the
         copy is skipped to avoid overlapping slots). Everything happens in one
         transaction.
-        Menus (MH-10) are not copied: the copied slots have no menu, which the
-        staff can write or reuse afterwards. Adjusting a copied slot afterwards
-        is MH-19, a later story.
+        Menus (MH-10) are not copied (PO issue #55: "the menu is not included
+        in the default copy of the schedule as it may vary"): the copied slots
+        have no menu, which the staff can write or reuse afterwards. Adjusting
+        a copied slot afterwards is MH-19, a later story.
       operationId: copyWeek
       security:
         - sessionCookie: []
@@ -1204,6 +1221,9 @@ paths:
         has it (by date and start time, future slots included); the list starts
         from the most recent one and has at most 20 menus. `q`, if given, keeps
         only the menus whose text contains it, ignoring upper and lower case.
+        Menus of slots that have started are listed too: they stay fixed on
+        their slot, but reusing one copies its text into a slot that has not
+        started (PO issue #59).
         Pending PO (planning question 2): any slot for now, not only the same
         meal; the label of the slot helps to choose.
       operationId: listPreviousMenus
@@ -1260,10 +1280,12 @@ paths:
         Employee and warden only; hikers receive 403. `menu` replaces the menu
         of the slot; `null`, an empty text or only spaces clear it. The text is
         stored trimmed and as written: the formatting marks of the "Menus"
-        convention are interpreted only by the client, without HTML. Any slot
-        can get a menu, also one that has started (e.g. to fix a typo) or that
-        is closed. The answer is the slot as in `GET /api/slots`.
-        Pending PO (planning question 1): one menu per slot.
+        convention are interpreted only by the client, without HTML. Only
+        **before the slot starts** (PO issue #59): adding, changing or clearing
+        the menu of a slot that has started answers 409 and the menu stays as
+        it is. A closed slot that has not started can still get a menu. The
+        change touches only this slot, also when the same text is on other
+        slots. The answer is the slot as in `GET /api/slots`.
       operationId: setSlotMenu
       security:
         - sessionCookie: []
@@ -1325,6 +1347,17 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: 'Slot not found'
+        '409':
+          description: >
+            The slot has started (its start is at or before the current
+            hut-local time, `past: true`): its menu cannot be added, changed or
+            removed (PO issue #59).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'The menu of a slot that has started cannot be changed'
 
   /api/staff/hikers:
     get:
@@ -1612,15 +1645,18 @@ paths:
   /api/hikes/{id}/complete:
     post:
       tags: [hikes]
-      summary: Confirm the safe arrival at the end of a hike (MH-22)
+      summary: Complete a hike - safe arrival, or cancel a planned hike (MH-22)
       description: >
         Hikers only, and only the hiker who registered the hike: another
-        hiker's hike answers 404, as an unknown one. The hike must have started
-        (`inProgress`); it becomes `completed`, `completedAt` is set and it
-        leaves the active hikes of the staff (MH-21). A hike not started yet or
-        already completed answers 409: the request is valid, the state of the
-        hike does not allow it. Pending PO (planning question 6): staff cannot
-        complete a hike for the hiker for now.
+        hiker's hike answers 404, as an unknown one. A hike `inProgress`
+        becomes `completed` (the safe arrival) and leaves the active hikes of
+        the staff (MH-21). A hike still `planned` can be completed too: for the
+        PO this means it has been cancelled (MH-22 clarification, PO issue
+        #53), so it never becomes active. In both cases `completedAt` is set;
+        it is before `departureAt` for a cancelled hike. Only a hike already
+        completed answers 409, and it keeps its first `completedAt`. Pending PO
+        (planning question 6): staff cannot complete a hike for the hiker for
+        now.
       operationId: completeHike
       security:
         - sessionCookie: []
@@ -1628,7 +1664,9 @@ paths:
         - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: The hike, now completed
+          description: >
+            The hike, now completed (`state: completed`), from `inProgress` or
+            from `planned` (cancelled)
           content:
             application/json:
               schema:
@@ -1664,16 +1702,13 @@ paths:
               example:
                 error: 'Hike not found'
         '409':
-          description: The hike has not started yet, or is already completed
+          description: The hike is already completed (safe arrival or cancellation)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              examples:
-                notStarted:
-                  value: { error: 'The hike has not started yet' }
-                alreadyCompleted:
-                  value: { error: 'The hike is already completed' }
+              example:
+                error: 'The hike is already completed'
 
   /api/staff/hikes/active:
     get:
@@ -1684,8 +1719,10 @@ paths:
         started and is not completed (`inProgress`), also after its expected
         return, with the hiker's contact details (the hiker information of
         context.md), so the staff can monitor the expected returns. Ordered by
-        expected return (earliest first), then departure, then id. Pending PO
-        (planning question 5): hikes not started yet are not included.
+        expected return (earliest first), then departure, then id. A hike is
+        active from its planned departure time (PO issue #53): hikes not
+        started yet and cancelled hikes (completed before the departure) are
+        never included.
       operationId: listActiveHikes
       security:
         - sessionCookie: []
@@ -2561,7 +2598,9 @@ components:
         A registered hike as the hiker sees it (MH-20, MH-22). `state` is
         computed by the server from the clock: `planned` before `departureAt`,
         `inProgress` from `departureAt` (included) until the safe arrival,
-        `completed` once the hiker has confirmed it.
+        `completed` once the hiker has declared it completed (MH-22): the safe
+        arrival, or a cancellation when it was still `planned` (`completedAt`
+        before `departureAt`).
       required: [id, destination, route, passagePoints, departureAt, expectedReturnAt, state, completedAt, createdAt]
       properties:
         id:
@@ -2593,7 +2632,9 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: When the hiker confirmed the safe arrival (MH-22); `null` until then.
+          description: >
+            When the hiker declared the hike completed (MH-22); `null` until
+            then. Before `departureAt` (hut local time) for a cancelled hike.
           example: null
         createdAt:
           type: string
