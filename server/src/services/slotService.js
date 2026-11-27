@@ -18,7 +18,7 @@ const MESSAGES = {
   invalidMenu: 'menu must be a text or null',
   menuTooLong: 'The menu cannot exceed 2000 characters',
   slotNotFound: 'Slot not found',
-  previousMenuQueryTooLong: 'q must be a string and cannot exceed 100 characters',
+  previousMenuQueryTooLong: 'q cannot exceed 100 characters',
 };
 
 /**
@@ -160,6 +160,10 @@ export async function copyWeek(sourceWeek, targetWeek) {
 
 // ---------------------------------------------------------------- MH-10: set or clear a slot menu
 
+const MENU_MAX_LENGTH = 2000;
+const PREVIOUS_MENU_QUERY_MAX_LENGTH = 100;
+const PREVIOUS_MENU_LIMIT = 20;
+
 /**
  * Replaces or clears the menu of one slot. Menu length is checked after trimming;
  * null and blank text are stored as null.
@@ -169,7 +173,7 @@ export async function setSlotMenu(slotId, menu) {
 
   const trimmed = menu === null ? null : menu.trim();
   const normalized = trimmed === '' ? null : trimmed;
-  if (normalized !== null && Array.from(normalized).length > 2000) {
+  if (normalized !== null && normalized.length > MENU_MAX_LENGTH) {
     throw new BadRequest(MESSAGES.menuTooLong);
   }
 
@@ -185,8 +189,8 @@ export async function listPreviousMenus(query) {
     throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
   }
   const trimmed = typeof query === 'string' ? query.trim() : '';
-  if (Array.from(trimmed).length > 100) {
+  if (trimmed.length > PREVIOUS_MENU_QUERY_MAX_LENGTH) {
     throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
   }
-  return slotDao.findPreviousMenus(await getDb(), { q: trimmed, limit: 20 });
+  return slotDao.findPreviousMenus(await getDb(), { q: trimmed, limit: PREVIOUS_MENU_LIMIT });
 }
