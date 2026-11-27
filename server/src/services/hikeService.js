@@ -1,7 +1,7 @@
 // Hikes registered by hikers (MH-20 BE1 register, BE2 "My hikes"): validation, the hut-local clock, the state of a hike.
 // Messages and status codes follow openapi.yaml (POST /api/hikes). The SQL is in hikeDao.js.
 // departureAt and expectedReturnAt are hut-local 'YYYY-MM-DDTHH:MM', so they compare as text (like the DAO).
-import { now } from '../clock.js';
+import { now, parseLocalDateTime } from '../clock.js';
 import { getDb } from '../dao/db.js';
 import * as hikeDao from '../dao/hikeDao.js';
 import { BadRequest } from '../errors.js';
@@ -14,23 +14,11 @@ export const MESSAGES = {
   returnBeforeDeparture: 'expectedReturnAt must be after departureAt',
 };
 
-const DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 const pad = (n) => String(n).padStart(2, '0');
 
 /** A Date as hut-local 'YYYY-MM-DDTHH:MM' (config.js sets TZ to the hut's time zone). */
 export function localDateTime(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/**
- * True for a real hut-local date and time written as YYYY-MM-DDTHH:MM. new Date() silently moves impossible values
- * (31 Nov → 1 Dec, 25:00 → next day, the hour skipped by daylight saving time), so the value must come back the same.
- */
-function isValidDateTime(value) {
-  const match = typeof value === 'string' && DATE_TIME.exec(value);
-  if (!match) return false;
-  const [year, month, day, hours, minutes] = match.slice(1).map(Number);
-  return localDateTime(new Date(year, month - 1, day, hours, minutes)) === value;
 }
 
 /** A required text: trimmed, not empty, at most MAX_LENGTH[field] characters. */
@@ -50,8 +38,9 @@ function optionalText(value, field) {
   return text === '' ? null : text;
 }
 
+/** A real hut-local date and time, YYYY-MM-DDTHH:MM (impossible dates and the DST gap are refused: clock.js). */
 function dateTime(value, field) {
-  if (!isValidDateTime(value)) throw new BadRequest(`${field} must be YYYY-MM-DDTHH:MM`);
+  if (parseLocalDateTime(value).error) throw new BadRequest(`${field} must be YYYY-MM-DDTHH:MM`);
   return value;
 }
 
