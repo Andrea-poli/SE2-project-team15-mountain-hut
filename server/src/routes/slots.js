@@ -4,7 +4,7 @@ import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
 import { requireRole } from '../middleware/auth.js';
 import { BadRequest } from '../errors.js';
-import { copyWeek, createSlot, hasStarted } from '../services/slotService.js';
+import { copyWeek, createSlot, hasStarted, listPreviousMenus, setSlotMenu } from '../services/slotService.js';
 
 const router = Router();
 
@@ -88,6 +88,23 @@ router.post('/copy-week', requireRole(['employee'], 'Staff only'), async (req, r
 
   const { created, replaced, skipped } = await copyWeek(sourceWeek, targetWeek);
   return res.status(201).json({ created: created.map(slotResponse), replaced: replaced.map(slotResponse), skipped });
+});
+
+// PUT /api/slots/:id/menu { menu } → 200 Slot | 400 | 401 | 403 | 404 | 409
+// Employee/warden only; null or blank text clears the menu.
+router.put('/:id/menu', requireRole(['employee'], 'Staff only'), async (req, res) => {
+  if (!/^[1-9]\d*$/.test(req.params.id) || !Number.isSafeInteger(Number(req.params.id))) {
+    throw new BadRequest('id must be a positive integer');
+  }
+
+  const slot = await setSlotMenu(Number(req.params.id), req.body?.menu);
+  return res.json(slotResponse(slot));
+});
+
+// GET /api/slots/menus?q=... → 200 [PreviousMenu] | 400 | 401 | 403
+// Employee/warden only; menus are unique, latest slot first, at most 20.
+router.get('/menus', requireRole(['employee'], 'Staff only'), async (req, res) => {
+  return res.json(await listPreviousMenus(req.query.q));
 });
 
 export default router;

@@ -3,7 +3,7 @@ import { now } from '../clock.js';
 import { getDb } from '../dao/db.js';
 import * as slotDao from '../dao/slotDao.js';
 import { withTransaction } from '../dao/transaction.js';
-import { BadRequest, Conflict } from '../errors.js';
+import { BadRequest, Conflict, NotFound } from '../errors.js';
 
 const MESSAGES = {
   invalidSlot: 'Slot details are required',
@@ -15,6 +15,11 @@ const MESSAGES = {
   overlap: 'Overlaps an existing slot',
   sameWeek: 'Choose a different week to copy into',
   targetHasBookings: 'The target week has bookings: its schedule cannot be replaced',
+  invalidMenu: 'menu must be a text or null',
+  menuTooLong: 'The menu cannot exceed 2000 characters',
+  slotNotFound: 'Slot not found',
+  previousMenuQueryTooLong: 'q cannot exceed 100 characters',
+  menuOfStartedSlot: 'The menu of a slot that has started cannot be changed',
 };
 
 /**
@@ -152,4 +157,45 @@ export async function copyWeek(sourceWeek, targetWeek) {
     }
     return { created, replaced, skipped };
   });
+}
+
+// ---------------------------------------------------------------- MH-10: set or clear a slot menu
+
+const MENU_MAX_LENGTH = 2000;
+const PREVIOUS_MENU_QUERY_MAX_LENGTH = 100;
+const PREVIOUS_MENU_LIMIT = 20;
+
+/**
+ * Replaces or clears the menu of one slot. Menu length is checked after trimming;
+ * null and blank text are stored as null.
+ */
+export async function setSlotMenu(slotId, menu) {
+  if (menu !== null && typeof menu !== 'string') throw new BadRequest(MESSAGES.invalidMenu);
+
+  const trimmed = menu === null ? null : menu.trim();
+  const normalized = trimmed === '' ? null : trimmed;
+  if (normalized !== null && normalized.length > MENU_MAX_LENGTH) {
+    throw new BadRequest(MESSAGES.menuTooLong);
+  }
+
+  const db = await getDb();
+  return withTransaction(db, async (transactionDb) => {
+    const existing = await slotDao.findById(transactionDb, slotId);
+    if (!existing) throw new NotFound(MESSAGES.slotNotFound);
+    if (hasStarted(existing)) throw new Conflict(MESSAGES.menuOfStartedSlot);
+
+    return slotDao.setMenu(transactionDb, slotId, normalized);
+  });
+}
+
+/** Lists previous menus for reuse, with the optional trimmed text filter. */
+export async function listPreviousMenus(query) {
+  if (query !== undefined && typeof query !== 'string') {
+    throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
+  }
+  const trimmed = typeof query === 'string' ? query.trim() : '';
+  if (trimmed.length > PREVIOUS_MENU_QUERY_MAX_LENGTH) {
+    throw new BadRequest(MESSAGES.previousMenuQueryTooLong);
+  }
+  return slotDao.findPreviousMenus(await getDb(), { q: trimmed, limit: PREVIOUS_MENU_LIMIT });
 }
