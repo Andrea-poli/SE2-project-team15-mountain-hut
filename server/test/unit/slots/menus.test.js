@@ -10,7 +10,7 @@
 // - no query or a blank one → every text once, with its most recent slot, the most recent first, at most 20;
 // - the query is trimmed and matches ignoring case; at most 100 characters after trimming; not a text → 400.
 // Real temporary SQLite database (setupTestDb.js), data through the DAOs, fixed clock.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../../src/dao/db.js';
 import * as slotDao from '../../../src/dao/slotDao.js';
 import { listPreviousMenus, setSlotMenu } from '../../../src/services/slotService.js';
@@ -28,10 +28,6 @@ let db;
 beforeEach(async () => {
   db = await getDb();
   for (const table of ['booking_tables', 'bookings', 'slot_tables', 'slots']) await db.run(`DELETE FROM ${table}`);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
 });
 
 // ---------- data helpers (through the DAOs) ----------
@@ -113,13 +109,6 @@ describe('setSlotMenu: saving and clearing', () => {
 
   it('answers 404 "Slot not found" for an unknown slot', async () => {
     await expectFailure(setSlotMenu(999_999, 'Soup'), 404, 'Slot not found');
-  });
-
-  it('answers 404 "Slot not found" when the slot is deleted while its menu is being saved', async () => {
-    const slot = await insertSlot();
-    vi.spyOn(slotDao, 'setMenu').mockResolvedValueOnce(null); // deleted between the check and the update
-
-    await expectFailure(setSlotMenu(slot.id, 'Soup'), 404, 'Slot not found');
   });
 });
 

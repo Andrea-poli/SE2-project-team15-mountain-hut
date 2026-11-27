@@ -65,16 +65,19 @@ describe('SQLite session store', () => {
     await expect(callStore('get', 'persistent-session')).resolves.toEqual(savedSession);
   });
 
+  // set, touch and destroy without a callback return nothing to await: wait until the change is in the database.
   it('supports omitted callbacks for set, touch, and destroy', async () => {
-    await store.set('callback-free', { userId: 3 });
-    await expect(callStore('get', 'callback-free')).resolves.toMatchObject({ userId: 3 });
+    store.set('callback-free', { userId: 3 });
+    await vi.waitFor(() => expect(callStore('get', 'callback-free')).resolves.toMatchObject({ userId: 3 }));
 
-    await store.touch('callback-free', { cookie: { expires: '2030-01-01T00:00:00.000Z' } });
-    const row = await getSql('SELECT expires FROM sessions WHERE sid = ?', ['callback-free']);
-    expect(row.expires).toBe(new Date('2030-01-01T00:00:00.000Z').getTime());
+    store.touch('callback-free', { cookie: { expires: '2030-01-01T00:00:00.000Z' } });
+    await vi.waitFor(async () => {
+      const row = await getSql('SELECT expires FROM sessions WHERE sid = ?', ['callback-free']);
+      expect(row.expires).toBe(new Date('2030-01-01T00:00:00.000Z').getTime());
+    });
 
-    await store.destroy('callback-free');
-    await expect(callStore('get', 'callback-free')).resolves.toBeNull();
+    store.destroy('callback-free');
+    await vi.waitFor(() => expect(callStore('get', 'callback-free')).resolves.toBeNull());
   });
 
   it('uses a one-day expiry for sessions without a cookie expiration', async () => {
