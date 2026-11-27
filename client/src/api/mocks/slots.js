@@ -261,18 +261,30 @@ export async function copyWeek(sourceWeek, targetWeek) {
   return { created, replaced, skipped };
 }
 
-// Mock of PUT /api/slots/{id}/menu: same rules as the server (trimmed; empty or null clears it, at most 2000).
+// Mock of PUT /api/slots/{id}/menu: same rules as the server (trimmed; empty or null clears it, at most 2000;
+// 409 when a menu is added to a slot that has started).
 export async function setSlotMenu(id, menu) {
+  if (menu !== null && typeof menu !== 'string') {
+    const error = new Error('menu must be a text or null');
+    error.status = 400;
+    throw error;
+  }
   const slot = mockSlots.find((existing) => existing.id === id);
   if (!slot) {
     const error = new Error('Slot not found');
     error.status = 404;
     throw error;
   }
-  const text = typeof menu === 'string' ? menu.trim() : '';
+  const text = menu === null ? '' : menu.trim();
   if (text.length > 2000) {
     const error = new Error('The menu cannot exceed 2000 characters');
     error.status = 400;
+    throw error;
+  }
+  // Team decision (26 Nov): a menu cannot be added to a slot that has started; an existing one can be changed.
+  if (text && !slot.menu && slot.past) {
+    const error = new Error('A menu cannot be added to a slot that has started');
+    error.status = 409;
     throw error;
   }
   slot.menu = text || null;

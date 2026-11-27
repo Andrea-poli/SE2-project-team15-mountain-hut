@@ -9,7 +9,7 @@
 // the close button close it (no backdrop click), so a long text is not lost by a click outside.
 // onSaved(slot, removed) receives the slot answered by the server and true when the menu was removed.
 import { Bold, History, IndentIncrease, Italic, List, Save, Trash2 } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import Button from 'react-bootstrap/Button';
 import ButtonGroup from 'react-bootstrap/ButtonGroup';
 import ButtonToolbar from 'react-bootstrap/ButtonToolbar';
@@ -53,6 +53,13 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
   const [menu, setMenu] = useState(slot.menu || '');
   const [saving, setSaving] = useState(false);
   const [reuseOpen, setReuseOpen] = useState(false);
+  // "Remove menu" asks first: the footer shows "Remove the menu of this slot?" with Keep it / Yes, remove.
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const keepRef = useRef(null);
+  // The question replaces the buttons, so the focus goes to "Keep it" (the safe choice).
+  useEffect(() => {
+    if (confirmRemove) keepRef.current?.focus();
+  }, [confirmRemove]);
   // "Menu of … copied" after a reuse, announced to screen readers; cleared by the next change.
   const [reused, setReused] = useState(null);
   const { errors, generalError, generalRef, checkOnSubmit, recheck, showGeneralError } = useFormErrors(
@@ -62,8 +69,9 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
   const textareaRef = useRef(null);
 
   // The selection to restore after a toolbar change, once React has put the new text in the textarea.
+  // useLayoutEffect: the caret is in place before the browser paints, so the next key goes to the right spot.
   const pendingSelection = useRef(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const selection = pendingSelection.current;
     if (!selection) return;
     pendingSelection.current = null;
@@ -74,6 +82,12 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
   function applyTool(tool) {
     const { selectionStart, selectionEnd } = textareaRef.current;
     const next = tool.apply(menu, selectionStart, selectionEnd);
+    if (next.value === menu) {
+      // Only the caret moves (e.g. after a closing mark): React does not render again, so it is moved here.
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(next.start, next.end);
+      return;
+    }
     setMenu(next.value);
     setReused(null);
     pendingSelection.current = { start: next.start, end: next.end };
@@ -93,6 +107,7 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
       onSaved(updated, newMenu === null);
     } catch (error) {
       setSaving(false);
+      setConfirmRemove(false);
       showGeneralError(error.message);
     }
   }
@@ -131,7 +146,7 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
           </Button>
           {reuseOpen && (
             <div id={`${id}-reuse`} className="mh-menu-reuse mb-3">
-              <PreviousMenus slotId={slot.id} onUse={reuseMenu} disabled={saving} />
+              <PreviousMenus slotId={slot.id} editorText={menu} onUse={reuseMenu} disabled={saving} />
             </div>
           )}
 
@@ -144,6 +159,8 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
                   title={tool.name}
                   aria-label={tool.name}
                   disabled={saving}
+                  // The textarea keeps the focus (and its selection) when a button is clicked with the mouse.
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => applyTool(tool)}
                 >
                   <tool.icon aria-hidden="true" size={16} />
@@ -185,31 +202,63 @@ export default function MenuEditorDialog({ slot, onHide, onSaved }) {
             </div>
           </section>
         </Modal.Body>
-        <Modal.Footer className="justify-content-between">
-          <div>
-            {hadMenu && (
+        {confirmRemove ? (
+          <Modal.Footer className="justify-content-between">
+            <p className="mb-0 fw-semibold">Remove the menu of this slot?</p>
+            <div className="d-flex gap-2">
               <Button
                 type="button"
-                variant="outline-danger"
+                variant="outline-secondary"
+                disabled={saving}
+                ref={keepRef}
+                onClick={() => setConfirmRemove(false)}
+              >
+                Keep it
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
                 className="d-inline-flex align-items-center gap-1"
                 disabled={saving}
                 onClick={() => save(null)}
               >
                 <Trash2 aria-hidden="true" size={18} />
-                Remove menu
+                {saving ? 'Removing…' : 'Yes, remove'}
               </Button>
-            )}
-          </div>
-          <div className="d-flex gap-2">
-            <Button type="button" variant="outline-secondary" disabled={saving} onClick={onHide}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" className="d-inline-flex align-items-center gap-1" disabled={saving}>
-              <Save aria-hidden="true" size={18} />
-              {saving ? 'Saving…' : 'Save menu'}
-            </Button>
-          </div>
-        </Modal.Footer>
+            </div>
+          </Modal.Footer>
+        ) : (
+          <Modal.Footer className="justify-content-between">
+            <div>
+              {hadMenu && (
+                <Button
+                  type="button"
+                  variant="outline-danger"
+                  className="d-inline-flex align-items-center gap-1"
+                  disabled={saving}
+                  onClick={() => setConfirmRemove(true)}
+                >
+                  <Trash2 aria-hidden="true" size={18} />
+                  Remove menu
+                </Button>
+              )}
+            </div>
+            <div className="d-flex gap-2">
+              <Button type="button" variant="outline-secondary" disabled={saving} onClick={onHide}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                className="d-inline-flex align-items-center gap-1"
+                disabled={saving}
+              >
+                <Save aria-hidden="true" size={18} />
+                {saving ? 'Saving…' : 'Save menu'}
+              </Button>
+            </div>
+          </Modal.Footer>
+        )}
       </Form>
     </Modal>
   );

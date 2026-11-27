@@ -2,7 +2,7 @@
 // already written (each text once, with its most recent slot, most recent first, at most 20); the search box
 // filters them by text, asked again after a short pause in typing. "Use this menu" hands the text to the editor,
 // where it can be changed before saving (PO issue #39: "reuse (and change) previous menus").
-// The menu of the slot being edited is left out: it is already in the editor.
+// The saved menu of the slot being edited is left out only while the editor holds the same text (editorText).
 // onUse(menu, previous) receives the text and the PreviousMenu ({ menu, slotId, date, startTime, label }).
 import { Search } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -19,11 +19,14 @@ import { formatDate } from '../utils/format.js';
 const SEARCH_DELAY_MS = 300;
 const SEARCH_MAX_LENGTH = 100; // same limit as the server (q)
 
-export default function PreviousMenus({ slotId, onUse, disabled }) {
+export default function PreviousMenus({ slotId, editorText, onUse, disabled }) {
   const id = useId();
   const searchId = `${id}-search`;
   const [query, setQuery] = useState('');
-  // Result of the last search, with the text it was made for: while it differs from the box, the list is loading.
+  // Spaces at the ends do not change the search (the server trims q too).
+  const searchText = query.trim();
+  // Result of the last search, with the text it was made for: while it differs from the box, a new one is on its way
+  // and the old list stays on screen.
   const [result, setResult] = useState({ query: null, menus: [], error: null });
   // The first list is asked at once, the next ones after a pause in typing.
   const delay = useRef(0);
@@ -31,12 +34,12 @@ export default function PreviousMenus({ slotId, onUse, disabled }) {
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      listPreviousMenus(query)
+      listPreviousMenus(searchText)
         .then((menus) => {
-          if (!cancelled) setResult({ query, menus, error: null });
+          if (!cancelled) setResult({ query: searchText, menus, error: null });
         })
         .catch((error) => {
-          if (!cancelled) setResult({ query, menus: [], error: error.message });
+          if (!cancelled) setResult({ query: searchText, menus: [], error: error.message });
         });
     }, delay.current);
     delay.current = SEARCH_DELAY_MS;
@@ -44,11 +47,14 @@ export default function PreviousMenus({ slotId, onUse, disabled }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [searchText]);
 
-  const loading = result.query !== query;
-  const menus = result.menus.filter((previous) => previous.slotId !== slotId);
-  const searched = query.trim() !== '';
+  const firstLoad = result.query === null;
+  const searching = !firstLoad && result.query !== searchText;
+  const menus = result.menus.filter(
+    (previous) => previous.slotId !== slotId || previous.menu !== editorText.trim(),
+  );
+  const searched = result.query !== '';
 
   return (
     <section aria-labelledby={`${id}-title`}>
@@ -67,12 +73,15 @@ export default function PreviousMenus({ slotId, onUse, disabled }) {
           onKeyDown={(event) => event.key === 'Enter' && event.preventDefault()}
         />
       </Form.Group>
-      {loading ? (
+      {firstLoad ? (
         <Loading />
       ) : (
-        <>
+        <div aria-busy={searching}>
+          <p className="visually-hidden" role="status">
+            {searching ? 'Searching…' : ''}
+          </p>
           <ErrorMessage message={result.error} />
-          {!result.error && menus.length === 0 && (
+          {!result.error && !searching && menus.length === 0 && (
             <p className="text-body-secondary mb-0" role="status">
               {searched ? 'No previous menus contain this text.' : 'No menus have been written yet.'}
             </p>
@@ -101,7 +110,7 @@ export default function PreviousMenus({ slotId, onUse, disabled }) {
               })}
             </ListGroup>
           )}
-        </>
+        </div>
       )}
     </section>
   );
