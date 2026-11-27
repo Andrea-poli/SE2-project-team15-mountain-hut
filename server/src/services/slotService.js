@@ -179,13 +179,13 @@ export async function setSlotMenu(slotId, menu) {
   }
 
   const db = await getDb();
-  const existing = await slotDao.findById(db, slotId);
-  if (!existing) throw new NotFound(MESSAGES.slotNotFound);
-  if (hasStarted(existing)) throw new Conflict(MESSAGES.menuOfStartedSlot);
+  return withTransaction(db, async (transactionDb) => {
+    const existing = await slotDao.findById(transactionDb, slotId);
+    if (!existing) throw new NotFound(MESSAGES.slotNotFound);
+    if (hasStarted(existing)) throw new Conflict(MESSAGES.menuOfStartedSlot);
 
-  const slot = await slotDao.setMenu(db, slotId, normalized);
-  if (!slot) throw new NotFound(MESSAGES.slotNotFound);
-  return slot;
+    return slotDao.setMenu(transactionDb, slotId, normalized);
+  });
 }
 
 /** Lists previous menus for reuse, with the optional trimmed text filter. */
