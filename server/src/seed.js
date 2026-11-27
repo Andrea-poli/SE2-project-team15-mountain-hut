@@ -1,5 +1,5 @@
 // Demo data (U10), to develop and try the app. Run with `npm run seed` from the repository root (seedCli.js):
-// it REPLACES every user, slot and booking of the database in DB_PATH / DATA_DIR and logs everybody out.
+// it REPLACES every user, slot, menu, booking and hike of the database in DB_PATH / DATA_DIR and logs everybody out.
 // This module only exports the data and seed(db, today): importing it changes nothing, so a test can run
 // seed() on its own temporary database with a fixed day. Unit and integration tests never rely on these data;
 // the E2E server loads them at start (index.js), so the E2E tests do: changing them can break the E2E.
@@ -20,7 +20,16 @@
 // Fri–Sun (the bookings of days 1–3 reach into it).
 // The E2E specs rely on some days: keep tomorrow's dinner at 12 free seats (MH-04), today's and day 2's
 // slots as they are (MH-02), and days 4–14 without bookings (MH-01). Run npm run test:e2e after any change.
+// Sprint 3 demo cases (U3):
+//   MH-10 menus: 3, 2 and 1 days ago, today and days 2–3 (past ones stay fixed, PO #59); "previous menus" lists
+//   each text once (the fondue is on two past dinners). No menu tomorrow and from day 4: there a menu can be added,
+//   and the meals page (MH-11) shows "no menu yet". Copy week does not copy menus (PO #55).
+//   MH-20/21/22 hikes, in hours from now (rounded down to the quarter hour): active (Hannah, back in 4 h; Anna,
+//   back tomorrow) and overdue (Luca, back 1 h ago) in the staff's Active hikes, earliest return first; Hannah
+//   (hiker@example.com) also has a planned hike tomorrow (to complete = cancel, MH-22), a cancelled one and a
+//   completed one; Marco has a completed one.
 import * as bookingDao from './dao/bookingDao.js';
+import * as hikeDao from './dao/hikeDao.js';
 import * as slotDao from './dao/slotDao.js';
 import { withTransaction } from './dao/transaction.js';
 import * as userDao from './dao/userDao.js';
@@ -111,6 +120,53 @@ export const BOOKINGS = [
   { day: 3, slot: 'lunch', hiker: 'giorgio', partySize: 3, tables: { T4: 3 }, createdDaysAgo: 0 },
 ];
 
+// MH-10 menus, with the formatting of the contract (bold, italic, list items and sub-items). Each slot keeps its
+// own copy of the text (PO #59): the same text on two slots is two copies.
+const FONDUE = '**Fondue** of Valdostana fontina\n- Boiled potatoes\n  - with or without speck\n- *Blueberry tart*';
+const PLIN = '**Plin** ravioli with butter and sage\n- Mixed salad\n- *Panna cotta*';
+const POLENTA = '**Polenta concia** with Toma cheese\n- Barley soup\n  - vegetarian\n- *Apple strudel* with cream';
+const TAGLIATELLE = '**Tagliatelle** with porcini mushrooms\n- Venison stew with polenta\n- *Bonet*';
+
+// key: day of the slot + slot key, as in BOOKINGS. Tomorrow and days 4–14 have no menu on purpose (see above).
+export const MENUS = {
+  '-3/dinner1': FONDUE,
+  '-2/lunch': PLIN,
+  '-1/lunch': POLENTA,
+  '-1/dinner1': FONDUE,
+  '0/lunch': TAGLIATELLE,
+  '2/lunch': PLIN,
+  '2/dinner1': TAGLIATELLE,
+  '3/dinner1': FONDUE,
+};
+
+// MH-20 hikes. Times are hours from now rounded down to the quarter hour (the E2E day, 10:00, stays 10:00), so the
+// states never get old: departure in the past and not completed = active (MH-21), completedAt before the departure =
+// cancelled (MH-22, PO #53). createdHoursAgo: when the hiker registered it (never after the departure).
+export const HIKES = [
+  // Active, in the staff's list in this order (earliest expected return first).
+  { hiker: 'luca', destination: 'Monviso summit', route: 'normal route from Rifugio Quintino Sella',
+    passagePoints: 'Rifugio Quintino Sella, Passo delle Sagnette',
+    departure: -6, expectedReturn: -1, createdHoursAgo: 14 },
+  { hiker: 'hannah', destination: 'Rifugio Quintino Sella', route: 'via the Chiaretto lake',
+    passagePoints: 'Lago Chiaretto, Colle del Viso', departure: -2, expectedReturn: 4, createdHoursAgo: 20 },
+  { hiker: 'anna', destination: 'Rifugio Vallanta', route: 'Giro del Monviso, first two stages',
+    passagePoints: 'Passo San Chiaffredo, Passo di Vallanta', departure: -3, expectedReturn: 31, createdHoursAgo: 26 },
+  // Hannah: planned tomorrow (not active yet), cancelled before it started, completed two days ago.
+  { hiker: 'hannah', destination: 'Colle delle Traversette', route: 'via the Buco di Viso tunnel',
+    passagePoints: 'Lago Chiaretto', departure: 22, expectedReturn: 30, createdHoursAgo: 2 },
+  { hiker: 'hannah', destination: 'Punta Gastaldi', route: 'from Pian del Re via Lago Fiorenza',
+    departure: 46, expectedReturn: 54, createdHoursAgo: 24, completed: -1 },
+  { hiker: 'hannah', destination: 'Lago Grande di Viso', route: 'from Pian del Re',
+    passagePoints: 'Lago Fiorenza, Lago Chiaretto',
+    departure: -50, expectedReturn: -43, createdHoursAgo: 60, completed: -44 },
+  // Marco: back safely yesterday, an hour before his expected return.
+  { hiker: 'marco', destination: 'Lago Fiorenza', route: 'path from Pian del Re',
+    departure: -26, expectedReturn: -18, createdHoursAgo: 30, completed: -19 },
+];
+
+const HOUR_MS = 60 * 60 * 1000;
+const QUARTER_HOUR_MS = 15 * 60 * 1000;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 'YYYY-MM-DD' of `date` + `days`, in hut local time (TZ, set by config.js). */
@@ -119,6 +175,31 @@ function localDate(date, days) {
   d.setDate(d.getDate() + days); // calendar days: a DST change does not move the date
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 'YYYY-MM-DDTHH:MM' of `date`, in hut local time: the format of hikes in the contract. */
+function localDateTime(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${localDate(date, 0)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** The hikes of HIKES at `today` rounded down to the quarter hour, ready for hikeDao.create. */
+function demoHikes(today, users) {
+  const base = Math.floor(today.getTime() / QUARTER_HOUR_MS) * QUARTER_HOUR_MS;
+  const at = (hours) => new Date(base + hours * HOUR_MS);
+  return HIKES.map(({ hiker, destination, route, passagePoints = null, departure, expectedReturn, createdHoursAgo,
+    completed }) => ({
+    hike: {
+      hikerId: users.get(hiker).id,
+      destination,
+      route,
+      passagePoints,
+      departureAt: localDateTime(at(departure)),
+      expectedReturnAt: localDateTime(at(expectedReturn)),
+      createdAt: at(-createdHoursAgo).toISOString(),
+    },
+    completedAt: completed === undefined ? null : at(completed).toISOString(),
+  }));
 }
 
 /** Slots of every day from FIRST_DAY to LAST_DAY, with the day offset they belong to. */
@@ -143,12 +224,13 @@ async function deleteAll(db) {
 }
 
 /**
- * Replaces users, slots and bookings with the demo data. Passwords are hashed before the transaction
+ * Replaces users, slots, menus, bookings and hikes with the demo data. Passwords are hashed before the transaction
  * (scrypt is slow); everything else is written in one transaction: all of it or nothing.
  * Does not touch the sessions (seedCli.js logs everybody out) and does not close the database.
  * @param {object} db connection from db.js
  * @param {Date} today now() of clock.js: the day the demo dates start from, and the time bookings were made before
- * @returns {Promise<{ users: number, slots: number, bookings: number, from: string, to: string }>}
+ * @returns {Promise<{ users: number, slots: number, menus: number, bookings: number, hikes: number, from: string,
+ *   to: string }>}
  */
 export async function seed(db, today) {
   // One hash per user, never shared: each has its own random salt, even with the same demo password.
@@ -168,6 +250,7 @@ export async function seed(db, today) {
     for (const { day, key, ...slot } of demoSlots(today)) {
       slots.set(`${day}/${key}`, await slotDao.create(db, slot));
     }
+    for (const [key, menu] of Object.entries(MENUS)) await slotDao.setMenu(db, slots.get(key).id, menu); // MH-10
 
     for (const booking of BOOKINGS) {
       const slot = slots.get(`${booking.day}/${booking.slot}`);
@@ -183,10 +266,17 @@ export async function seed(db, today) {
       if (booking.requirements) await bookingDao.saveRequirements(db, newBooking.id, booking.requirements); // MH-05
     }
 
+    for (const { hike, completedAt } of demoHikes(today, users)) { // MH-20, MH-22
+      const saved = await hikeDao.create(db, hike);
+      if (completedAt) await hikeDao.complete(db, saved.id, completedAt);
+    }
+
     return {
       users: users.size,
       slots: slots.size,
+      menus: Object.keys(MENUS).length,
       bookings: BOOKINGS.length,
+      hikes: HIKES.length,
       from: localDate(today, FIRST_DAY),
       to: localDate(today, LAST_DAY),
     };
