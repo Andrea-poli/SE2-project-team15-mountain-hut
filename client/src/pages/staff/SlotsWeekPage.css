@@ -82,7 +82,12 @@
   font-weight: 600;
 }
 
-.mh-slot-card-menu-none,
+.mh-slot-card-menu-none {
+  color: #4a544f;
+  font-style: italic;
+}
+
+.mh-slot-card-past .mh-slot-card-menu-none,
 .mh-slot-card-past .mh-slot-card-menu-set {
   color: var(--mh-muted);
 }
