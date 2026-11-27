@@ -62,13 +62,22 @@ export function validateNewHike(body, nowLocal) {
   return hike;
 }
 
+/**
+ * True when the hike was completed while still planned, before its departure: for the PO it has been cancelled
+ * (MH-22 clarification, PO issue #53; openapi.yaml 0.3.1 Hike.cancelled). completedAt is an ISO time (UTC) and
+ * departureAt hut-local, so completedAt is turned into hut-local time before comparing them.
+ */
+export function isCancelled(hike) {
+  return Boolean(hike.completedAt) && localDateTime(new Date(hike.completedAt)) < hike.departureAt;
+}
+
 /** planned before the departure, inProgress from the departure (included), completed once confirmed (MH-22). */
 export function hikeState(hike, nowLocal) {
   if (hike.completedAt) return 'completed';
   return hike.departureAt <= nowLocal ? 'inProgress' : 'planned';
 }
 
-/** A hike of hikeDao as the hiker sees it (openapi.yaml Hike): with its state, without hikerId. */
+/** A hike of hikeDao as the hiker sees it (openapi.yaml Hike): with its state and `cancelled`, without hikerId. */
 export function toHike(hike, nowLocal) {
   const { id, destination, route, passagePoints, departureAt, expectedReturnAt, completedAt, createdAt } = hike;
   return {
@@ -79,6 +88,7 @@ export function toHike(hike, nowLocal) {
     departureAt,
     expectedReturnAt,
     state: hikeState(hike, nowLocal),
+    cancelled: isCancelled(hike),
     completedAt,
     createdAt,
   };
