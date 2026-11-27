@@ -110,9 +110,44 @@ describe('SlotCard – menu (MH-10)', () => {
     render(<SlotCard slot={withoutMenu} expanded onSelect={() => {}} onViewMenu={onViewMenu} onEditMenu={onEditMenu} />);
     expect(screen.queryByRole('button', { name: 'View menu' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add menu' }));
+    const add = screen.getByRole('button', { name: 'Add menu' });
+    expect(add).toBeEnabled();
+    expect(add).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(add);
 
     expect(onEditMenu).toHaveBeenCalledWith(withoutMenu);
     expect(onViewMenu).not.toHaveBeenCalled();
+  });
+
+  // PO rule: once the slot has started (also earlier today) its menu can only be viewed.
+  it.each([
+    ['a slot that started earlier today', { past: true }, false],
+    ['a slot of a past day', { past: false }, true],
+  ])('%s without a menu: "Add menu" is unavailable, with the reason, and does nothing', async (_case, over, isPastDay) => {
+    const onEditMenu = vi.fn();
+    render(
+      <SlotCard slot={slot({ menu: null, ...over })} isPastDay={isPastDay} expanded onSelect={() => {}} onViewMenu={vi.fn()} onEditMenu={onEditMenu} />,
+    );
+    const add = screen.getByRole('button', { name: 'Add menu' });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveAccessibleDescription('This slot has started: a menu can no longer be added.');
+
+    await userEvent.click(add);
+
+    expect(onEditMenu).not.toHaveBeenCalled();
+  });
+
+  it('a slot that has started, with a menu: "View menu" still shows it', async () => {
+    const onViewMenu = vi.fn();
+    const started = slot({ menu: 'Soup', past: true });
+    render(<SlotCard slot={started} expanded onSelect={() => {}} onViewMenu={onViewMenu} onEditMenu={vi.fn()} />);
+    const view = screen.getByRole('button', { name: 'View menu' });
+    expect(view).toBeEnabled();
+    expect(view).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(view);
+
+    expect(onViewMenu).toHaveBeenCalledWith(started);
   });
 });

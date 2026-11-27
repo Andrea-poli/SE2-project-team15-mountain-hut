@@ -1,5 +1,7 @@
 // MH-10 FT1 – MenuViewDialog (task MH-10 FE1): the menu of a slot with the slot it belongs to; Close, the close
 // button and Escape call onHide; "Edit menu" calls onEdit(slot).
+// PO rule: once the slot has started (canEdit false) the menu can only be viewed: "Edit menu" stays in the dialog but
+// is unavailable (aria-disabled, with the reason as its description) and does nothing.
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -17,10 +19,10 @@ const slot = {
   tables: [{ id: 1, name: 'T1', seats: 4 }],
 };
 
-function renderDialog() {
+function renderDialog({ canEdit = true } = {}) {
   const onHide = vi.fn();
   const onEdit = vi.fn();
-  render(<MenuViewDialog slot={slot} onHide={onHide} onEdit={onEdit} />);
+  render(<MenuViewDialog slot={slot} canEdit={canEdit} onHide={onHide} onEdit={onEdit} />);
   return { onHide, onEdit, dialog: screen.getByRole('dialog', { name: /^Menu/ }) };
 }
 
@@ -47,10 +49,28 @@ describe('MenuViewDialog', () => {
     expect(onHide).toHaveBeenCalled();
   });
 
-  it('"Edit menu" calls onEdit with the slot', async () => {
-    const { dialog, onHide, onEdit } = renderDialog();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Edit menu' }));
+  it('a slot that has not started: "Edit menu" is available and calls onEdit with the slot', async () => {
+    const { dialog, onHide, onEdit } = renderDialog({ canEdit: true });
+    const edit = within(dialog).getByRole('button', { name: 'Edit menu' });
+    expect(edit).toBeEnabled();
+    expect(edit).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(edit);
+
     expect(onEdit).toHaveBeenCalledWith(slot);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('a slot that has started: the menu is shown, "Edit menu" is unavailable with the reason and does nothing', async () => {
+    const { dialog, onHide, onEdit } = renderDialog({ canEdit: false });
+    expect(within(dialog).getByText('Venison stew')).toBeInTheDocument();
+    const edit = within(dialog).getByRole('button', { name: 'Edit menu' });
+    expect(edit).toHaveAttribute('aria-disabled', 'true');
+    expect(edit).toHaveAccessibleDescription('This slot has started: its menu can no longer be changed or removed.');
+
+    await userEvent.click(edit);
+
+    expect(onEdit).not.toHaveBeenCalled();
     expect(onHide).not.toHaveBeenCalled();
   });
 });

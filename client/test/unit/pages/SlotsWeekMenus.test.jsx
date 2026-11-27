@@ -1,10 +1,11 @@
 // MH-10 FT1 – menus in the staff week view (SlotsWeekPage, task MH-10 FE1), from the story and docs/openapi.yaml
-// (PUT /api/slots/{id}/menu answers the whole Slot). Only today's and future slots: whether "Add menu" stays on
-// past days is still open (PO issue #59).
+// (PUT /api/slots/{id}/menu answers the whole Slot).
 //  "View menu" on the open card → the menu in a dialog; Close closes it; "Edit menu" → the editor.
-//  "Add menu" → the editor; Cancel closes it without saving.
+//  "Add menu" → the editor; Cancel closes it without saving. "Remove menu" asks first ("Yes, remove").
 //  After saving, the saved slot replaces the old one in the week (no reload, the card stays open) and
 //  "Menu saved: …" / "Menu removed: …" is shown; it can be closed, and moving to another week removes it.
+//  PO rule: a menu can be added, changed or removed only before its slot starts; after, it can only be viewed
+//  ("Edit menu" / "Add menu" unavailable, no editor). A menu reused on more slots is changed only on its own slot.
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,6 +126,8 @@ describe('SlotsWeekPage – menus (MH-10)', () => {
     await user.click(within(dialog()).getByRole('button', { name: 'Edit menu' }));
 
     await user.click(within(dialog()).getByRole('button', { name: 'Remove menu' }));
+    expect(slotsApi.setSlotMenu).not.toHaveBeenCalled(); // asked first
+    await user.click(within(dialog()).getByRole('button', { name: 'Yes, remove' }));
 
     expect(slotsApi.setSlotMenu).toHaveBeenCalledWith(5, null);
     await noDialog();
@@ -149,6 +152,77 @@ describe('SlotsWeekPage – menus (MH-10)', () => {
     await user.click(screen.getByRole('button', { name: /Lunch/ }));
     await user.click(screen.getByRole('button', { name: 'View menu' }));
     expect(within(dialog()).getByText('Old soup')).toBeInTheDocument();
+  });
+
+  it('a menu reused on two slots: changing it on one slot leaves the other with its text', async () => {
+    const lunch = slot({ id: 6, date: '2026-11-06', startTime: '12:00', endTime: '14:00', label: 'Lunch', menu: 'Barley soup' });
+    vi.mocked(slotsApi.listSlots).mockResolvedValue([slot({ menu: 'Barley soup' }), lunch]);
+    vi.mocked(slotsApi.setSlotMenu).mockResolvedValue(slot({ menu: 'Venison stew' }));
+    renderPage(<SlotsWeekPage />, { path: '/staff/slots' });
+    await user.click(await screen.findByRole('button', { name: /Dinner/ }));
+    await user.click(screen.getByRole('button', { name: 'View menu' }));
+    await user.click(within(dialog()).getByRole('button', { name: 'Edit menu' }));
+    const field = within(dialog()).getByRole('textbox', { name: 'Menu' });
+    await user.clear(field);
+    await user.type(field, 'Venison stew');
+
+    await user.click(within(dialog()).getByRole('button', { name: 'Save menu' }));
+
+    await screen.findByText(`Menu saved: ${SLOT_NAME}`);
+    expect(slotsApi.setSlotMenu).toHaveBeenCalledTimes(1);
+    expect(slotsApi.setSlotMenu).toHaveBeenCalledWith(5, 'Venison stew');
+    await user.click(screen.getByRole('button', { name: 'View menu' }));
+    expect(within(dialog()).getByText('Venison stew')).toBeInTheDocument();
+    await user.click(within(dialog()).getAllByRole('button', { name: 'Close' })[0]);
+    await noDialog();
+
+    await user.click(screen.getByRole('button', { name: /Lunch/ }));
+    await user.click(screen.getByRole('button', { name: 'View menu' }));
+    expect(within(dialog()).getByText('Barley soup')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['a slot that started earlier today', { date: '2026-11-04', startTime: '08:00', endTime: '09:30', past: true }],
+    ['a slot of a past day', { date: '2026-11-03', past: false }],
+  ])('%s with a menu: "View menu" shows it, "Edit menu" is unavailable and opens no editor', async (_case, over) => {
+    await openCard(slot({ menu: 'Soup', ...over }));
+
+    await user.click(screen.getByRole('button', { name: 'View menu' }));
+    expect(within(dialog()).getByText('Soup')).toBeInTheDocument();
+    const edit = within(dialog()).getByRole('button', { name: 'Edit menu' });
+    expect(edit).toHaveAttribute('aria-disabled', 'true');
+    expect(edit).toHaveAccessibleDescription('This slot has started: its menu can no longer be changed or removed.');
+
+    await user.click(edit);
+
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(within(dialog()).getByRole('heading', { level: 2 })).toHaveTextContent(/^Menu/);
+    expect(within(dialog()).queryByRole('textbox', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(slotsApi.setSlotMenu).not.toHaveBeenCalled();
+  });
+
+  it('a slot that has not started, with a menu: "Edit menu" in the dialog is available', async () => {
+    await openCard(slot({ menu: 'Soup' }));
+    await user.click(screen.getByRole('button', { name: 'View menu' }));
+    const edit = within(dialog()).getByRole('button', { name: 'Edit menu' });
+    expect(edit).toBeEnabled();
+    expect(edit).not.toHaveAttribute('aria-disabled');
+  });
+
+  it.each([
+    ['a slot that started earlier today', { date: '2026-11-04', startTime: '08:00', endTime: '09:30', past: true }],
+    ['a slot of a past day', { date: '2026-11-03', past: false }],
+  ])('%s without a menu: "No menu", and "Add menu" is unavailable and opens no editor', async (_case, over) => {
+    await openCard(slot({ menu: null, ...over }));
+    expect(card()).toHaveTextContent('No menu');
+    const add = screen.getByRole('button', { name: 'Add menu' });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveAccessibleDescription('This slot has started: a menu can no longer be added.');
+
+    await user.click(add);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(slotsApi.setSlotMenu).not.toHaveBeenCalled();
   });
 
   async function saveMenu() {

@@ -1,7 +1,9 @@
 // MH-10 FT1 – PreviousMenus, "Reuse a previous menu" (task MH-10 FE2), from docs/openapi.yaml (GET /api/slots/menus,
 // PreviousMenu).
-//  The first list is asked at once with ''; typing asks again only after a 300 ms pause, once, with the last text;
-//  an answer for a text already changed is ignored; the menu of the slot being edited is left out;
+//  The first list is asked at once with '' ("Loading…"); typing asks again only after a 300 ms pause, once, with the
+//  last text, trimmed (spaces only = no search); while a new search runs the old list stays, a hidden status says
+//  "Searching…" and the empty message is not shown; an answer for a text already changed is ignored.
+//  The saved menu of the slot being edited is left out only while it equals the editor text (trimmed).
 //  "No menus have been written yet." / "No previous menus contain this text."; an error is shown in an alert;
 //  Enter in the search box does not submit the form; "Use the menu of …" calls onUse(menu, previous); disabled.
 // The timing tests use fake timers and fireEvent (user-event waits on a real timeout, which fake timers never run).
@@ -42,18 +44,19 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-function renderList({ slotId = 1, disabled = false } = {}) {
+function renderList({ slotId = 1, editorText = '', disabled = false } = {}) {
   const onUse = vi.fn();
   const onSubmit = vi.fn((event) => event.preventDefault());
   render(
     <form onSubmit={onSubmit}>
-      <PreviousMenus slotId={slotId} onUse={onUse} disabled={disabled} />
+      <PreviousMenus slotId={slotId} editorText={editorText} onUse={onUse} disabled={disabled} />
     </form>,
   );
   return { onUse, onSubmit };
 }
 const searchBox = () => screen.getByRole('searchbox', { name: 'Search previous menus' });
 const search = (text) => fireEvent.change(searchBox(), { target: { value: text } });
+const searchingStatus = () => screen.queryByText('Searching…');
 
 describe('PreviousMenus – timing (fake timers)', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -82,13 +85,81 @@ describe('PreviousMenus – timing (fake timers)', () => {
     search('po');
     await wait(200);
     search('pol');
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
     await wait(299);
     expect(slotsApi.listPreviousMenus).toHaveBeenCalledTimes(1);
 
     await wait(1);
     expect(slotsApi.listPreviousMenus).toHaveBeenCalledTimes(2);
     expect(slotsApi.listPreviousMenus).toHaveBeenLastCalledWith('pol');
+  });
+
+  it('the search is trimmed: spaces at the ends do not change it', async () => {
+    renderList();
+    await wait();
+
+    search('  pol ');
+    await wait(300);
+    expect(slotsApi.listPreviousMenus).toHaveBeenLastCalledWith('pol');
+
+    search('pol   ');
+    await wait(300);
+    expect(slotsApi.listPreviousMenus).toHaveBeenCalledTimes(2); // same search: not asked again
+  });
+
+  it('spaces only are no search: nothing else is asked, and the list stays', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous()]);
+    renderList();
+    await wait();
+
+    search('   ');
+    await wait(300);
+
+    expect(slotsApi.listPreviousMenus.mock.calls).toEqual([['']]);
+    expect(searchingStatus()).not.toBeInTheDocument();
+    expect(screen.getByText('Dinner, Thu 5 Nov 19:00')).toBeInTheDocument();
+  });
+
+  it('while a new search runs, the old list stays and a hidden status says "Searching…"', async () => {
+    const searching = deferred();
+    vi.mocked(slotsApi.listPreviousMenus)
+      .mockResolvedValueOnce([previous()])
+      .mockReturnValueOnce(searching.promise);
+    renderList();
+    await wait();
+    expect(searchingStatus()).not.toBeInTheDocument();
+
+    search('caviar');
+    expect(searchingStatus()).toHaveAttribute('role', 'status');
+    expect(screen.getByText('Dinner, Thu 5 Nov 19:00')).toBeInTheDocument();
+    await wait(300); // the request is out, not answered yet
+    expect(slotsApi.listPreviousMenus).toHaveBeenLastCalledWith('caviar');
+    expect(searchingStatus()).toBeInTheDocument();
+    expect(screen.getByText('Dinner, Thu 5 Nov 19:00')).toBeInTheDocument();
+
+    searching.resolve([]);
+    await wait();
+
+    expect(searchingStatus()).not.toBeInTheDocument();
+    expect(screen.queryByText('Dinner, Thu 5 Nov 19:00')).not.toBeInTheDocument();
+    expect(screen.getByText('No previous menus contain this text.')).toBeInTheDocument();
+  });
+
+  it('the empty message is not shown while a search runs', async () => {
+    const searching = deferred();
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValueOnce([]).mockReturnValueOnce(searching.promise);
+    renderList();
+    await wait();
+    expect(screen.getByText('No menus have been written yet.')).toBeInTheDocument();
+
+    search('polenta');
+    await wait(300);
+
+    expect(searchingStatus()).toBeInTheDocument();
+    expect(screen.queryByText(/No menus|No previous menus/)).not.toBeInTheDocument();
+
+    searching.resolve([]);
+    await wait();
+    expect(screen.getByText('No previous menus contain this text.')).toBeInTheDocument();
   });
 
   it.each([
@@ -113,21 +184,37 @@ describe('PreviousMenus – timing (fake timers)', () => {
 });
 
 describe('PreviousMenus', () => {
-  it('leaves out the menu of the slot being edited', async () => {
-    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([
-      previous({ slotId: 1, label: 'This slot' }),
-      previous({ slotId: 2, label: 'Lunch', menu: 'Barley soup' }),
-    ]);
-    renderList({ slotId: 1 });
+  const thisSlotMenu = previous({ slotId: 1, label: 'This slot', menu: 'Venison stew' });
+  const otherMenu = previous({ slotId: 2, label: 'Lunch', menu: 'Barley soup' });
+
+  it('leaves out the saved menu of the slot being edited while the editor holds the same text (trimmed)', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([thisSlotMenu, otherMenu]);
+    renderList({ slotId: 1, editorText: '  Venison stew\n' });
 
     expect(await screen.findByText('Barley soup')).toBeInTheDocument();
     expect(screen.queryByText(/This slot/)).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Use the menu of/ })).toHaveLength(1);
   });
 
-  it('"No menus have been written yet." without a search, also when the only menu is this slot\'s', async () => {
-    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous({ slotId: 1 })]);
-    renderList({ slotId: 1 });
+  it('shows the saved menu of the slot being edited once the editor text is different', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([thisSlotMenu, otherMenu]);
+    renderList({ slotId: 1, editorText: 'Venison stew with polenta' });
+
+    expect(await screen.findByText('Venison stew')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use the menu of This slot, Thu 5 Nov 19:00' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Use the menu of/ })).toHaveLength(2);
+  });
+
+  it('the same text on another slot is not left out', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([previous({ slotId: 2, label: 'Lunch', menu: 'Venison stew' })]);
+    renderList({ slotId: 1, editorText: 'Venison stew' });
+
+    expect(await screen.findByRole('button', { name: 'Use the menu of Lunch, Thu 5 Nov 19:00' })).toBeInTheDocument();
+  });
+
+  it('"No menus have been written yet." without a search, also when the only menu is the one in the editor', async () => {
+    vi.mocked(slotsApi.listPreviousMenus).mockResolvedValue([thisSlotMenu]);
+    renderList({ slotId: 1, editorText: 'Venison stew' });
 
     expect(await screen.findByText('No menus have been written yet.')).toHaveAttribute('role', 'status');
   });
@@ -141,17 +228,6 @@ describe('PreviousMenus', () => {
 
     expect(await screen.findByText('No previous menus contain this text.')).toHaveAttribute('role', 'status');
     expect(slotsApi.listPreviousMenus).toHaveBeenLastCalledWith('caviar');
-  });
-
-  it('a search of spaces only is not a search', async () => {
-    const user = userEvent.setup();
-    renderList();
-    await screen.findByText('No menus have been written yet.');
-
-    await user.type(searchBox(), '   ');
-
-    await vi.waitFor(() => expect(slotsApi.listPreviousMenus).toHaveBeenLastCalledWith('   '));
-    expect(await screen.findByText('No menus have been written yet.')).toBeInTheDocument();
   });
 
   it('an error is shown in an alert, without the "no menus" message', async () => {

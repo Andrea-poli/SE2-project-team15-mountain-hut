@@ -3,10 +3,12 @@
 //  Title "Add menu" without a menu, "Edit menu" with one, with the slot (label, date, time).
 //  Checks before saving: empty menu → "Enter the menu." (or the "Remove menu" hint when the slot had a menu); more
 //  than 2000 characters → the length error; the server is not called. An error goes away on blur once corrected.
-//  Toolbar: Bold, Italic, List item, Sub-item change the text of the selection, and the preview follows.
-//  "Save menu" → setSlotMenu(id, trimmed text), onSaved(slot, false); "Remove menu" (only when the slot had a menu)
-//  → setSlotMenu(id, null), onSaved(slot, true). Server error: shown, fields enabled again. While saving: every
-//  control disabled, "Saving…", the dialog cannot be closed, a second submit is ignored.
+//  Toolbar: Bold, Italic, List item, Sub-item change the text of the selection, and the preview follows; pressed
+//  again they give back the text; with no selection the caret stays where typing goes on.
+//  "Save menu" → setSlotMenu(id, trimmed text), onSaved(slot, false). "Remove menu" (only when the slot had a menu)
+//  asks first ("Remove the menu of this slot?", focus on "Keep it"); "Yes, remove" → setSlotMenu(id, null),
+//  "Removing…", onSaved(slot, true). Server error: shown, fields enabled again. While saving: every control
+//  disabled, "Saving…", the dialog cannot be closed, a second submit is ignored.
 //  Cancel and Escape call onHide. "Reuse a previous menu" opens the list; "Use this menu" copies the text into the
 //  editor with a "copied" message, which the next change clears.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -151,16 +153,16 @@ describe('MenuEditorDialog – toolbar', () => {
   });
 
   it.each([
-    ['Bold', 'Polenta', [0, 7], '**Polenta**', [2, 9], () => expect(within(preview()).getByText('Polenta').tagName).toBe('STRONG')],
-    ['Italic', 'Polenta', [0, 7], '*Polenta*', [1, 8], () => expect(within(preview()).getByText('Polenta').tagName).toBe('EM')],
-    ['List item', 'Soup\nTart', [0, 9], '- Soup\n- Tart', [0, 13],
+    ['Bold', 'Polenta', [0, 7], '**Polenta**', () => expect(within(preview()).getByText('Polenta').tagName).toBe('STRONG')],
+    ['Italic', 'Polenta', [0, 7], '*Polenta*', () => expect(within(preview()).getByText('Polenta').tagName).toBe('EM')],
+    ['List item', 'Soup\nTart', [0, 9], '- Soup\n- Tart',
       () => expect(within(preview()).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Soup', 'Tart'])],
-    ['Sub-item', '- Soup\nvegan', [9, 9], '- Soup\n  - vegan', [7, 16],
+    ['Sub-item', '- Soup\nvegan', [9, 9], '- Soup\n  - vegan',
       () => {
         const [soup] = within(preview()).getAllByRole('listitem');
         expect(within(soup).getByRole('list')).toHaveTextContent('vegan');
       }],
-  ])('%s changes the selected text, keeps it selected, and the preview follows', async (name, text, [start, end], expected, [newStart, newEnd], checkPreview) => {
+  ])('%s changes the text, the field keeps the focus and the preview follows; pressed again it gives back the text', async (name, text, [start, end], expected, checkPreview) => {
     renderEditor();
     fireEvent.change(menuField(), { target: { value: text } });
     menuField().setSelectionRange(start, end);
@@ -169,8 +171,30 @@ describe('MenuEditorDialog – toolbar', () => {
 
     expect(menuField()).toHaveValue(expected);
     expect(menuField()).toHaveFocus();
-    expect([menuField().selectionStart, menuField().selectionEnd]).toEqual([newStart, newEnd]);
     checkPreview();
+
+    await user.click(button(name)); // on the selection or caret the first press left
+    expect(menuField()).toHaveValue(text);
+  });
+
+  it('Sub-item with no selection keeps the caret on the same character, so typing goes on there', async () => {
+    renderEditor();
+    fireEvent.change(menuField(), { target: { value: '- Soup\nvean' } });
+    menuField().setSelectionRange(9, 9); // between "ve" and "an"
+
+    await user.click(button('Sub-item'));
+    await user.keyboard('g');
+
+    expect(menuField()).toHaveValue('- Soup\n  - vegan');
+  });
+
+  it('after Bold on a selection, the selection includes the marks', async () => {
+    renderEditor();
+    fireEvent.change(menuField(), { target: { value: 'Polenta' } });
+    menuField().setSelectionRange(0, 7);
+
+    await user.click(button('Bold'));
+    expect(menuField().value.slice(menuField().selectionStart, menuField().selectionEnd)).toBe('**Polenta**');
   });
 
   /** Puts `text` in the field and selects from `start` to `end` (the whole text when not given). */
@@ -283,15 +307,61 @@ describe('MenuEditorDialog – saving', () => {
     expect(onHide).not.toHaveBeenCalled();
   });
 
-  it('"Remove menu" sends null, then onSaved(slot, true)', async () => {
-    const updated = slot({ menu: null });
-    vi.mocked(slotsApi.setSlotMenu).mockResolvedValue(updated);
-    const { onSaved } = renderEditor({ menu: 'Soup' });
+  it('"Remove menu" asks first: "Remove the menu of this slot?", with the focus on "Keep it"', async () => {
+    renderEditor({ menu: 'Soup' });
 
     await user.click(button('Remove menu'));
 
+    expect(within(dialog()).getByText('Remove the menu of this slot?')).toBeInTheDocument();
+    await waitFor(() => expect(button('Keep it')).toHaveFocus());
+    expect(button('Yes, remove')).toBeEnabled();
+    expect(within(dialog()).queryByRole('button', { name: 'Save menu' })).not.toBeInTheDocument();
+    expect(slotsApi.setSlotMenu).not.toHaveBeenCalled();
+  });
+
+  it('"Keep it" goes back to the editor without saving', async () => {
+    const { onSaved } = renderEditor({ menu: 'Soup' });
+    await user.click(button('Remove menu'));
+
+    await user.click(button('Keep it'));
+
+    expect(within(dialog()).queryByText('Remove the menu of this slot?')).not.toBeInTheDocument();
+    expect(button('Remove menu')).toBeEnabled();
+    expect(button('Save menu')).toBeEnabled();
+    expect(menuField()).toHaveValue('Soup');
+    expect(slotsApi.setSlotMenu).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('"Yes, remove" sends null, shows "Removing…" while saving, then onSaved(slot, true)', async () => {
+    const removing = deferred();
+    vi.mocked(slotsApi.setSlotMenu).mockReturnValue(removing.promise);
+    const { onSaved } = renderEditor({ menu: 'Soup' });
+    await user.click(button('Remove menu'));
+
+    await user.click(button('Yes, remove'));
+
     expect(slotsApi.setSlotMenu).toHaveBeenCalledWith(3, null);
+    expect(button('Removing…')).toBeDisabled();
+    expect(button('Keep it')).toBeDisabled();
+    const updated = slot({ menu: null });
+    removing.resolve(updated);
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated, true));
+  });
+
+  it('a server error while removing is shown with the focus, back to the editor buttons', async () => {
+    vi.mocked(slotsApi.setSlotMenu).mockRejectedValue(new ApiError(409, 'The menu of a slot that has started cannot be changed'));
+    const { onSaved } = renderEditor({ menu: 'Soup' });
+    await user.click(button('Remove menu'));
+
+    await user.click(button('Yes, remove'));
+
+    const alert = await within(dialog()).findByRole('alert');
+    expect(alert).toHaveTextContent('The menu of a slot that has started cannot be changed');
+    await waitFor(() => expect(alert).toHaveFocus());
+    expect(within(dialog()).queryByText('Remove the menu of this slot?')).not.toBeInTheDocument();
+    expect(button('Remove menu')).toBeEnabled();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('a server error is shown with the focus, and the fields can be used again', async () => {
