@@ -1,7 +1,7 @@
 // Slot details card and table layout; used in the weekly schedule view.
 // MH-10 FE1: the closed card says whether the slot has a menu ("Menu set" / "No menu"), so a day can be checked at a
 // glance; the open card has "View menu" (onViewMenu(slot): the page shows it in a dialog) or "Add menu"
-// (onEditMenu(slot): the page opens the menu editor).
+// (onEditMenu(slot): the page opens the menu editor). A past slot without a menu has no "Add menu"
 import { ChevronDown, ChevronUp, Clock, Utensils, UtensilsCrossed } from 'lucide-react';
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
@@ -62,17 +62,19 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect, onViewMe
               </ListGroup.Item>
             ))}
           </ListGroup>
-          <div className="border-top mt-2 pt-2 px-2">
-            {slot.menu ? (
-              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onViewMenu(slot)}>
-                View menu
-              </Button>
-            ) : (
-              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onEditMenu(slot)}>
-                Add menu
-              </Button>
-            )}
-          </div>
+          {(slot.menu || !isPast) && (
+            <div className="border-top mt-2 pt-2 px-2">
+              {slot.menu ? (
+                <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onViewMenu(slot)}>
+                  View menu
+                </Button>
+              ) : (
+                <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onEditMenu(slot)}>
+                  Add menu
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Card>
