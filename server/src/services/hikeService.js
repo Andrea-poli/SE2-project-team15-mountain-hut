@@ -1,4 +1,5 @@
-// Hikes registered by hikers (MH-20 BE1 register, BE2 "My hikes"): validation, the hut-local clock, the state of a hike.
+// Hikes registered by hikers (MH-20 BE1 register, BE2 "My hikes"; MH-21 BE1 active hikes for the staff): validation,
+// the hut-local clock, the state of a hike.
 // Messages and status codes follow openapi.yaml (POST /api/hikes). The SQL is in hikeDao.js.
 // departureAt and expectedReturnAt are hut-local 'YYYY-MM-DDTHH:MM', so they compare as text (like the DAO).
 import { now, parseLocalDateTime } from '../clock.js';
@@ -122,4 +123,16 @@ export async function listMyHikes(hiker) {
   const nowLocal = localDateTime(now());
   const hikes = await hikeDao.findByHiker(await getDb(), hiker.id);
   return hikes.map((hike) => toHike(hike, nowLocal));
+}
+
+/**
+ * The hikes in progress for the staff (MH-21 BE1, openapi.yaml ActiveHike): started at their planned departure (PO
+ * issue #53) and not completed, also after the expected return, each with the hiker's contact details. Earliest
+ * expected return first, then departure, then id (order of the DAO). Hikes not started yet and cancelled ones
+ * (completed before the departure) are never in the list.
+ */
+export async function listActiveHikes() {
+  const nowLocal = localDateTime(now());
+  const hikes = await hikeDao.findActive(await getDb(), nowLocal);
+  return hikes.map((hike) => ({ ...toHike(hike, nowLocal), hiker: hike.hiker }));
 }
