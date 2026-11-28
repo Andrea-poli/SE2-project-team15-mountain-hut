@@ -1,0 +1,11 @@
+/* MH-10 FE1/FE2 – menu editor dialog: the preview box and the list of previous menus. */
+.mh-menu-preview {
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  background-color: var(--mh-bg);
+}
+
+/* Up to 20 previous menus: the list scrolls inside the dialog instead of pushing the editor down. */
+.mh-menu-reuse .mh-previous-menus {
+  max-height: 18rem;
+  overflow-y: auto;
+}

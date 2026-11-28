@@ -5,6 +5,10 @@
 // MH-09 FE1 – "Copy week" copies the slots of the shown week into another week (CopyWeekDialog), then shows the
 // target week with a summary of the slots copied, of the ones they replaced and of the ones skipped (already past
 // or overlapping a slot already under way).
+// MH-10 FE1 – on the open slot card, "View menu" shows the menu in a dialog in the middle of the page
+// (MenuViewDialog), whose "Edit menu" opens the editor (MenuEditorDialog); "Add menu" opens the editor directly.
+// Only slots not started yet can get or change a menu (PO, issue #59): past ones show it read-only.
+// The saved slot replaces the old one in the week, and a message says which slot changed.
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from 'react-bootstrap/Alert';
@@ -14,6 +18,8 @@ import Collapse from 'react-bootstrap/Collapse';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { listSlots } from '../../api/slots.js';
 import CopyWeekDialog from '../../components/CopyWeekDialog.jsx';
+import MenuEditorDialog from '../../components/MenuEditorDialog.jsx';
+import MenuViewDialog from '../../components/MenuViewDialog.jsx';
 import ErrorMessage from '../../components/ErrorMessage.jsx';
 import Loading from '../../components/Loading.jsx';
 import SlotCard from '../../components/SlotCard.jsx';
@@ -85,6 +91,10 @@ export default function SlotsWeekPage() {
   // Result of the last copy, with the Monday of its target week: the summary is shown only on that week.
   const [copyResult, setCopyResult] = useState(null);
   const [copyDetailsOpen, setCopyDetailsOpen] = useState(false);
+  // MH-10: the slot whose menu is shown or edited (one dialog at a time), and the message after a save.
+  const [viewedSlot, setViewedSlot] = useState(null);
+  const [menuSlot, setMenuSlot] = useState(null);
+  const [menuMessage, setMenuMessage] = useState(null);
   const currentUrl = useRef(`${location.pathname}${location.search}`);
 
   // If a slot was just created, clear the state so that the success message is not shown again on page reload.
@@ -150,6 +160,7 @@ export default function SlotsWeekPage() {
   function moveWeek(amount) {
     setSelectedSlotId(null);
     setCopyResult(null);
+    setMenuMessage(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('week', toLocalIsoDate(addDays(weekStart, amount)));
     setSearchParams(nextParams);
@@ -158,6 +169,7 @@ export default function SlotsWeekPage() {
   function moveToToday() {
     setSelectedSlotId(null);
     setCopyResult(null);
+    setMenuMessage(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('week', toLocalIsoDate(currentWeek));
     setSearchParams(nextParams);
@@ -168,11 +180,29 @@ export default function SlotsWeekPage() {
     setCopyOpen(false);
     setSelectedSlotId(null);
     setCreatedSlot(null);
+    setMenuMessage(null);
     setCopyResult({ week: targetWeek, ...result });
     setCopyDetailsOpen(false);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('week', targetWeek);
     setSearchParams(nextParams);
+  }
+
+  // MH-10: the server answers with the whole slot; it takes the place of the old one, the card stays open.
+  function editMenu(slot) {
+    setViewedSlot(null);
+    setMenuMessage(null);
+    setMenuSlot(slot);
+  }
+
+  function handleMenuSaved(saved, removed) {
+    setMenuSlot(null);
+    setSlotResult((current) => ({
+      ...current,
+      slots: current.slots.map((slot) => (slot.id === saved.id ? saved : slot)),
+    }));
+    const slotName = `${saved.label}, ${formatDate(saved.date)}, ${formatTimeRange(saved.startTime, saved.endTime)}`;
+    setMenuMessage(`${removed ? 'Menu removed' : 'Menu saved'}: ${slotName}`);
   }
 
   const shownCopyResult = copyResult?.week === from ? copyResult : null;
@@ -229,6 +259,23 @@ export default function SlotsWeekPage() {
       </div>
       {copyOpen && (
         <CopyWeekDialog weekStart={weekStart} onHide={() => setCopyOpen(false)} onCopied={handleCopied} />
+      )}
+      {viewedSlot && (
+        <MenuViewDialog
+          slot={viewedSlot}
+          canEdit={!viewedSlot.past && viewedSlot.date >= todayDate}
+          onHide={() => setViewedSlot(null)}
+          onEdit={editMenu}
+        />
+      )}
+      {menuSlot && (
+        <MenuEditorDialog slot={menuSlot} onHide={() => setMenuSlot(null)} onSaved={handleMenuSaved} />
+      )}
+
+      {menuMessage && (
+        <Alert variant="success" dismissible role="status" onClose={() => setMenuMessage(null)}>
+          {menuMessage}
+        </Alert>
       )}
 
       {shownCopyResult && (
@@ -320,6 +367,8 @@ export default function SlotsWeekPage() {
                         onSelect={(selected) =>
                           setSelectedSlotId((current) => (current === selected.id ? null : selected.id))
                         }
+                        onViewMenu={setViewedSlot}
+                        onEditMenu={editMenu}
                       />
                     ))}
                   </div>

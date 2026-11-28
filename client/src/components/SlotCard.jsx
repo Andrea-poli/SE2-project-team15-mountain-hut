@@ -1,11 +1,18 @@
 // Slot details card and table layout; used in the weekly schedule view.
-import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
+// MH-10 FE1: the closed card says whether the slot has a menu ("Menu set" / "No menu"), so a day can be checked at a
+// glance; the open card has "View menu" (onViewMenu(slot): the page shows it in a dialog) or "Add menu"
+// (onEditMenu(slot): the page opens the menu editor). PO, MH-10 clarification (issue #59): a menu can be changed
+// only before its slot starts, and the menus of past slots stay fixed: on a started slot "Add menu" (and "Edit menu"
+// in the "View menu" dialog) is shown but unavailable, with the reason in a tooltip (UnavailableButton).
+import { ChevronDown, ChevronUp, Clock, Utensils, UtensilsCrossed } from 'lucide-react';
+import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import ListGroup from 'react-bootstrap/ListGroup';
+import UnavailableButton from './UnavailableButton.jsx';
 import { formatTimeRange } from '../utils/format.js';
 
-// A compact slot summary that expands its tables within the same day section.
-export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
+// A compact slot summary that expands its tables and menu within the same day section.
+export default function SlotCard({ slot, isPastDay, expanded, onSelect, onViewMenu, onEditMenu }) {
   const seatCount = slot.tables.reduce((total, table) => total + table.seats, 0);
   const tableCount = slot.tables.length;
   const detailsId = `slot-details-${slot.id}`;
@@ -30,6 +37,17 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
             </span>
           )}
         </span>
+        {slot.menu ? (
+          <span className="mh-slot-card-line mh-slot-card-menu mh-slot-card-menu-set">
+            <Utensils aria-hidden="true" size={14} className="flex-shrink-0" />
+            Menu set
+          </span>
+        ) : (
+          <span className="mh-slot-card-line mh-slot-card-menu mh-slot-card-menu-none">
+            <UtensilsCrossed aria-hidden="true" size={14} className="flex-shrink-0" />
+            No menu
+          </span>
+        )}
         <span className="mh-slot-card-line">{tableCount} {tableCount === 1 ? 'table' : 'tables'}</span>
         <span className="mh-slot-card-line mh-slot-card-last-line">{seatCount} {seatCount === 1 ? 'seat' : 'seats'}</span>
         {expanded ? (
@@ -47,6 +65,28 @@ export default function SlotCard({ slot, isPastDay, expanded, onSelect }) {
               </ListGroup.Item>
             ))}
           </ListGroup>
+          <div className="border-top mt-2 pt-2 px-2">
+            {slot.menu && (
+              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onViewMenu(slot)}>
+                View menu
+              </Button>
+            )}
+            {!slot.menu && !isPast && (
+              <Button variant="outline-primary" size="sm" className="w-100 text-nowrap" onClick={() => onEditMenu(slot)}>
+                Add menu
+              </Button>
+            )}
+            {!slot.menu && isPast && (
+              <UnavailableButton
+                variant="outline-primary"
+                size="sm"
+                className="w-100 text-nowrap"
+                reason="This slot has started: a menu can no longer be added."
+              >
+                Add menu
+              </UnavailableButton>
+            )}
+          </div>
         </div>
       )}
     </Card>
