@@ -99,7 +99,7 @@ export default function PreviousMenus({ slotId, editorText, onUse, disabled }) {
                         variant="outline-primary"
                         size="sm"
                         disabled={disabled}
-                        aria-label={`Use the menu of ${slotName}`}
+                        aria-label={`Use this menu: ${slotName}`}
                         onClick={() => onUse(previous.menu, previous)}
                       >
                         Use this menu

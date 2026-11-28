@@ -1,4 +1,5 @@
 // The card of one slot in the week view (MH-02 FE1), on its own: summary, "Past", tables when open.
+// MH-10 FE1: "Menu set" / "No menu" on the closed card; "View menu" / "Add menu" on the open one.
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -54,5 +55,99 @@ describe('SlotCard', () => {
     expect(screen.getByRole('button', { name: /Dinner/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('T1 – 4 seats')).toBeInTheDocument();
     expect(screen.getByText('T2 – 6 seats')).toBeInTheDocument();
+  });
+});
+
+// MH-10 FT1: the closed card says whether the slot has a menu; the open one has "View menu" or "Add menu".
+// Found by their text only: icons, colours and the place of the menu line may still change.
+describe('SlotCard – menu (MH-10)', () => {
+  it('a closed card says "Menu set" when the slot has a menu', () => {
+    render(<SlotCard slot={slot({ menu: 'Soup' })} expanded={false} onSelect={() => {}} />);
+    const card = screen.getByRole('button', { name: /Dinner/ });
+    expect(card).toHaveTextContent('Menu set');
+    expect(card).not.toHaveTextContent('No menu');
+  });
+
+  it.each([
+    ['a future slot', false, false],
+    ['a slot that has started', true, false],
+    ['a slot of a past day', false, true],
+  ])('a closed card says "No menu" when the menu is null: %s', (_case, past, isPastDay) => {
+    render(<SlotCard slot={slot({ menu: null, past })} isPastDay={isPastDay} expanded={false} onSelect={() => {}} />);
+    const card = screen.getByRole('button', { name: /Dinner/ });
+    expect(card).toHaveTextContent('No menu');
+    expect(card).not.toHaveTextContent('Menu set');
+  });
+
+  it('"Menu set" also on a past card', () => {
+    render(<SlotCard slot={slot({ menu: 'Soup', past: true })} isPastDay expanded={false} onSelect={() => {}} />);
+    expect(screen.getByRole('button', { name: /Dinner/ })).toHaveTextContent('Menu set');
+  });
+
+  it('a closed card has neither "View menu" nor "Add menu"', () => {
+    render(<SlotCard slot={slot({ menu: 'Soup' })} expanded={false} onSelect={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'View menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add menu' })).not.toBeInTheDocument();
+  });
+
+  it('an open card with a menu: "View menu" calls onViewMenu(slot)', async () => {
+    const onViewMenu = vi.fn();
+    const onEditMenu = vi.fn();
+    const withMenu = slot({ menu: 'Soup' });
+    render(<SlotCard slot={withMenu} expanded onSelect={() => {}} onViewMenu={onViewMenu} onEditMenu={onEditMenu} />);
+    expect(screen.queryByRole('button', { name: 'Add menu' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'View menu' }));
+
+    expect(onViewMenu).toHaveBeenCalledWith(withMenu);
+    expect(onEditMenu).not.toHaveBeenCalled();
+  });
+
+  it('an open card without a menu: "Add menu" calls onEditMenu(slot)', async () => {
+    const onViewMenu = vi.fn();
+    const onEditMenu = vi.fn();
+    const withoutMenu = slot({ menu: null });
+    render(<SlotCard slot={withoutMenu} expanded onSelect={() => {}} onViewMenu={onViewMenu} onEditMenu={onEditMenu} />);
+    expect(screen.queryByRole('button', { name: 'View menu' })).not.toBeInTheDocument();
+
+    const add = screen.getByRole('button', { name: 'Add menu' });
+    expect(add).toBeEnabled();
+    expect(add).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(add);
+
+    expect(onEditMenu).toHaveBeenCalledWith(withoutMenu);
+    expect(onViewMenu).not.toHaveBeenCalled();
+  });
+
+  // PO rule: once the slot has started (also earlier today) its menu can only be viewed.
+  it.each([
+    ['a slot that started earlier today', { past: true }, false],
+    ['a slot of a past day', { past: false }, true],
+  ])('%s without a menu: "Add menu" is unavailable, with the reason, and does nothing', async (_case, over, isPastDay) => {
+    const onEditMenu = vi.fn();
+    render(
+      <SlotCard slot={slot({ menu: null, ...over })} isPastDay={isPastDay} expanded onSelect={() => {}} onViewMenu={vi.fn()} onEditMenu={onEditMenu} />,
+    );
+    const add = screen.getByRole('button', { name: 'Add menu' });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveAccessibleDescription('This slot has started: a menu can no longer be added.');
+
+    await userEvent.click(add);
+
+    expect(onEditMenu).not.toHaveBeenCalled();
+  });
+
+  it('a slot that has started, with a menu: "View menu" still shows it', async () => {
+    const onViewMenu = vi.fn();
+    const started = slot({ menu: 'Soup', past: true });
+    render(<SlotCard slot={started} expanded onSelect={() => {}} onViewMenu={onViewMenu} onEditMenu={vi.fn()} />);
+    const view = screen.getByRole('button', { name: 'View menu' });
+    expect(view).toBeEnabled();
+    expect(view).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(view);
+
+    expect(onViewMenu).toHaveBeenCalledWith(started);
   });
 });
